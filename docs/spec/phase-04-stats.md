@@ -34,9 +34,9 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
 ## User Stories
 
 1. As a Creator, I want every load of my Profile counted as one Page View, so that I know how many Visitors saw it.
-2. As a Creator, I want every Click that goes through `/r/:linkId` counted, so that I know which of my non-Adult Links Visitors follow (in v2 they all go through `/r/{id}`, plan section 9).
+2. As a Creator, I want every Click that goes through `/r/:linkId` counted, so that I know which of my non-Adult Links Visitors follow. In v2, non-Adult Links in Direct or Escape Mode go through `/r/{id}`; Links in Deeplink Mode, Adult or not, go through Reveal (Phase 2 spec, Contracts: Profile JSON `url`), and story 3's Reveal counting covers them.
 3. As a Creator, I want a Click on an Adult Link counted when Continue on the Age Gate triggers its Reveal, so that my OnlyFans Link, usually the one that matters most, is not missing from Stats.
-4. As a Creator, I want a Link Shortcut (`?link=`) that triggers a Reveal on page load counted as a Click, so that Clicks from Links I share directly are not lost.
+4. As a Creator, I want a Link Shortcut (`?link=`) counted as a Click, whether it triggers a Reveal on page load or follows the Link's `/r` url, so that Clicks from Links I share directly are not lost.
 5. As a Creator, I want an unknown Link Id, and a Reveal that is refused, rate-limited or fails, to record nothing, so that broken or guessed URLs do not inflate my Clicks.
 6. As a Creator, I want each Page View and Click to carry the Visitor's country, so that I can see where my audience is.
 7. As a Creator, I want traffic whose country is unknown shown as "Unknown", not guessed as US the way v1's Geo Rule code does (geo_utils.js:48), so that my country numbers are honest.
@@ -57,13 +57,13 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
 22. As a Creator, I want the Stats page mobile-first and in the look of the link.me Template's analytics page, like the Editor, so that I can check it on my phone.
 23. As a Creator, I want only my own Profile's Stats visible to me, so that no other account holder can read my numbers. Anyone may sign up (plan section 9, D9).
 24. As a Creator, I want nobody who is signed out able to read any Event or Stats row through PocketBase's API, so that my traffic stays private.
-25. As a Creator, I want a Tracking Code that arrived in my Profile URL to stay with my Profile, so that a Visitor who later opens another Creator's Profile does not carry my code into that Creator's Destination.
+25. As a Creator, I want a Tracking Code that arrived in my Profile URL to stay with my Profile, so that a Visitor who later opens another Creator's Profile, including one that later holds my old Username, does not carry my code into that Creator's Destination or escape target.
 26. As a Creator, I want v2 to ignore the code that v1's global key left in Visitors' browsers, so that those leftovers credit no one after Cutover.
 27. As a Creator, I want the `/c{code}` suffix on my OnlyFans Destination to keep working (D5), so that OnlyFans keeps crediting subscribers to my sources.
 28. As a Creator, I want the Tracking Code to survive an Escape exactly as Phase 1 left it (plan section 4), so that moving to the System Browser does not lose my attribution.
 29. As the Operator, I want the Page View ping rate-limited, so that nobody can flood Events and fill the server's disk.
 30. As the Operator, I want a Profile's Events deleted along with the Profile, so that they never block the deletion.
-31. As the Operator, I want the exact commands for the production country source written down, so that I can switch on real country numbers at Cutover and undo it with one command.
+31. As the Operator, I want the production country source switched on by Phase 5's Cutover runbook, which already proxies ofl.ink through Cloudflare with IP Geolocation on, and a check written here that proves Events then carry real countries, so that one runbook owns Cloudflare.
 32. As the Operator, I want local tests to set the Visitor's country through a request header, so that country Stats are tested without any account, download or network.
 33. As the Operator, I want a real-device step in RUN.md, so that I can confirm that a phone inside Instagram is recorded as Instagram.
 34. As the Operator, I want a screenshot of the Stats page saved where I can glance at it (plan section 7), so that I can judge the look without running anything.
@@ -81,6 +81,7 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
     - The public page script, v2's own copy since Phase 0. It now sends the ping and keeps Tracking Codes per Profile.
     - Phase 3's same-origin PocketBase proxy, whose allow-list gains `dailyStats`.
     - Phase 2's seed, which gains two Creators with one Profile each.
+    - Phase 2's public Profile JSON, whose `profile` object gains the Profile's record `id`, the per-Profile Tracking Code key.
   - New spec: `tests/e2e/04-stats.spec.ts`.
 
 - **No page-script fork.** Run 1 had to copy v1's script.js into the app at this Phase, because until then v2 served v1's own files. Under the amendment, v2's page has been its own copy since Phase 0, and Phase 1's Mode and Escape changes are already in that copy. This Phase edits the copy and adds no new file to serve. Nothing in `linkme_clone3/` changes (ADR 0005).
@@ -116,7 +117,7 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
     created       autodate on create (UTC)
     index         (profile, created)
 
-  dailyStats      view collection; list and view rule: profile.owner = @request.auth.id
+  dailyStats      view collection; list and view rule: @request.auth.id != "" && profile.owner = @request.auth.id
     one row per (profile, link, country, day); row id unique per row
     day     = UTC calendar date of created, "YYYY-MM-DD"
     views   = count of kind = page_view        clicks = count of kind = click
@@ -124,6 +125,7 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
   ```
 
   - Only the app writes Events. Visitors have no create rule.
+  - The `dailyStats` rule starts with `@request.auth.id != ""`. Imported Profiles keep an empty owner (Phase 2 and Phase 3 specs, Schema), and for a signed-out caller a bare `profile.owner = @request.auth.id` compares empty with empty, so every ownerless Profile's rows would be public.
   - The fields above are the whole record. No IP address, User-Agent string, referrer or Visitor identifier is stored.
   - The migration never renames, retypes or drops anything Phase 2 defined.
 
@@ -157,7 +159,9 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
 
     ASSUMPTION: D5's two country sources both need the human, and this Phase chooses the Cloudflare header over VPS geo-IP. Rung 3: v1 also takes the country from its edge's request header (geo_utils.js:48). Rung 5: a header needs no account, licensed download, dependency or lookup code. Overturned if the Operator will not proxy ofl.ink through Cloudflare; MaxMind then becomes a parked follow-up (account, download, new dependency).
 
-    ASSUMPTION: v1's Geo Rule reads `x-country`. If Reveal's Geo Rule (Phase 2) keeps reading it, a Click's recorded country and the Tracking Code its Geo Rule picked can disagree. This Phase does not change Reveal's lookup (rung 4: leave the other Phase's code alone). Overturned if Phase 2 has a Visitor location lookup that reads a Cloudflare header. The Event Recorder then calls that lookup and maps its US fallback to `XX`.
+    - The Event Recorder reads the header itself and never calls Phase 2's Visitor location lookup. That lookup prefers `x-country`, then `cf-ipcountry`, then `US` (Phase 2 spec, Contracts), so it would let `x-country` override Cloudflare and would turn every unknown country into US.
+
+    ASSUMPTION: Reveal's Geo Rule keeps Phase 2's lookup, so a request carrying both `x-country` and `CF-IPCountry` can record one country and pick a Geo Rule code for the other. This Phase does not change Reveal's lookup (rung 4: leave the other Phase's code alone). Overturned if Phase 2 or Phase 5 makes `CF-IPCountry` the only country header the app sees; the two then agree.
   - **In-App Browser.** Classified from the request's User-Agent with plan section 4's patterns; the first match wins:
     - `Threads` → threads
     - `Instagram` → instagram
@@ -169,12 +173,14 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
 
     ASSUMPTION: Threads is checked before Instagram in case Threads' User-Agent also says Instagram (rung 6 for the order). Overturned by real-device User-Agents.
   - **Tracking Code storage.**
-    - One `localStorage` entry per Username, keyed `linkme_tracking_id:{username}`. A code that arrived on Profile A is never sent with a Reveal on Profile B.
+    - One `localStorage` entry per Profile, keyed `linkme_tracking_id:{Profile id}`, where the Profile id is the record id that Phase 2's Profile JSON now carries as `profile.id`. A code that arrived on Profile A is never sent with a Reveal, a Link Shortcut or an escape target on Profile B, even when B later holds A's old Username.
     - v1's global key is ignored, not migrated.
     - Only the key changes. As in v1, a code is sent only for a Link with Tracking on, the Profile's stored code wins over the Link's default code, and a stored code does not expire (script.js:90-101, :235-247).
     - Reveal's resolver (Phase 2) still turns the code into `/c{code}`, as v1's reveal.js:9-37 does.
 
     ASSUMPTION: v1's global key is ignored rather than adopted, because at Cutover it may hold another Creator's code (rung 4: nothing stored is rewritten). Overturned if the Operator wants leftover codes honoured on the Profile they came from. That cannot be known, because v1 never stored which Profile a code came from.
+
+    ASSUMPTION: the key is the Profile's record id, not its Username. The Operator can rename a Username, a deleted Profile's Username can be claimed again (Phase 3 spec), and Usernames match case-insensitively (Phase 2 spec), so a Username key could hand a stored code to a different Profile or lose it. The record id survives v1 Import reruns, which update records in place (Phase 2 spec), and tells a Visitor nothing useful. Rung 4: a key written into Visitors' browsers cannot be renamed later. Overturned if Phase 2's Profile JSON must not carry the record id; the key then falls back to the lowercased Username, and the reuse case is accepted.
   - **`dailyStats` read.**
     - The Stats page lists the chosen range's `dailyStats` rows, 500 to a page, and requests the next page until it has every row.
     - It sends no Profile filter, so the list rule alone decides which rows a Creator sees.
@@ -201,7 +207,7 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
   - **Daily panel.** Page Views and Clicks for each day in the range, as bars with numbers, in place of the template's Traffic Overview.
   - **Links table.** Link, Clicks and CTR, most-clicked first, in place of the template's Top Web Links.
   - **Countries table.** Country, Page Views, Clicks and CTR, most Page Views first, in place of Geographic Analytics → Countries. Countries show as two-letter codes, as in the template, and `XX` shows as "Unknown".
-  - **CTR.** Clicks ÷ Page Views for the same range and filters, as a percentage with one decimal, or "—" when there are no Page Views. Page Views belong to the Profile, not to a Link. So under a Link filter, Page Views stay Profile-wide and CTR is that Link's Clicks over them.
+  - **CTR.** Clicks ÷ Page Views for the same range and filters, as a percentage with one decimal, or "—" when there are no Page Views. It can exceed 100%, because Clicks are not de-duplicated, and is shown as computed. Page Views belong to the Profile, not to a Link. So under a Link filter, Page Views stay Profile-wide and CTR is that Link's Clicks over them.
   - **Empty range.** A range with no rows reads "No Page Views or Clicks in this range yet."
   - **Freshness.** Numbers are as of page load. There is no auto-refresh.
   - **Accessibility.** Every number sits under an accessible label (card names, table column headers), so a spec can read it by role.
@@ -211,7 +217,7 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
   ASSUMPTION: the layout is mobile-first like the Editor (rung 3; plan section 6, "simplistic layout UI"). Overturned by a separate brief for Stats.
 
 - **Seed.** Phase 2's seed gains two Creators. Each has a known test password in the test stack's environment and one Profile.
-  - The **Stats Creator**'s **Stats Profile** has a Direct Mode Link and an Adult Link. The Adult Link has Tracking on, no Geo Rule and no default Tracking Code.
+  - The **Stats Creator**'s **Stats Profile** keeps the default Profile Mode (escape_ig) and has a Direct Mode Link and an Adult Link with no Mode of its own. The Adult Link has Tracking on, no Geo Rule and no default Tracking Code.
   - The **Other Creator**'s **Other Profile** has the same two Links.
   - Every Destination is on a `.test` host (reserved by RFC 6761), which the spec stubs.
   - Only this Phase's spec visits these two Profiles, so other specs running in parallel cannot disturb their counts.
@@ -223,7 +229,7 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
 - **Seam: one.** The existing Playwright loop, `./check.sh` → `npx playwright test`, runs against Phase 2's compose stack at `baseURL`. Nothing below it is mocked, and no unit-test seam is added.
   - The spec is `tests/e2e/04-stats.spec.ts`. It runs serially, in the order below.
   - Every Visitor is a fresh browser context. The country is set through `extraHTTPHeaders` (`CF-IPCountry`), and a fake User-Agent is used where needed (plan section 7).
-  - Creator calls and signed-out calls to PocketBase's records API go through the same origin, as the Stats page's do. Operator steps use PocketBase's own API on its loopback port, with the superuser credentials from the test stack's environment.
+  - Rule checks (test 7) call PocketBase's records API directly on its loopback port, with a Creator's token or none. The same-origin proxy keeps `events` off its allow-list, so a check sent through it would be refused before PocketBase's rules were reached. The Stats page itself goes through the proxy. Operator steps use the same loopback port, with the superuser credentials from the test stack's environment.
 
   ASSUMPTION: the Operator steps reach PocketBase on a loopback port, and the rule checks run against PocketBase itself, because its rules are the security boundary (ADR 0002). Rung 3. Overturned if Phase 2's test stack exposes PocketBase elsewhere; the spec then uses that address.
 
@@ -231,7 +237,10 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
 - **Counting by delta.** Outside CI, Playwright reuses an already-running server (playwright.config.ts:13), and the tests in this file share Profiles. So each test reads Stats before and after acting and asserts the difference.
   - Between its two reads, a test also makes traffic that its assertion must leave out, so an ignored filter changes the number.
   - A run that straddles 00:00 UTC can fail a daily-row assertion; rerun it.
-- **Destinations are stubbed.** Navigation to any host other than `baseURL` is fulfilled with a stub through `page.route`, so no test leaves the machine. Before a Visitor acts, the spec waits for the ping's 204, or for the redirect or Reveal response.
+- **Destinations are stubbed.** No test leaves the machine, and no browser looks up a `.test` host.
+  - `/r/*` is intercepted with `page.route`. The handler sends the real request with `route.fetch({ maxRedirects: 0 })`, asserts the 302 and its `Location`, and fulfils the navigation with a local stub page. Playwright calls a route handler only for the first URL of a redirect chain, so a route on the Destination's host alone would not catch a redirect.
+  - A Destination reached through Reveal is a fresh navigation, which a `page.route` on every host other than `baseURL` fulfils with the stub.
+  - Before a Visitor acts, the spec waits for the ping's 204; after it, for the `/r` or Reveal response.
 - **No raw Events in the page.** Every test that opens Stats asserts that the page requested nothing from the `events` collection (story 12).
 - **Tests.**
   1. **Page View and Click reach Stats.** A Visitor with country `SI` loads the Stats Profile and clicks its Direct Mode Link. Signed in as the Stats Creator, Stats → 7D shows +1 in each of:
@@ -240,7 +249,7 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
      - that Link's row;
      - the `SI` country row.
 
-     The CTR text equals Clicks ÷ Page Views as displayed. The page is then reloaded with every `dailyStats` request's `perPage` rewritten to 1 through `page.route`, and the cards and both tables must read the same. The test saves `.scratch/goal_ai/shots/04-stats.png`. (Stories 1, 2, 6, 13–17, 19, 34.)
+     The CTR text equals Clicks ÷ Page Views as displayed. The page is then reloaded with every `dailyStats` request's `perPage` rewritten to 1 through `page.route`, and the cards and both tables must read the same. At a 390 × 844 viewport the page has no horizontal overflow (`scrollWidth` ≤ `clientWidth`), and the test saves `.scratch/goal_ai/shots/04-stats.png` at that size. (Stories 1, 2, 6, 13–17, 19, 22, 34.)
   2. **Adult Link, filters and filtered CTR.** Between the two reads:
      - an `SI` Visitor clicks the Adult Link and passes the Age Gate;
      - an `SI` Visitor clicks the Direct Mode Link;
@@ -249,17 +258,19 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
      Stats → 7D then shows:
      - no filter: Page Views +3, Clicks +3;
      - Link = Adult Link: Clicks +2, Page Views still +3;
-     - Link = Adult Link and Country = `SI`: Page Views +2, and Clicks +1 on the card and in today's daily row.
+     - Link = Adult Link and Country = `SI`: Page Views +2, and Clicks +1 on the card and in today's daily row. The Links table lists only the Adult Link (+1), and the Countries table only `SI` (Page Views +2, Clicks +1).
 
-     Every CTR shown equals Clicks ÷ Page Views as displayed. (Stories 3, 18.)
-  3. **The Link Shortcut counts; unknown Ids do not.** Between the two reads:
-     - a Visitor opens the Stats Profile with `?link={its Direct Mode Link's Id}` and lands on the stub;
+     Every CTR shown equals Clicks ÷ Page Views as displayed. Read with the Stats Creator's token, `dailyStats` holds exactly one row for (Direct Mode Link, `SI`, today), and its `clicks` rose by 1 across this test, so rows are grouped before they reach the page. (Stories 3, 12, 18.)
+  3. **Link Shortcuts count; unknown Ids and refused Reveals do not.** Between the two reads:
+     - a Visitor opens the Stats Profile with `?link={its Direct Mode Link's Id}` and lands on the stub (the `/r` path);
+     - a Visitor opens the Stats Profile with `?link={its Adult Link's Id}`, passes the Age Gate if it shows, and lands on the stub (the Reveal-on-load path);
      - `GET /r/{unknown Id}` answers 404;
-     - a Reveal for an unknown Link Id answers 404.
+     - a Reveal for an unknown Link Id answers 404;
+     - a Reveal for the Adult Link sent with a foreign `Origin` is refused.
 
-     Clicks rise by exactly 1, all of it on the Direct Mode Link's row. (Stories 4, 5.)
-  4. **Unknown country.** One Visitor sends no country header and another sends `CF-IPCountry: T1`; both load the Stats Profile. The Countries table's "Unknown" row shows +2 Page Views, and no `US` or `T1` row gains any. (Story 7.)
-  5. **Ranges and the empty range.** The Stats Creator reads the Today, 7D and 30D tabs. Each shows its UTC date span: 1, 7 and 30 days ending today. The Creator then reopens Stats with the browser clock moved one day ahead through `page.clock`, leaving the server's clock untouched.
+     Clicks rise by exactly 2: +1 on the Direct Mode Link's row and +1 on the Adult Link's row. (Stories 4, 5.)
+  4. **Country comes from `CF-IPCountry` only.** Four Visitors load the Stats Profile: one with no country header, one with `CF-IPCountry: T1`, one with `x-country: SI` and `CF-IPCountry: DE`, and one with `CF-IPCountry: US`. The Countries table shows Page Views "Unknown" +2, `DE` +1 and `US` +1, and `SI` and `T1` gain none. (Stories 6, 7.)
+  5. **Ranges and the empty range.** The Stats Creator reads the Today, 7D and 30D tabs. Each shows its UTC date span: 1, 7 and 30 days ending today. Every `dailyStats` request sent for a tab names that span's first day (today, today − 6, today − 29) in its `filter`, so a page that fetches all history fails although no stored Event is old enough to show it. The Creator then reopens Stats with the browser clock moved one day ahead through `page.clock`, leaving the server's clock untouched.
      - Today reads "No Page Views or Clicks in this range yet."
      - 7D and 30D each list the real today's date, with the Page Views and Clicks the Today tab showed before the move.
 
@@ -267,28 +278,32 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
 
      ASSUMPTION (evidence blocked): a Creator session issued at real time stays valid in a browser whose clock is one day ahead, because PocketBase's default token lifetime is longer than a day (no network to check the pinned release). Overturned by a shorter lifetime; the test then signs in again after moving the clock.
   6. **In-App Browser recorded, nothing else stored.** A Visitor loads the Stats Profile once with each of five User-Agents: Instagram, Facebook (`FBAN`), Threads, TikTok and desktop Chrome. For each load, the newest Event for that Profile, read with the Operator's credentials, has `inAppBrowser` instagram, facebook, threads, tiktok or empty, respectively. Read the same way, the `events` collection's fields are exactly `id`, `kind`, `profile`, `link`, `country`, `inAppBrowser` and `created`. (Stories 8, 9, 11.)
-  7. **Owner only.** Each Creator first records a Page View on their own Profile. Then, through PocketBase's records API:
+  7. **Owner only.** Each Creator first records a Page View on their own Profile, and the Operator creates a throwaway Profile with no owner, which a Visitor loads once. Then, through PocketBase's records API on its loopback port:
      - with the Stats Creator's token, every listed `dailyStats` row belongs to the Stats Profile, and viewing a known Other Profile row by its id answers 404. The same holds the other way round.
-     - with either Creator's token, and signed out, listing or viewing `events` returns no record, and creating an Event is refused.
-     - signed out, listing `dailyStats` returns no items.
+     - with either Creator's token, and signed out, listing or viewing `events` returns no record, and creating, updating or deleting an Event is refused.
+     - signed out, listing `dailyStats` returns no items, and viewing the ownerless Profile's row by its id (read with the Operator's credentials) answers 404.
+     - signed out and with the Other Creator's token, listing `dailyStats` with `expand=link` returns no Stats Profile row, and no response body holds a `destination` key.
 
-     In the UI, the Other Creator's Stats page names none of the Stats Profile's Links. (Stories 23, 24.)
+     The throwaway Profile is then deleted. In the UI, the Other Creator's Stats page names none of the Stats Profile's Links. (Stories 23, 24.)
   8. **A Tracking Code stays with its Profile.** The Visitor's context starts with v1's global `linkme_tracking_id` = 999 already in `localStorage`. The Visitor:
      - opens `/{Other Profile's Username}/123` and follows its Adult Link; the Destination ends in `/c123`;
-     - then opens the Stats Profile and follows its Adult Link. That Reveal request carries no Tracking Code, and its Destination has neither `/c123` nor `/c999`.
+     - then opens the Stats Profile and follows its Adult Link. That Reveal request carries no Tracking Code, and its Destination has neither `/c123` nor `/c999`;
+     - then opens the Stats Profile with `?link={its Adult Link's Id}`. That Reveal request carries no Tracking Code either.
 
-     (Stories 25, 26, 27.)
+     A second context, with an Instagram User-Agent and the same global 999, opens `/{Other Profile's Username}/123` and then the Stats Profile. Once the Escape Overlay shows, the address bar, which is the escape target (Phase 1), carries neither `/123` nor `/999`.
+
+     Username reuse: the Operator creates a throwaway Profile with a run-unique Username and an Adult Link with Tracking on. A third context opens `/{that Username}/777`. The Operator deletes that Profile and creates a new one under the same Username with the same kind of Link, and the third context follows the new Profile's Adult Link. That Reveal request carries no Tracking Code. The new Profile is then deleted. (Stories 25, 26, 27.)
   9. **A deleted Link keeps its Clicks.** The Operator creates a Link with a stub Destination on the Stats Profile. A Visitor opens `/r/{its Id}`, then the Operator deletes the Link. The Links table's "Deleted link" row shows +1 Click, and the Clicks card shows the same total as just before the delete. (Story 20.)
   10. **A deleted Profile takes its Events.** The Operator creates a throwaway Profile. A Visitor loads it and its ping answers 204. The Operator then deletes the Profile. The delete succeeds, and no Event for that Profile remains. (Story 30.)
-  11. **A failed Event write does not block a Click.** The Operator adds a temporary required field to `events`, so that every Event write fails. A Visitor clicks the Stats Profile's Direct Mode Link and reaches the stub Destination. A `finally` step removes the field. (Story 10.)
+  11. **A failed Event write does not block a Click.** The Operator adds a temporary required field to `events`, so that every Event write fails. A Visitor clicks the Stats Profile's Direct Mode Link, whose `/r` still answers 302 to its Destination, then follows the Adult Link through the Age Gate, whose Reveal still answers with its Destination; both reach the stub. A `finally` step removes the field. (Story 10.)
 
       ASSUMPTION (evidence blocked): adding a required field to a populated collection through the superuser API makes later inserts without that field fail (no network to check the pinned release). Overturned if that release refuses the change; the test then narrows the `kind` select so that the app's values fail.
   12. **The ping is rate-limited.** The Operator creates a throwaway Profile with a Username unique to this run. Pings to it reach 429 within the Reveal threshold + 1 requests, using the value from the test stack's environment. Right after that, a ping for the Stats Profile still answers 204, and `/r` for its Direct Mode Link still redirects. The throwaway Profile is then deleted. Because each run uses a fresh Username, a reused stack's exhausted window cannot leak into the next run. (Story 29.)
 
-  A stalled write has no automated test. The seam cannot stall one PocketBase insert without a test-only fault switch, and this Phase adds none; the 300 ms bound in the Event Recorder is the guarantee. Story 28 is Phase 1's rule and Phase 1's test. This Phase changes only the storage key, and test 8 shows that a code arriving in the URL is still stored and used. Stories 31 and 33 are the manual lines in Acceptance; story 22 is the screenshot glance.
+  A stalled write has no automated test. The seam cannot stall one PocketBase insert without a test-only fault switch, and this Phase adds none. Pausing PocketBase would stall the Link lookup that comes before the write, so the 300 ms bound in the Event Recorder is the guarantee. Story 28 is Phase 1's rule and Phase 1's test. This Phase changes only the storage key, and test 8 shows that a code arriving in the URL is still stored and used, and that neither a Link Shortcut nor an escape target picks up another Profile's code. Stories 31 and 33 are the manual lines in Acceptance; story 22's look is the screenshot glance.
 - **Prior art.** `tests/e2e/00-smoke.spec.ts` already uses each technique this spec needs:
   - a fake Instagram User-Agent through `test.use`;
-  - `page.route` to stop a Destination from being followed (00-smoke.spec.ts:33-36);
+  - `page.route` with `route.fetch`, so the real endpoint answers before its result is replaced (00-smoke.spec.ts:35-37);
   - role-based assertions.
 
   `playwright.config.ts:7` already writes into `.scratch/goal_ai/shots`.
@@ -296,35 +311,22 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
 ## Acceptance
 
 ```sh
+set -e  # any failing check fails the block; the final ./check.sh cannot mask it (house precedent: Phases 1-3)
 # Playwright's webServer starts Phase 2's compose stack with its seed (plan section 7).
 test -f tests/e2e/04-stats.spec.ts
 ./check.sh tests/e2e/04-stats.spec.ts
 test -s .scratch/goal_ai/shots/04-stats.png
-# manual: glance at .scratch/goal_ai/shots/04-stats.png. It should read like link.me/analytics.html:
+# manual: glance at .scratch/goal_ai/shots/04-stats.png (phone width). It should read like link.me/analytics.html:
 #         range tabs with a date span, three cards, daily bars, a Links table and a Countries table.
 # manual (RUN.md, real device): in Instagram on a phone, open a Profile on v2's VPS host. In PocketBase's admin UI
-#         the newest Event for that Profile shows inAppBrowser = instagram (and country XX until the step below).
-# manual, at Cutover, with Phase 5's DNS switch. Production country source = Cloudflare's CF-IPCountry.
-#   Needs: a Cloudflare account, an API token with Zone:Edit + DNS:Edit, ofl.ink's registrar login, the VPS address.
-#   export CF_API_TOKEN=<token> CF_ACCOUNT_ID=<account id> VPS_IP=<vps address>
-#   CF=https://api.cloudflare.com/client/v4; H1="Authorization: Bearer $CF_API_TOKEN"; H2='Content-Type: application/json'
-#   # 1. zone (skip if ofl.ink is already a Cloudflare zone); then set result.name_servers at the registrar:
-#   curl -sX POST "$CF/zones" -H "$H1" -H "$H2" --data "{\"name\":\"ofl.ink\",\"account\":{\"id\":\"$CF_ACCOUNT_ID\"},\"type\":\"full\"}"
-#   export CF_ZONE_ID=<result.id>
-#   # 2. record, DNS-only first, so that Caddy gets ofl.ink's certificate directly:
-#   curl -sX POST "$CF/zones/$CF_ZONE_ID/dns_records" -H "$H1" -H "$H2" \
-#     --data "{\"type\":\"A\",\"name\":\"ofl.ink\",\"content\":\"$VPS_IP\",\"proxied\":false,\"ttl\":1}"
-#   export CF_RECORD_ID=<result.id>   # wait until https://ofl.ink answers from v2 with a valid certificate
-#   # 3. settings, then proxy on:
-#   curl -sX PATCH "$CF/zones/$CF_ZONE_ID/settings/ssl" -H "$H1" -H "$H2" --data '{"value":"strict"}'
-#   curl -sX PATCH "$CF/zones/$CF_ZONE_ID/settings/ip_geolocation" -H "$H1" -H "$H2" --data '{"value":"on"}'
-#   curl -sX PATCH "$CF/zones/$CF_ZONE_ID/dns_records/$CF_RECORD_ID" -H "$H1" -H "$H2" --data '{"proxied":true}'
-#   # 4. verify: expect 204, then the newest Event for that Profile (admin UI) shows this machine's real country, not ZZ:
+#         the newest Event for that Profile shows inAppBrowser = instagram (and country XX until Cutover).
+# manual, after Phase 5's switch. Phase 5's runbook proxies ofl.ink and every Spare Domain through Cloudflare with
+#         IP Geolocation on; this Phase adds no Cloudflare step of its own.
 #   curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'CF-IPCountry: ZZ' https://ofl.ink/v/<a Username>
-#   #    then open a Profile on a phone on mobile data: its Page View appears in that Creator's Stats.
-#   # rollback (every Event records XX again):
-#   curl -sX PATCH "$CF/zones/$CF_ZONE_ID/dns_records/$CF_RECORD_ID" -H "$H1" -H "$H2" --data '{"proxied":false}'
-#   # Repeat steps 2-4 for each Spare Domain in its own zone. A Custom Domain that Cloudflare does not proxy records XX.
+#   # expect 204; the newest Event for that Profile (admin UI) shows this machine's real country, not ZZ or XX.
+#   # then open a Profile on a phone on mobile data: its Page View appears in that Creator's Stats with its country.
+#   # if Events still show XX: Cloudflare dashboard -> ofl.ink -> Network -> IP Geolocation on
+#   #   (API: PATCH zones/<zone id>/settings/ip_geolocation {"value":"on"}, with a token holding Zone Settings:Edit).
 ./check.sh
 ```
 
@@ -342,7 +344,8 @@ test -s .scratch/goal_ai/shots/04-stats.png
 - **Phase 2.** Provides:
   - PocketBase, the app container and the app's privileged PocketBase access;
   - the `users`, `profiles`, `links` and `events` collections (plan section 5);
-  - `/r/:linkId`, which every non-Adult Link goes through (plan section 9);
+  - `/r/:linkId`, which non-Adult Links in Direct or Escape Mode go through; Links in Deeplink Mode and Adult Links go through Reveal (Phase 2 spec, Contracts);
+  - the public Profile JSON, whose `profile` object this Phase extends with the record `id`;
   - Reveal, with its Geo Rule, `/c{code}` resolver and rate limiter, and the client address that limiter uses;
   - the compose stack and its seed with the Fixture Profile;
   - Playwright's webServer switched to `docker compose up` (plan section 7);
@@ -353,6 +356,7 @@ test -s .scratch/goal_ai/shots/04-stats.png
   - the creator-only area and its navigation, where Stats sits next to the Editor;
   - the allow-listed same-origin PocketBase proxy, to which this Phase adds `dailyStats` (`events` stays off the list);
   - the owner relation on `profiles` that the `dailyStats` rule names.
+- **Phase 5, for production countries only, not for landing.** Its Cutover runbook proxies ofl.ink and every Spare Domain through Cloudflare with IP Geolocation on, drops country headers from peers outside Cloudflare's ranges, and gives the app the Visitor's own address (Phase 5 spec, stories 18 and 19). Until then every production Event records `XX`.
 
 ## Out of Scope
 
@@ -373,19 +377,66 @@ test -s .scratch/goal_ai/shots/04-stats.png
 - **A scheduled rollup job or table.** The `dailyStats` view meets "daily aggregation" (see Schema).
 - **Per-Creator time zones.** Days are UTC (see Schema).
 - **VPS geo-IP (MaxMind).** It needs an account, a licensed download, a new dependency and lookup code. Cloudflare needs none of these (see Visitor country).
-- **Caddy lines that rewrite or strip country headers.** The app reads `CF-IPCountry` directly. A Visitor who bypasses Cloudflare can only set the country of their own Events, which fake pings could inflate anyway.
-- **A Deeplink or Escape Mode counting matrix.** Clicks are counted where `/r` or Reveal hands out the Destination, whatever the Mode. Phase 1 tests each Mode's path.
+- **Caddy lines that strip country headers, Cloudflare zone, record and setting changes, and the client address behind Cloudflare.** Phase 5 owns all of them (Phase 5 spec, stories 3, 18 and 19). The app reads `CF-IPCountry` directly.
+- **A Deeplink or Escape Mode counting matrix.** Clicks are counted where `/r` or Reveal hands out the Destination, whatever the Mode, and tests 2, 3 and 11 cover both endpoints, Reveal-on-load included. Phase 1 tests which endpoint each Mode calls.
 - **Umami.** The plan lists it as a Bonus "if PocketBase stats are not enough".
 - **A chart library.** It is a new dependency, and plain bars meet the brief.
 
 ## Further Notes
 
-ASSUMPTION: Reveal's and the ping's rate limits must key on the Visitor's address once the records are Proxied, not on Cloudflare's. Behind the proxy every request comes from a Cloudflare address, so many Visitors would share one window and get 429s on Reveal and on the ping. This Phase changes nothing about how the client address is found: the ping reads it exactly where Reveal's limiter does, so one fix covers both (rung 5). Before the proxy is switched on, whoever holds the Caddyfile at Cutover (Phase 2's file) takes the client address from `CF-Connecting-IP`, but only for peers in Cloudflare's published ranges (`curl -s https://www.cloudflare.com/ips-v4 https://www.cloudflare.com/ips-v6`). In Caddy that is the global `servers { trusted_proxies static <ranges>; client_ip_headers CF-Connecting-IP }`. If the phone check in Acceptance step 4 fails, the rollback command undoes the proxy. Overturned if Phase 2 or Phase 5 already owns the client address behind Cloudflare; this note then only points at their step.
+ASSUMPTION: Reveal's and the ping's rate limits key on the Visitor's address once ofl.ink is Proxied, not on Cloudflare's; otherwise many Visitors share one window and get 429s. Phase 5 owns that (Phase 5 spec, story 19), and the ping reads the client address exactly where Reveal's limiter does, so its fix covers both (rung 5). Overturned if Phase 5 drops that step; the client address then needs an owner before the switch.
 
-ASSUMPTION (evidence blocked): Cloudflare overwrites any `CF-IPCountry` a client sends, and the zone settings `ssl` = `strict` and `ip_geolocation` = `on`, plus the zone and DNS-record calls in Acceptance, match the current Cloudflare v4 API. There is no network to check the reference. Acceptance step 4's `ZZ` probe tests the first part. Overturned by the API reference or by that probe; if the probe reads `ZZ`, Caddy must drop the client's `CF-IPCountry` for peers outside Cloudflare's ranges.
-
-ASSUMPTION (evidence blocked): it is unknown whether ofl.ink is already a Cloudflare zone, because checking its name servers is a network lookup. Acceptance step 1 is skipped if it is. Overturned by `dig NS ofl.ink` showing Cloudflare name servers.
-
-ASSUMPTION: the record is DNS-only until Caddy holds ofl.ink's certificate, and only then Proxied with SSL "Full (strict)". That way Caddy's own certificate issuance never has to pass through Cloudflare (rung 4: each step can be undone on its own). Overturned if Phase 5 issues certificates another way, such as a Cloudflare origin certificate. Step 2's wait then falls away.
+ASSUMPTION (evidence blocked): Cloudflare overwrites any `CF-IPCountry` a client sends through its proxy. There is no network to check its reference. The Acceptance `ZZ` probe tests it. Overturned by that probe: if it reads `ZZ`, the country numbers cannot be trusted, and the source goes back to the human, with VPS geo-IP as the parked alternative.
 
 ASSUMPTION: until Cutover every production Event records `XX`, because v2 has no live traffic before then and nothing proxies it. This costs nothing (rung 5). Overturned if the Operator wants real country numbers on v2's VPS host before Cutover; that host then needs its own Proxied record.
+
+## Review
+
+Reviewer: **codex** (codex-cli 0.155.0-alpha.9, `model_reasoning_effort=high`, read-only sandbox on a workspace holding the plan, CONTEXT.md, ADRs 0001–0005 and the harness only), 2026-10-02. Two calls: a blind call without this spec, and a draft call with it. Both exited 0 within the 900 s bound with fresh, non-empty output.
+
+Process notes. The draft call read the sibling Phase 0–3 and 5 specs from the worktree's git objects (`git show HEAD:docs/spec/<file>`, commit c52cbe2), so it was not blind to docs/spec/ as the workspace intended. Every claim it based on those specs was rechecked against the current files in docs/spec/ before being accepted. The draft call also fetched four public documentation pages (PocketBase rules and relations, Playwright `page.route`, Cloudflare zone settings) by URL; no workspace content went with them. The blind call read no spec. The forbidden-URL grep from the security constraints found nothing in either prompt or either output.
+
+Draft call (with the spec):
+
+- **accept** (D1) The `dailyStats` rule `profile.owner = @request.auth.id` matches every row of an ownerless Profile for a signed-out caller (empty equals empty), and imported Profiles keep an empty owner (Phase 2 spec, Schema: `owner relation -> users, optional`, and its ASSUMPTION that owner stays empty on import; Phase 3 spec, Schema: "imported Profiles have none"). The rule now starts with `@request.auth.id != ""` (Schema), and test 7 adds an ownerless Profile with a Page View, checked signed out by list and by id.
+- **accept** (D2) A Username key is not per-Profile: the Operator can rename a Username (Phase 3 spec, line 34 and its squatting note), a deleted Profile's Username can be claimed again, and Usernames match case-insensitively (Phase 2 spec, "What differs on purpose"). The key is now `linkme_tracking_id:{Profile id}`, Phase 2's Profile JSON gains `profile.id` (Owns, Tracking Code storage, Depends on), and test 8 adds a Username-reuse case.
+- **accept** (D3) The Acceptance block had no fail-fast, so the final `./check.sh` could mask a failed Phase 4 line (codex: `bash -c 'test -f tests/e2e/04-stats.spec.ts; printf "continued..."'` exited 0). It now opens with `set -e`, following Phases 1–3's Acceptance blocks.
+- **accept** (D4) Rule checks sent through the same-origin proxy would be refused by its allow-list (`events` stays off it, Depends on → Phase 3) before PocketBase's rules were reached, so test 7 could pass with public rules. Test 7 now calls PocketBase on its loopback port with Creator tokens and none, and also checks update and delete on `events`, which Schema promises are closed.
+- **partial** (D5) Accepted: "every non-Adult Link goes through `/r`" was false, since Phase 2's Profile JSON gives Deeplink Mode Links an empty `url` and sends them through Reveal (Phase 2 spec, Contracts). Story 2 and Depends on are corrected. Test 3's Direct Mode Shortcut also follows `/r` (Phase 2 spec: "A Link Shortcut to a non-Adult Link opens that Link's url"), so test 3 now adds an Adult Link Shortcut for Reveal-on-load. Rejected: a per-Mode counting matrix and an Escape counted in a fresh context. Recording sits in the two endpoints, whatever the Mode; tests 2, 3 and 11 cover both endpoints, and Phase 1 tests which endpoint each Mode calls.
+- **accept** (D6) The hand-off is clean in text: Phase 1 defines the escape target as "the code the page would pass to Reveal" and defers the key to Phase 4 (Phase 1 spec, Tracking Code storage). But only the tap-to-Reveal consumer was tested. Test 8 now also checks a Link Shortcut, and an Instagram context's escape target, against another Profile's code and v1's global 999.
+- **accept** (D7) "`CF-IPCountry` only" contradicted the fallback ASSUMPTION, which would switch to Phase 2's lookup. That lookup exists and reads `x-country`, then `cf-ipcountry`, then `US` (Phase 2 spec, Contracts: Visitor location). The Event Recorder now reads the header itself and never calls that lookup (Contracts → Visitor country). Test 4 adds a conflicting `x-country: SI` + `CF-IPCountry: DE` (expect DE) and a genuine `US`.
+- **accept** (D8) Playwright calls a route handler only for the first URL of a redirect chain (codex cites the Playwright 1.58.2 `page.route` docs), so a route on the Destination's host would not catch `/r`'s 302 target, and the browser would look up the `.test` host. Testing Decisions now intercepts `/r/*`, fetches it with `maxRedirects: 0`, asserts the 302 and `Location`, and fulfils with a stub.
+- **accept** (D9) The Cloudflare runbook duplicated Phase 5's, which already moves the zone, sets the records Proxied with "Network -> IP Geolocation on", and owns peer-matched country-header stripping and the client address (Phase 5 spec, stories 3, 18 and 19, Caddy section and runbook step 3). Following both would create a second apex record. Acceptance keeps only the post-switch `ZZ` probe and an IP Geolocation fallback. Story 31, Depends on (Phase 5, production countries only), Out of Scope and Further Notes now point at Phase 5.
+- **accept** (D10) The listed token (Zone:Edit + DNS:Edit) could not PATCH zone settings, which needs Zone Settings:Edit (codex cites Cloudflare's endpoint reference). The zone-settings commands left with D9, and the one remaining fallback names Zone Settings:Edit.
+- **partial** (D11) Test 5 could not tell 7D's and 30D's lower bounds from "all history". Accepted: test 5 now asserts that each tab's `dailyStats` request names its first day (today − 6, today − 29) in `filter`. Rejected: backdated Events and a clock moved past the bound. `created` is an autodate the API does not set, and moving the browser clock 7 or more days can outlive the Creator's token, which test 5's own evidence-blocked ASSUMPTION already worries about at one day.
+- **accept** (D12) Filters were asserted on cards and the daily row only, so a table that ignored them would pass. Under Link + Country, test 2 now checks that the Links table and the Countries table each show only the filtered row.
+- **accept** (D13) A `dailyStats` that returned one row per Event would pass the "no `events` request" check. Test 2 now asserts exactly one row for (Direct Mode Link, `SI`, today) whose `clicks` rose by 1.
+- **partial** (D14) Accepted: test 3 now sends a foreign-`Origin` Reveal and expects no Click. Rejected: a rate-limited Reveal. Reveal's limiter keys on the client address alone (Phase 2 spec, Interfaces: `allow(clientIp)`), so exhausting it from 127.0.0.1 would give 429s to every parallel spec's Reveals for the window. That is the reason the ping has its own counter (Contracts → Page View Ping).
+- **partial** (D15) Accepted: test 11 now also passes an Adult Link through Reveal while every write fails. Rejected: a stalled-write test. Pausing PocketBase stalls the Link lookup that comes before the write, so it cannot isolate the 300 ms bound without a fault switch, and this Phase adds none (Testing Decisions).
+- **accept** (D16) The one project is Desktop Chrome (playwright.config.ts:9), so a desktop-only layout would pass. Test 1 now checks for no horizontal overflow at 390 × 844 and takes the screenshot at that size.
+- **accept** (D17) ADR 0004: codex found no Destination published by Stats; `dailyStats` holds ids and counts, and Link names come through the owner's authenticated Editor read. Relation expansion was not verified, though. Test 7 now lists `dailyStats` with `expand=link`, signed out and as the Other Creator, and expects no Stats Profile row and no `destination` key.
+
+Blind call (without the spec):
+
+- **reject** (B1) "Reveal-as-Click needs an explicit decision." Interfaces and What counts make it, flagged as an ASSUMPTION with what would overturn it, following CONTEXT.md:111–114.
+- **reject** (B2) "Route every Click through `/r`, or instrument both endpoints without double counting." The spec instruments both, and exactly one endpoint hands out any one Destination (Interfaces). D5's correction keeps that true for Deeplink Mode.
+- **reject** (B3) "Browser ping or server-side page request." The plan names "a page-view ping" (goal_ai.txt:157), rung 2.
+- **reject** (B4) "Read-time grouping, counters or a materialized rollup." Schema picks the read-time view, with a one-second overturn threshold and a same-shaped nightly table as the fallback.
+- **reject** (B5) "Choose a failure contract for Event writes." Write path picks a 300 ms bounded wait, and D15 adds the Reveal-path test.
+- **reject** (B6) "Umami is a contingency, not an alternative." No defect: Out of Scope already says so (goal_ai.txt:166).
+- **reject** (B7) "Define counting for cancel, retries, previews, bots and duplicates." What counts and Out of Scope define each: a handed-out Destination is a Click, double taps count, link previewers count, and bot filtering waits for evidence.
+- **partial** (B8) "Define the CTR denominator and whether CTR above 100% is valid." The denominator was already defined (Profile-wide Page Views for the same range and filters). The Stats page now also says CTR can exceed 100% without de-duplication and is shown as computed.
+- **reject** (B9) "Clarify D5's `user`, server-side Profile resolution and idempotency." Schema's ASSUMPTION reads `user` as the Creator via the Profile; the server resolves the Profile from the Username or the Link; there is no idempotency key because nothing is de-duplicated.
+- **partial** (B10) "Country trust and normalization." Normalization was defined (two letters A–Z, else `XX`). Trust at the origin is Phase 5's peer-matched header stripping, which Out of Scope and Depends on now name. US state stays out of scope (D5 logs country only).
+- **reject** (B11) "Attribution precedence, validity and lifetime." Tracking Code storage keeps v1's precedence (stored code over the Link's default) and no expiry; Geo Rule selection is Phase 2's resolver.
+- **reject** (B12) "Time zone, late Events, deletion, renames, import reruns." Days are UTC; the view stores nothing, so there are no late arrivals; deleted Links keep their Clicks; v1 Import reruns update records in place (Phase 2 spec), so Link and Profile ids stay. Renames are D2.
+- **accept** (B13) "Test ownership against PocketBase's own API." Same as D4: test 7 now runs on the loopback port.
+- **reject** (B14) "Retention, throughput, abuse limits, classification, empty and error states." Retention is Out of Scope with a revisit trigger, abuse is the ping limiter, classification is the In-App Browser contract, the empty state is specified, and throughput has Schema's overturn threshold. An error-state message is polish, not a defect.
+- **partial** (B15) "Primary seam: a real v2 app and PocketBase, ending in the Creator's Stats; extend across every Mode." The seam is the spec's. The Mode extension is answered as in D5.
+- **reject** (B16) "Deterministic calculation checks with fixed timestamps." `created` is an autodate and the spec adds no unit seam; D11 checks range bounds at the request.
+- **reject** (B17) "Test header spoofing at the trusted-proxy boundary." The local stack has no Cloudflare; Phase 5 owns and tests peer matching.
+- **reject** (B18) "The harness serves v1 through `tests/dev-server.mjs`" (playwright.config.ts:11). Depends on → Phase 2 lists the switch to `docker compose up` (plan section 7).
+- **reject** (B19) "Screenshots are only-on-failure" (playwright.config.ts:8). Test 1 saves its own screenshot.
+- **reject** (B20) Falsifiers. Each is a test or a stated choice: one endpoint per Click (Interfaces), a cancelled navigation after a Reveal counts by design (What counts), ownership (test 7), attribution (test 8), country (test 4), and cost (Schema's overturn threshold).
+
+Counts: 14 accept, 7 partial, 16 reject, 0 needs-human.

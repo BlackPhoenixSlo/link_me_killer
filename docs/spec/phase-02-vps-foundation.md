@@ -106,7 +106,7 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 **Developer**
 
 54. As a developer, I want `./check.sh` to start the stack with docker compose, seed it with the v1 Import, run every spec and tear the stack down, all at the same baseURL as before. The seed takes the v1 Snapshot plus Phase 0's Fixture Profile and test-only secrets file.
-55. As a developer, I want the Phase 0 and Phase 1 specs to pass against v2 unchanged, reading Link Ids from the served Profile rather than pinning them.
+55. As a developer, I want the Phase 0 and Phase 1 specs to pass against v2 unchanged. They read Link Ids from the served Profile rather than pinning them.
 56. As a developer, I want the test stack in its own Compose project with throwaway data, and never to land on a server it did not start.
 57. As a developer, I want test failures never to print a Destination, because failing output is pasted into tickets (plan §7).
 58. As a developer, I want committed image fixtures for every D4 format, so that the upload spec runs offline.
@@ -134,7 +134,6 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
     - The five specs under Testing Decisions.
     - Changes to `playwright.config.ts`.
     - `tests/dev-server.mjs` is removed: plan §7 replaces it with docker compose from Phase 2 on, and YAGNI.
-    - The one-line change to `tests/e2e/00-smoke.spec.ts` described under Testing Decisions.
 
   ASSUMPTION: the Compose file and Caddyfile sit at the repo root, with `app/` and `pocketbase/` beside them. Rung 2 for `app/`: plan §9 names `pnpm --dir app add …`. Rung 3 for the rest: plan §7 runs `docker compose up` from the root, where Playwright runs. Overturned if v2's stack should live in a sub-directory or its own repository.
 
@@ -155,9 +154,9 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
   - **v1 Import:** `import-v1 --site <dir> [--site <dir>]…`, on the app image's PATH and run through `docker compose run`.
     - Each `<dir>` is laid out like the v1 Snapshot: Profile files in `api/profiles/*.json`, Destinations in `netlify/functions/secrets.json`, and image paths (`/images/…`) resolved against `<dir>`.
     - A Profile looks up Destinations only in its own site's secrets file. A Username found in two sites refuses the run.
-  - **Public page:** serves the page copy directory, mounted read-only into the app.
+  - **Public page:** serves the page copy directory, `app/public/`, which the build copies into the app image.
 
-  ASSUMPTION: `--site` takes v1-shaped directories, and the seed builds one for the Fixture Profile with read-only bind mounts: Phase 0's Fixture Profile file, Phase 0's test-only secrets file, and the v1 Snapshot's `images/` unless Phase 0 ships its own images. Rung 5: one input shape for production and the seed, and no rule is needed for a Link Id that appears in two secrets files. Overturned by the shape Phase 0 actually gives its fixtures; only the seed's mounts change.
+  ASSUMPTION: `--site` takes v1-shaped directories. The seed passes Phase 0's `tests/fixtures/` as the Fixture site, as Phase 0 lays it out (`api/profiles/fixture.json`, `netlify/functions/secrets.json`). It bind-mounts `app/public/images/` read-only as that site's `images/`, because the Fixture Profile's image paths name the stock icons Phase 0 puts there (Phase 0 spec, Implementation Decisions: Page Copy and the Fixture Profile sample). Rung 5: one input shape for production and the seed, and no rule is needed for a Link Id that appears in two secrets files. Overturned by a change to Phase 0's fixture layout; only the seed's mounts change.
 
 - **Schema.** PocketBase collections, created and changed only through versioned migrations. In Phase 2 every API rule of every collection is superuser-only.
 
@@ -177,7 +176,7 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
             order                number
             isAdult              bool
             mode                 select direct | escape_ig | deeplink, optional    (empty = the Profile's default Mode)
-            destination          text, optional                                    (absolute http(s) URL or root-relative path)
+            destination          text, optional, pattern ^(https?://|/[^/])       (absolute http(s) URL or root-relative path)
             tracking             bool
             defaultTrackingCode  text, optional                                    (v1 default_tracknumber, verbatim)
             geo                  json, optional                                    (Geo Rule, v1 shape)
@@ -204,6 +203,8 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 
   ASSUMPTION: file fields accept only image/webp, so the admin UI refuses a dropped-in JPG instead of converting it. Rung 4: this keeps "every stored image is WebP" true without a second converter inside PocketBase. The 5 MB cap clears the largest v1 image, about 2.8 MB (`ls -lS linkme_clone3/images`). Overturned if the Operator must upload raw photos through the admin UI before the Editor exists (Phase 3).
 
+  ASSUMPTION: `links.destination` enforces `^(https?://|/[^/])` in the schema, not only in the import. Reveal hands that value to the page, which navigates to it, so a `javascript:` or `//host` value typed into the admin UI (or, from Phase 3, the Editor) would run on, or leave from, v2's own origin. Rung 4: a rule is cheaper to relax than an injected script is to recall. Overturned if a Destination must use another scheme; D3's Deeplink hands over an https link, so none does yet.
+
 - **Contracts.**
 
   HTTP. Every request reaches the app through Caddy. The app answers the paths that v1's page script calls, so the page copy needs no path changes.
@@ -211,8 +212,8 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
   | Request | Answer |
   |---|---|
   | `GET /api/profiles/{username}.json` | 200 with the Profile JSON, or 404 `{"error":"Profile not found"}`. The Username is matched lower-cased. `Cache-Control: public, max-age=0, must-revalidate` (v1's netlify.toml rule) |
-  | `GET /.netlify/functions/reveal?id&user&trackingId` | 200 `{"realUrl": …}`; 404 `{"error":"Link not found"}`; 403 cross-origin; 429 over the limit. Never an `Access-Control-Allow-Origin` header |
-  | `GET /r/{linkId}` | 302 with `Location:` the Destination; 404; or 429 |
+  | `GET /.netlify/functions/reveal?id&user&trackingId` | 200 `{"realUrl": …}`; 404 `{"error":"Link not found"}`; 403 cross-origin; 429 over the limit. Never an `Access-Control-Allow-Origin` header. Every answer `Cache-Control: no-store` |
+  | `GET /r/{linkId}` | 302 with `Location:` the Destination; 404; or 429. Every answer `Cache-Control: no-store` |
   | `GET /api/files/{profiles\|links}/{recordId}/{filename}` | The file, only while it is that record's current avatar, icon or backgroundImage, else 404. `Cache-Control: public, max-age=31536000, immutable` |
   | `POST /api/upload/{collection}/{recordId}/{field}`, with `Authorization: <PocketBase token>` and multipart `file` | 200 `{"url": "/api/files/…"}`; 401 with no token; PocketBase's own 403 or 404 passed through; 404 for a target not listed below; 413 over 20 MB; 415 for anything that is not a decodable image |
   | `GET /netlify/*` | 404 with landing.html as the body |
@@ -268,7 +269,9 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 
   ASSUMPTION: a non-Adult Link's `url` is the absolute `{origin}/r/{id}`. Rung 2 for leaving the Destination out (D8: "no real URL in any public file"). The absolute form is needed because v1's Escape code strips the scheme from the URL it is handed (script.js:29, :33). Overturned if Phase 1's page builds its own redirect URLs from the Link Id.
 
-  ASSUMPTION: a Link in Deeplink Mode gets an empty `url` even when it is not Adult, so the page reveals it and hands the phone the real Destination. With `{origin}/r/{id}` the phone would get an ofl.ink address that no app owns, and Deeplink would behave like Direct. Rung 5: one rule in the projection. Overturned if Phase 1's page does not take a Link with an empty `url` through Reveal, or if the real-device matrix shows the hand-off failing. Deeplink Links then go back to `/r/{id}`.
+  ASSUMPTION: a Link in Deeplink Mode gets an empty `url` even when it is not Adult. Phase 1's page reveals every Deeplink Mode Link whatever its `url` holds (Phase 1 spec, the Deeplink Mode ASSUMPTION), so the value is never followed, and leaving it empty keeps an ofl.ink address that no app owns out of a hand-off that D3 means for the Destination's own app. Rung 5: one rule in the projection. There is no fallback to `/r/{id}`: that would make Deeplink behave like Direct, against D3. Overturned if Phase 1's page stops revealing Deeplink Links; the page then changes, not the projection. The hand-off itself is judged by Phase 1's real-device matrix.
+
+  ASSUMPTION: Reveal and `/r` answer `Cache-Control: no-store`, so that no browser or edge cache (Cloudflare, Further Notes) replays a Destination outside the rate limit, or swallows a Click that Phase 4 must count. Rung 4: one header, cheaper to drop than a cached Destination is to recall. Overturned if Phase 5 puts a cache in front that needs these answers cacheable.
 
   ASSUMPTION: `/netlify/*` answers 404 with landing.html as its body, not the catch-all's 200. Rung 2: the plan's Phase 0 DONE line ("ofl.ink/netlify/functions/secrets.json returns 404") can only come true on v2 once ofl.ink points here. Rung 5 for the body. Overturned if a Username `netlify` must exist; Phase 3 reserves it.
 
@@ -344,30 +347,31 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
   - **Matching.** Profiles are upserted by Username. Links are upserted within their Profile by `v1Key` (`<v1 id>#<occurrence>`), so a Link keeps its v2 Link Id across runs, duplicated v1 ids included.
   - **v1 wins on v1's fields:** display name, bio, verified, avatar, title, order, Adult flag, tracking, default Tracking Code, Geo Rule, Destination, icon and background. Image files are replaced on every run.
   - **v2-only fields survive:** `mode`, `owner` and `linkId` are set when a record is created and never touched by a later run.
-  - **New and vanished Links.** A v1 Link new since the last run gets a fresh Link Id. A v1-imported record (one with a `v1Key`) that this run's input no longer contains is named in a `stale in v2:` warning and kept. Records born in v2 have no `v1Key` and are never named.
+  - **New and vanished Links.** A v1 Link new since the last run gets a fresh Link Id. A v1-imported record (one with a `v1Key`) that this run's input no longer contains is named in a `stale in v2:` warning and kept, still public, until the Operator deletes it. Records born in v2 have no `v1Key` and are never named.
+  - **Reconciliation is a required step.** A served stale record is a card v1 no longer shows, so the parity check against the VPS fails while one is left. That failure is the gate working, not a defect. Before the VPS parity run, and again after Phase 5's final import, the Operator deletes through the admin UI every record that a `stale in v2:` line names (Acceptance).
 
-  ASSUMPTION: re-runs match on a private `v1Key`, keep Mode and owner, and warn about stale records instead of deleting them. Rung 4: a deletion cannot be undone without backups, and a Mode chosen in v2 has no v1 counterpart for v1 to overrule. Overturned if the Operator wants re-runs to mirror v1 deletions, or to reset Mode to escape_ig.
+  ASSUMPTION: re-runs match on a private `v1Key`, keep Mode and owner, and warn about stale records instead of deleting them, which makes the Operator's deletion of stale records a required step before parity is signed off. Rung 4: a deletion cannot be undone without backups, and a Mode chosen in v2 has no v1 counterpart for v1 to overrule. ADR 0002's "v1 winning" still holds at sign-off, because the parity gate cannot pass until v1's deletions are mirrored. Overturned if the Operator wants re-runs to delete stale records themselves (a `--prune` flag), or to reset Mode to escape_ig.
 
 - **v1 Import — how it runs.**
   - It runs inside the app image with `docker compose run --rm`, with the v1 Snapshot mounted read-only for that run only (`-v "$PWD/linkme_clone3:/v1:ro"`). The VPS needs no Node of its own, and the running app never mounts secrets.json.
   - The import writes as the superuser.
   - The app and the import never log a Destination. Rung 2: plan §7 pastes failing output into tickets, and D8.
 
-- **Public page.** The app serves the page copy that Phase 0 creates (index.html, script.js, style.css, landing.html and whatever else the page needs) from a read-only bind mount.
+- **Public page.** The app serves the page copy that Phase 0 creates at `app/public/` (index.html, script.js, style.css, landing.html and the stock icons under `images/`). The build copies it into the app image.
   - The app's own routes are matched first, and index.html is the catch-all.
   - Nothing of the page is copied from `linkme_clone3/` by this Phase.
-  - The app's build context is `app/` alone, so neither the page copy nor the v1 Snapshot can be baked into the image.
+  - The app's build context is `app/` alone, so the v1 Snapshot cannot be baked into the image. The page copy is baked in, because it sits inside `app/`.
 
-  ASSUMPTION: the page copy lives in `public/` at the repo root. Rung 2 by analogy: the plan names `public/` as the published folder (§2, §5 Phase 0). Overturned by where Phase 0 actually puts it; only the Compose mount line changes.
+  ASSUMPTION: the page copy lives in `app/public/`, where Phase 0 puts it (Phase 0 spec, Implementation Decisions: Page Copy). Rung 5: the app serves its own directory with no extra mount. Overturned by a change to Phase 0's layout; only the Dockerfile's copy line follows it.
 
-  ASSUMPTION: a bind mount, not a copy baked into the image. Rung 4: a build context of `app/` alone cannot leak `linkme_clone3/` into an image. Overturned if the VPS should run a single self-contained image.
+  ASSUMPTION: the page copy is baked into the app image, not bind-mounted. Rung 5: one self-contained image for the VPS. `./check.sh` runs `up --build`, so Phase 1's page edits reach the test stack on every run. The build context `app/` holds no v1 file, so nothing of `linkme_clone3/` can reach the image. Overturned if page edits must reach the VPS without a rebuild.
 
 - **No cache.** Every Profile request reads PocketBase, which is what puts an admin edit on the next load. Images can be cached as immutable because PocketBase gives every stored file a new name.
 
 - **Reveal hardening (D8).**
   - Reveal sends no CORS header.
   - Reveal answers 403 when `Origin` names another origin than the one the request came to, or when `Sec-Fetch-Site` is `cross-site` or `same-site`. A request carrying neither header passes.
-  - Reveal and `/r` share an in-memory, fixed-window limit per client IP (`REVEAL_LIMIT_PER_MINUTE`). The client IP is the one Caddy reports in `X-Forwarded-For`, and a 429 body carries no Destination.
+  - Reveal and `/r` share an in-memory, fixed-window limit per client IP (`REVEAL_LIMIT_PER_MINUTE`). The client IP is the last entry of `X-Forwarded-For`, the one Caddy writes, never the first, which a client can set. A 429 body carries no Destination.
   - The app publishes no port, so only Caddy reaches it.
   - Only v2 Link Ids resolve; every v1 id answers 404.
 
@@ -388,16 +392,18 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 
 - **Caddy (D6).** There is one site, `SITE_ADDRESS`, reverse-proxied to the app. On the VPS, Caddy obtains and renews the certificate and redirects HTTP to HTTPS by itself. Certificates live in a named volume. PocketBase is not routed through Caddy.
 
-  ASSUMPTION: on-demand TLS for Custom Domains moves to Phase 5. Plan Phase 2 lists it on the caddy line, but it needs D6's per-Profile domain field and an `ask` check that has no domain list to consult before Phase 5 ("Custom domain per profile via Caddy on-demand TLS"). Without that check it would either issue a certificate for any domain or refuse every one. Rung 2: the user's standing YAGNI instruction. Overturned if the Operator wants on-demand TLS live before Phase 5.
+  ASSUMPTION: on-demand TLS for Custom Domains moves to Phase 5. Plan Phase 2 lists it on the caddy line (goal_ai.txt:137). Phase 2's DONE line does not (goal_ai.txt:145–146), and Phase 5 holds the feature it serves ("Custom domain per profile via Caddy on-demand TLS", goal_ai.txt:163). It needs D6's per-Profile domain field and an `ask` check that has no domain list to consult before Phase 5. Without that check it would either issue a certificate for any domain or refuse every one. The plan's own lines split here, so rung 2 does not settle it. Rung 4 does: adding an on-demand block later is additive, while certificates issued for any domain cannot be recalled. The user's standing YAGNI instruction agrees. Overturned if the Operator wants on-demand TLS live before Phase 5.
 
 - **PocketBase.**
-  - Built from the official release archive (PocketBase publishes no official image), at least 0.23, on `alpine:3`.
+  - Built from the official release archive (PocketBase publishes no official image), at least 0.23, on `alpine:3`. The archive is fetched in a `RUN` step keyed by the pinned version, never with `ADD <url>`, so a cached build needs no network.
   - The superuser comes from the environment and is upserted on every start.
   - Migrations are copied into the image.
-  - Data lives in a named volume.
+  - Data lives in a named volume mounted at `/pb/pb_data`, the `--dir` the image starts PocketBase with. The Acceptance predicate checks that path.
   - It is published on 127.0.0.1 only, and the admin UI is reached through an SSH tunnel.
 
   ASSUMPTION (evidence blocked): the version pin is the newest release the human finds, at least 0.23, which brought JS migrations, autodate fields and the superuser command. The newest release cannot be looked up offline. Overturned by the human setting the pin.
+
+  ASSUMPTION (evidence blocked): BuildKit re-checks an `ADD <url>` source on every build, while a `RUN` download layer is reused from cache. This is recalled, not observed, because observing it is a network fetch. Overturned if a cached `./check.sh` run with the network off rebuilds either way.
 
   ASSUMPTION: the admin UI is reachable only through an SSH tunnel. Rung 4: nothing new goes on the public internet. Overturned if the Operator wants a public admin host, which would be one more Caddy site.
 
@@ -409,6 +415,7 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
   - All three services restart `unless-stopped`.
   - PocketBase has a healthcheck on `/api/health`, and the app depends on it being healthy.
   - `docker compose up --wait` therefore returns with the stack ready for the import.
+  - A recreated stack keeps its data. `02-v1-import` recreates `pocketbase` and `app` and checks that records and files created before are still served.
 
 - **Base images.** `caddy:2-alpine` and `node:22-alpine`, both already on this Mac (`docker images`, 2026-10-02), and `alpine:3` under PocketBase, which needs a pull.
 
@@ -417,11 +424,12 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 - **Test loop (plan §7).**
   - **Startup.** The Playwright webServer runs the stack wrapper, which:
     1. runs `docker compose --env-file tests/e2e.env up --build --wait`;
-    2. runs the v1 Import with the v1 Snapshot as the first site and the Fixture Profile's site last;
+    2. runs the v1 Import with the v1 Snapshot as the first site, when `linkme_clone3/` exists, and the Fixture site (`tests/fixtures/`) last;
     3. follows the logs;
     4. on SIGTERM (Playwright's `gracefulShutdown`), runs `docker compose … down -v`.
   - **Readiness.** Playwright waits on the Fixture Profile's JSON URL, which exists only after the seed's last write.
   - **baseURL** stays `http://localhost:4173`.
+  - **Fresh clone.** With no `linkme_clone3/`, the seed imports the Fixture site alone. `02-profile-parity`'s v1 cases and `02-v1-import`'s v1-Snapshot cases then skip with the reason `v1 Snapshot absent`. Phase 0 keeps `./check.sh` passing on a fresh clone, and asks any later Phase that needs the Snapshot in the loop to guard it this way (Phase 0 spec, the stand-in ASSUMPTION). Acceptance's `test -f linkme_clone3/…` line keeps those skips out of this Phase's own verdict.
   - **`reuseExistingServer: false`.** Today a server is reused whenever `CI` is unset (playwright.config.ts:13).
   - **VPS runs.** When `PLAYWRIGHT_BASE_URL` is set, it replaces baseURL and the webServer is skipped.
   - **Spec order.** The import spec and the Reveal-guard spec run in a last project, after every other spec: the first re-imports records that other specs read, and the second uses up the rate-limit window.
@@ -449,10 +457,11 @@ ASSUMPTION: edits are driven through PocketBase's REST API rather than by clicki
 - **The oracle for "identical" is the v1 Snapshot itself.** Tests read its Profile files and load v1's own reveal.js handler in the test process, the way tests/dev-server.mjs does today (tests/dev-server.mjs:29–37). No test re-implements Tracking Codes or Geo Rules.
 - **Destinations stay out of failures.** Assertions compare Destinations as booleans, and failure messages name a Username and card position, never a Destination.
 - **Phase 0 and Phase 1 specs run against v2 unchanged.**
-  - `tests/e2e/00-smoke.spec.ts` pins the v1 id `juliafilippo_juliafilippo_juliafilippo_name1` (lines 5 and 48), which v2 no longer serves. If it still does so when this Phase lands, this Phase changes it to find the Adult Link by its title in the served Profile JSON.
-  - Its other assertions hold on v2: juliafilippo_ imports in Escape Mode, so the Instagram overlay still shows, and its Adult Link has a secrets entry, so Reveal answers 200.
+  - Phase 0 rewrites `tests/e2e/00-smoke.spec.ts` onto the Fixture Profile. It finds the Adult Link by title, reads its id from the served `/api/profiles/fixture.json`, and leaves the status of the secrets paths unasserted, so v2's 404 with landing.html passes it (Phase 0 spec, Testing Decisions, smoke items 4 and 5). The v1 id that today's file pins (00-smoke.spec.ts:5, :48) is gone before this Phase lands.
+  - Its other assertions hold on v2. The Fixture Profile imports with its own `mode` values and Escape Mode as its default, so the Instagram overlay still shows. Its Adult Link has a Test Secrets entry, so Reveal answers 200.
+  - Phase 1's spec reads Link Ids, Modes and the Username from the served Fixture Profile (Phase 1 spec, Testing Decisions).
 
-  ASSUMPTION: this Phase owns that one edit if Phase 0 has not already made it. Rung 1: the pinned id cannot survive fresh Link Ids. Overturned if Phase 0 rewrites the smoke spec.
+  ASSUMPTION: this Phase edits no Phase 0 or Phase 1 spec. Rung 1: Phase 0's smoke reads served ids and leaves the secrets status open. Overturned if a Phase 0 or Phase 1 spec reads an id from the fixture file; that spec then reads it from the served Profile.
 
 **Specs this Phase adds:**
 
@@ -473,6 +482,10 @@ ASSUMPTION: edits are driven through PocketBase's REST API rather than by clicki
   - **Old ids.** Every v1 Link Id and every secrets key gets 404 from both Reveal and `/r`.
   - **Leaks.** No Destination appears in any Profile JSON, in any page's HTML, in `/netlify/functions/secrets.json` (which answers 404) or in `/secrets.json` (the catch-all).
   - **Paths.** An unknown Username lands on `/landing.html`, and `/Jaka`, `/JakaJaka` and `/weiWEi` serve the same JSON as their lower-case twins.
+  - **Fixture Profile journeys.** These run with or without the v1 Snapshot, on `/fixture` with a desktop User-Agent. Each Destination host is answered by `page.route`, and every id is read from the served Profile JSON.
+    - The Direct Link's tap goes through `/r/{id}` and ends at its Test Secrets Destination.
+    - The Deeplink Link's tap sends Reveal with its id and never requests `/r`, and the page then requests its Test Secrets Destination. This is import, projection, Reveal and hand-off on the stack, not only an empty `url` in JSON.
+    - `/fixture?link={Direct Link's id}` ends at that Link's Test Secrets Destination, the non-Adult Link Shortcut change listed under "What differs on purpose".
 - **`tests/e2e/02-v1-import.spec.ts`** (last project, local only).
   - **Repairs, checked through HTTP on the seeded stack:**
     - `/weiwei` and `/weiWEi` show the repaired file's display name and cards.
@@ -498,6 +511,7 @@ ASSUMPTION: edits are driven through PocketBase's REST API rather than by clicki
 
     Expected: the retitled Link shows its new title and keeps its Link Id; the added Link has a fresh id; the dropped Link is named `stale in v2` and is still served; and the Profile's Mode is still `direct`.
   - **No Destination printed.** No run's output contains any Destination of its input.
+  - **Survives recreation.** After the re-run case, `docker compose … up -d --force-recreate --wait pocketbase app` recreates both containers. The re-run Profile still serves with its Mode `direct`, and the Fixture Profile's avatar file still serves with the same bytes.
 - **`tests/e2e/02-live-edit.spec.ts`**
   - A throwaway Profile and Link created through PocketBase's API show on the page.
   - Each of these shows on the next load with no restart: renaming the Profile, retitling a Link, reordering, adding a Link and deleting one. Deleting the Profile sends the page to `/landing.html`.
@@ -529,12 +543,14 @@ ASSUMPTION: edits are driven through PocketBase's REST API rather than by clicki
 ## Acceptance
 
 ```sh
+set -e  # any failing check fails the block; the final ./check.sh cannot mask it (house precedent: Phase 1's Acceptance)
 # manual (once, network; plan §9 — the Operator runs these when asked): pnpm --dir app add hono @hono/node-server sharp
 # manual (once, network): docker pull alpine:3        # caddy:2-alpine and node:22-alpine are already local (docker images, 2026-10-02)
 # manual (once, network): docker compose --env-file tests/e2e.env build        # downloads the pinned PocketBase release and the app's packages
 # manual (once, network, only if the HEIC case of 02-image-upload fails with sharp alone): pnpm --dir app add heic-convert
 test -f linkme_clone3/netlify/functions/secrets.json
-git check-ignore -q linkme_clone3/ && git check-ignore -q .env
+git check-ignore -q linkme_clone3/   # one check per line: set -e ignores a failure on the left of &&
+git check-ignore -q .env
 docker compose --env-file tests/e2e.env config --quiet
 test "$(docker compose --env-file tests/e2e.env config --services | sort | paste -sd' ' -)" = "app caddy pocketbase"
 docker compose --env-file tests/e2e.env config --format json | node -e '
@@ -546,7 +562,7 @@ docker compose --env-file tests/e2e.env config --format json | node -e '
     && vols("app").every(v => v.type !== "bind" || v.read_only)
     && (s.pocketbase.ports || []).length > 0
     && s.pocketbase.ports.every(p => p.host_ip === "127.0.0.1")
-    && vols("pocketbase").some(v => v.type === "volume")
+    && vols("pocketbase").some(v => v.type === "volume" && v.target === "/pb/pb_data")
     && vols("caddy").some(v => v.type === "volume" && v.target === "/data")
     && ["app", "caddy", "pocketbase"].every(n => s[n].restart === "unless-stopped")
     && !!s.pocketbase.healthcheck;
@@ -557,11 +573,12 @@ for s in 02-profile-parity 02-v1-import 02-live-edit 02-image-upload 02-reveal-g
 # no v1 Destination in any file git tracks or would add (prints file names only, never a Destination)
 node -e '
   const fs = require("fs"), cp = require("child_process"), dir = "linkme_clone3/api/profiles";
-  const urls = new Set(Object.values(JSON.parse(fs.readFileSync("linkme_clone3/netlify/functions/secrets.json", "utf8"))));
+  // parse unchanged; only a file that fails gets the import's trailing-comma repair
+  const parse = t => { try { return JSON.parse(t); } catch { return JSON.parse(t.replace(/,(\s*[}\]])/g, "$1")); } };
+  const urls = new Set(Object.values(parse(fs.readFileSync("linkme_clone3/netlify/functions/secrets.json", "utf8"))));
   for (const f of fs.readdirSync(dir))
-    for (const l of JSON.parse(fs.readFileSync(dir + "/" + f, "utf8").replace(/,(\s*[}\]])/g, "$1")).links)
-      if (/^https?:\/\//.test(l.url || "")) urls.add(l.url);
-  const needles = [...urls].filter(u => u.length > 12);
+    for (const l of parse(fs.readFileSync(dir + "/" + f, "utf8")).links) urls.add(l.url || "");
+  const needles = [...urls].filter(u => /^https?:\/\/\S/.test(u));   // every absolute Destination, no length exemption
   const files = cp.execSync("git ls-files -z --cached --others --exclude-standard").toString().split("\0").filter(Boolean);
   const hits = files.filter(f => { try { const t = fs.readFileSync(f, "utf8"); return needles.some(n => t.includes(n)); } catch { return false; } });
   if (hits.length) { console.error("v1 Destination found in: " + hits.join(" ")); process.exit(1); }'
@@ -570,24 +587,29 @@ node -e '
 # manual: on the VPS, write /opt/oflinkv2/.env with SITE_ADDRESS=<v2 host>, PB_SUPERUSER_EMAIL, PB_SUPERUSER_PASSWORD; point <v2 host>'s DNS A record at the VPS.
 # manual: on the VPS: cd /opt/oflinkv2 && docker compose up -d --build --wait
 # manual: on the VPS: docker compose run --rm -v "$PWD/linkme_clone3:/v1:ro" app import-v1 --site /v1     # exit 0; a git clone of v1 prints three case-twin lines, an rsync from this Mac none
+# manual: delete through the admin UI every record a `stale in v2:` line names (none on the first run); the parity run below fails while one is served.
 # manual: from the Mac: curl -sI http://<v2 host>/ | grep -i '^location: https://'     # Caddy redirects HTTP to HTTPS
 # manual: from the Mac: PLAYWRIGHT_BASE_URL=https://<v2 host> npx playwright test tests/e2e/02-profile-parity.spec.ts     # paced; takes a few minutes
 # manual: ssh -L 8090:127.0.0.1:8090 root@srv1395798.hstgr.cloud; edit a display name at http://localhost:8090/_/; reload https://<v2 host>/<username>; the new name shows.
 ./check.sh    # runs tests/e2e/02-profile-parity, 02-v1-import, 02-live-edit, 02-image-upload, 02-reveal-guard with every earlier spec
+# DONE gate: a green block above proves the local stack only. The plan's DONE line names the VPS URL (goal_ai.txt:145–146), so the Phase is done
+# only when the Operator has run every `# manual:` VPS line and its output (exit codes, the redirect line, the parity summary, the admin edit) is recorded with the Phase's ticket.
 ```
 
 ## Depends on
 
 - **Phase 0** provides:
-  - The page copy in this repo, which the app serves as the public page.
-  - The Fixture Profile and the test-only secrets file, which the seed imports as a second site.
+  - The page copy at `app/public/`, which the app image carries as the public page.
+  - The Fixture Profile (`tests/fixtures/api/profiles/fixture.json`, Username `fixture`, four Links: Adult, Direct, Escape and Deeplink) and the Test Secrets (`tests/fixtures/netlify/functions/secrets.json`), which the seed imports as the Fixture site.
   - Specs that run against whatever serves baseURL.
 
-  ASSUMPTION: the page copy is a directory holding index.html, script.js, style.css and landing.html, at `public/`, and it calls v1's paths (`/api/profiles/{username}.json`, `/.netlify/functions/reveal?id&user&trackingId`). Rung 5: it is a copy of v1's page. Overturned by Phase 0's actual layout or paths: the mount line, or the routes, follow it.
+  ASSUMPTION: the page copy at `app/public/` calls v1's paths (`/api/profiles/{username}.json`, `/.netlify/functions/reveal?id&user&trackingId`), as Phase 0 says it still does (Phase 0 spec, Interfaces: Page Copy). Rung 5: it is a copy of v1's page. Overturned by Phase 0's or Phase 1's actual paths; the routes follow them.
 
-  ASSUMPTION: the Fixture Profile is a v1-shaped Profile file (plan §7: "juliafilippo_ copy"). Its Username differs from every v1 Username, its image paths sit under `/images/`, and its test-only secrets file has secrets.json's shape with `example.com` Destinations. Rung 2 for the shape. The rest is rung 5, so the seed can mount it as a v1-shaped site. Overturned by Phase 0's actual fixture; only the seed's mounts change.
+  ASSUMPTION: the Fixture site is v1-shaped. Phase 0 lays `tests/fixtures/` out like the v1 Snapshot, its Username `fixture` differs from every v1 Username, its image paths name the stock icons under `/images/`, and every Test Secrets value is on `example.com`, with a non-Adult Link's value equal to its `url` (Phase 0 spec, Contracts). The import therefore drops three Test Secrets entries with a `dropped:` warning, one per non-Adult Link, and the Deeplink Link's Destination is its `url`. Rung 1, read from Phase 0's spec. Overturned by a change to Phase 0's fixture; only the seed's mounts change.
 
-  ASSUMPTION: Phase 0's specs do not pin Link Ids; they read them from the served Profile. ADR 0004 makes every v2 Link Id fresh, so a pinned id cannot pass on v2. Overturned if a Phase 0 spec pins one; that spec then changes as the smoke spec does here.
+  ASSUMPTION: Phase 0's specs read Link Ids from the served Profile, never from the fixture file (Phase 0 spec, Contracts and smoke item 4). ADR 0004 makes every v2 Link Id fresh, so a pinned id cannot pass on v2. Overturned if a Phase 0 spec pins one; that spec then reads the served id.
+
+- **The Operator** settles what holds ports 80 and 443 on the VPS (Further Notes, NEEDS-HUMAN; ADR 0001). The local stack and `./check.sh` do not wait on it. Every `# manual:` VPS line in Acceptance, and so the Phase's DONE gate, does.
 
 - **Phase 1** provides the Mode field in the page: the page copy acts on `profile.mode` and `links[].mode`, and passes its specs against v2 on the Fixture Profile.
 
@@ -606,7 +628,7 @@ node -e '
 - **ffmpeg, video and animated images.** D4: "ffmpeg only if video is added later".
 - **Proxies (D7), a Geo Rule UI, Umami, content rules and abuse reporting.** Bonus, after Phase 5 (§5, §9 D9).
 - **A response cache or realtime push to open pages.** "Live instantly" means the next load, and reading PocketBase on every request already gives that.
-- **PocketBase backups before Cutover.** The plan does not ask for them; until Cutover the v1 Import rebuilds v2 from v1.
+- **PocketBase backups.** The plan does not ask for them, and while Phase 2 holds only imported data the v1 Import rebuilds it. That stops being true once Phase 3 lets Creators store data v1 never had, so backups belong to the Phase that first stores v2-only data.
 - **A geo-IP database in the app.** Edge headers are enough until Phase 5 picks the production source (Further Notes).
 - **A least-privilege PocketBase account for the app.** The superuser is enough while every rule is closed.
 - **More than one app container, or a shared rate-limit store.** One container serves the stack.
@@ -638,7 +660,7 @@ node -e '
   - the first `docker compose build`, which downloads the pinned PocketBase release and the app's packages;
   - the conditional `heic-convert` add.
 
-  After them, `./check.sh` rebuilds from cache with no network. The same first build runs once on the VPS.
+  After them, `./check.sh` rebuilds from cache with no network, provided the Dockerfile fetches PocketBase in a `RUN` layer (PocketBase section). The same first build runs once on the VPS, inside the `up -d --build` line, and needs the network there too.
 - **The v2 host name.** It is the Operator's choice, set as `SITE_ADDRESS` in the VPS `.env`, and its DNS A record is a manual step.
 
   ASSUMPTION: a host name separate from ofl.ink until Cutover, such as a subdomain the Operator controls, so that ofl.ink keeps pointing at v1. Rung 2: D1, "Netlify … keep running … until … parity". Overturned if the Operator tests on the VPS's own host name instead.
@@ -647,3 +669,42 @@ node -e '
 
   ASSUMPTION: edge headers rather than a geo-IP database. Rung 3: v1 takes location from its edge's headers (geo_utils.js:48–49), and D5 names "VPS geo-ip or Cloudflare header". Overturned if the Operator will not proxy through Cloudflare; a geo-IP lookup then goes behind the same Visitor location function.
 - **Who can upload in Phase 2.** Only a superuser token gets past PocketBase's rules, so the Operator and the tests are the only uploaders until Phase 3 gives Creators a token and owner rules.
+
+## Review
+
+Reviewer: **codex** (`codex exec --sandbox read-only`, `model_reasoning_effort="high"`), 2026-10-02. B = the blind call (plan, CONTEXT, ADRs and harness only), D = the draft call, (a)–(d) = the coordinator's cross-spec flags, X = this agent's own cross-check against the sibling specs. The review workspace left `linkme_clone3/` out by design.
+
+- B1 **accept**. B1: whether v2 can take ingress beside n8n needs a live inventory of the VPS (ADR 0001). It was already NEEDS-HUMAN in Further Notes, and it is now also a Depends on entry that gates every VPS line (see D4b).
+- B2 **reject**. B2 offered a public-safe mirror collection as the alternative to a Node projection. This was already decided: every PocketBase rule is superuser-only and the app projects the Profile JSON (Schema, Contracts). A mirror adds sync work and gains nothing while nothing public reads PocketBase.
+- B3 **partial**. B3: where domain support stops in Phase 2. The deferral stays and its rung is corrected (see D5).
+- B4 **reject**. B4: the absent Snapshot means fidelity cannot be proven. That absence belongs to the review workspace only. The repo holds `linkme_clone3/`, the repairs cite observations of it, and the parity spec reads it at test time.
+- B5 **reject**. B5: keeping the final import current. This is settled. The Snapshot is refreshed before the last run (Further Notes; ADR 0002), and freezing Form edits belongs to Phase 5 (Out of Scope).
+- B6 **reject**. B6: what "identically" excludes. The DONE-line block defines what stays the same and what differs on purpose.
+- B7 **reject**. B7: a complete import policy. It is specified under the v1 Import headings: repairs, refusals, precedence, missing images, re-runs and exit codes 0/1/2.
+- B8 **partial**. B8: re-run identity and edit precedence. `v1Key` matching and the survival of v2-only fields were already specified. Deletions were the gap, and they are now a required Operator step (see D2).
+- B9 **reject**. B9: who owns imported Profiles. `owner` stays empty on import and every rule is superuser-only. How Creators claim Profiles is Phase 3's work (Out of Scope).
+- B10 **partial**. B10: the exception for a Destination given out one Click at a time. Its scope was already set: story 14 names Profile JSON, page HTML and PocketBase's API, and 429 bodies carry no Destination. Caching was still open, so Reveal and `/r` now answer `Cache-Control: no-store` (Contracts).
+- B11 **partial**. B11: request contracts for Reveal and `/r`. Most were already there: 403/404/429, a missing `Origin` passes, and only digit codes are appended. Two were loose and are rewritten. The client IP is now the last `X-Forwarded-For` entry. `links.destination` now enforces `^(https?://|/[^/])` in the schema, so a `javascript:` value cannot reach the page through Reveal.
+- B12 **reject**. B12: upload semantics and proof of HEIC. Upload (D4) already specifies the PocketBase-checked token, longest-side sizing, the 20 MB cap and pixel limit, the first GIF frame, transparency, metadata stripping and PocketBase's file replacement. 02-image-upload proves HEIC with a committed fixture, and heic-convert is parked as the fallback.
+- B13 **partial**. B13: operational durability. Persistence now has a recreation test and a checked data path (see D6). Backups stay out of scope, with the reason narrowed to Phase 2's import-only data. Resource budgets beside n8n are rejected: nothing observed points to pressure, and the live VPS is out of bounds.
+- B14 **reject**. B14: what "live instantly" means. It is defined as the next load (No cache; Out of Scope).
+- B15 **reject**. B15: the seam is a browser through Caddy, with ids from seeded v2 data. That was already the seam, and specs already read Link Ids from served data (Testing Decisions).
+- B16 **reject**. B16: Creator A against Creator B authorization tests. These need owner rules, which arrive in Phase 3. Phase 2 tests that anonymous PocketBase calls are refused (02-live-edit).
+- B17 **reject**. B17: assert the real click resolution and decode the stored uploads. Parity compares v2's actual Reveal answer and `/r` `Location` with v1's own handler, not with a replaced body. Uploads are judged by their `RIFF…WEBP` bytes and natural size.
+- B18 **reject**. B18: the suite might reach a stale server on 4173. `reuseExistingServer: false` rules that out (Test loop), and Acceptance checks for it with grep.
+- B19 **reject**. B19: Phase 2 must not promise that a domain avoids flagging. It promises nothing of the kind: `sed '/^## Review/,$d' docs/spec/phase-02-vps-foundation.md | grep -ci flagg` prints 0.
+- B20 **accept**. B20: §7's fixture list does not guarantee a Deeplink Link. Phase 0's Fixture has one, and Phase 2 now drives it through the stack (see D3).
+- D1 **accept**. D1: the page copy location contradicts Phase 0, and the build-context argument fails with it. The page copy is now `app/public/`, baked into the image. The build context still keeps the v1 Snapshot out. Public page, Interfaces and Depends on are rewritten.
+- D2 **accept**. D2: kept stale records fail parity and ADR 0002's "v1 winning". Reconciliation is now a required Operator step, with an Acceptance line before the VPS parity run, and the failing parity run is named as the gate. Warn-not-delete stays (rung 4), and a `--prune` flag is named as what would overturn it.
+- D3 **accept**. D3: the `/r` fallback for Deeplink contradicts D3, and no seam test covered it. The fallback is removed. 02-profile-parity gains Fixture Profile journeys: Direct through `/r`, Deeplink through Reveal to its Destination, and a non-Adult Link Shortcut.
+- D4a **accept**. D4a: Acceptance can pass while the VPS is unverified. A DONE gate line now says a green block proves only the local stack. The Phase is done when the Operator's VPS results are recorded with its ticket (goal_ai.txt:145–146).
+- D4b **needs-human**. D4b: neither branch for occupied ports 80/443 satisfies the whole spec. The spec's position: if a proxy in front of n8n holds them, the Operator picks Caddy-fronts-both, which breaks story 24, or the existing proxy fronts v2, which puts TLS outside Caddy. Codex's position: a resolved deployment contract is needed before any VPS step. Evidence that settles it: the output of `ssh root@srv1395798.hstgr.cloud 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Ports}}"; ss -ltnp "( sport = :80 or sport = :443 )"'` (Further Notes). If nothing holds the ports, the question closes with no spec change. The local stack does not wait on it.
+- D5 **partial**. D5: on-demand TLS was dropped from the plan's Phase 2 caddy line. The deferral is kept, because without a domain list the `ask` check either issues for any domain or refuses every one. The rung was wrong, though. The plan's lines split (goal_ai.txt:137 against :145–146 and :163), so rung 2 does not settle it; it now rests on rung 4 plus YAGNI, flagged and open for the Operator to overturn.
+- D6 **accept**. D6: the persistence check passes an ephemeral database. The PocketBase volume is now pinned to `/pb/pb_data` and the Acceptance predicate checks that path. 02-v1-import recreates `pocketbase` and `app` and checks that records, a Mode and an avatar file survive.
+- D7 **accept**. D7: the Acceptance block does not fail fast. `set -e` is added, following Phase 1's Acceptance. The one `a && b` check is split onto two lines, because `set -e` ignores a failure on the left of `&&`.
+- D8 **accept**. D8: the Destination scan can alter or skip needles. It now parses each file unchanged, repairs only a file that fails to parse (as the import does), and drops the 12-character exemption.
+- (a) **accept**. (a): `public/` against Phase 0's `app/public/`. The same fix as D1.
+- (b) **accept**. (b): the smoke spec still pins a v1 id. Phase 0's current spec reads ids from the served `/api/profiles/fixture.json` and leaves the secrets paths' status unasserted (Phase 0 spec, smoke items 4–5). This Phase therefore owns no smoke edit, and the Owns list, story 55 and Testing Decisions are rewritten. The draft call agreed.
+- (c) **accept**. (c): the Fixture Profile has four Links, one of them Deeplink. The Fixture site is now described as Phase 0 ships it. A non-Adult Test Secrets value equals its `url`, so the import logs three `dropped:` lines. The seed mounts `app/public/images/` as the site's `images/`, because the fixture's images are the stock icons. The Deeplink Link is driven end to end (D3).
+- (d) **partial**. (d): are the ports and the first build honestly human-only? Yes as written: the ports are NEEDS-HUMAN, and the first four `# manual:` lines are the network steps. One claim is tightened: `./check.sh` rebuilds offline only if PocketBase is fetched in a `RUN` layer. That is now required, with an evidence-blocked ASSUMPTION about BuildKit re-checking an `ADD <url>` source.
+- X1 **accept**. X1: Phase 0 keeps `./check.sh` green on a fresh clone and asks any later Phase that needs the Snapshot in the loop to guard it (Phase 0 spec, stand-in ASSUMPTION). With no `linkme_clone3/`, the seed and the v1 cases now skip with `v1 Snapshot absent`. Acceptance's `test -f` line keeps that skip out of this Phase's verdict.

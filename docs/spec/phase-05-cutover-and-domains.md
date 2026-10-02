@@ -12,7 +12,7 @@ Creators who own a domain cannot use it: v1 has no Custom Domains (plan section 
 
 ## Solution
 
-The Operator follows a Cutover runbook in `RUN.md`. Days ahead, the ofl.ink zone moves to Cloudflare, carrying v1's records unchanged. Then n8n Form edits are frozen, the v1 Snapshot is refreshed from v1's GitHub repo, which is only read, and the final v1 Import runs. v2 has to pass Phase 2's parity check. Then one DNS record change points ofl.ink at the VPS. The runbook verifies the result and says how to roll back, which is the same record change reversed. Nothing in Caddy or the app changes on the day. v1 on Netlify keeps serving its own address for a month. After that the Operator removes ofl.ink from the Netlify site, on their side.
+The Operator follows a Cutover runbook in `RUN.md`. Days ahead, the ofl.ink zone moves to Cloudflare, carrying v1's records unchanged. Then n8n Form edits are frozen, the v1 Snapshot is refreshed from v1's GitHub repo, which is only read, and the final v1 Import runs. v2 has to pass Phase 2's parity check. Then one change to ofl.ink's address records in Cloudflare (the apex, and `www` if it exists) points ofl.ink at the VPS. The runbook verifies the result and says how to roll back, which is the same change reversed. Nothing in Caddy or the app changes on the day, and the v1 Import is never run again. v1 on Netlify stays as the cold backup for 30 days. After that the Operator switches it off on their side: ofl.ink comes off the Netlify site, and then the site stops serving at every address, which is what ends v1's exposure (plan section 8).
 
 Caddy obtains a certificate for a hostname the first time someone visits it. Before it does, it asks the app whether the hostname is ofl.ink's own, a Spare Domain or a Custom Domain. The app reads the request's Host header and decides which Profile the page shows. The page learns its Profile from the app, not from its own address. Giving a Creator a domain therefore takes two steps and no deploy. The Creator points an A record at the VPS, and the Operator types the domain into the Creator's Profile in the PocketBase admin UI. A Spare Domain works the same way: buy it, point it at the VPS through Cloudflare, list it in PocketBase, and open it once so its certificate is issued.
 
@@ -27,12 +27,12 @@ From the Cutover on, PocketBase takes daily backups, because v2 then holds the o
 Cutover
 
 1. As the Operator, I want a Cutover runbook in `RUN.md`, with exact commands in order, so that I can switch ofl.ink to v2 in one sitting without guessing.
-2. As the Operator, I want every record of the ofl.ink zone recorded before anything changes, as the DNS host defines it (type, name, value, TTL) and as live answers, so that a rollback restores exactly what v1 had.
-3. As the Operator, I want the ofl.ink zone moved to Cloudflare at least 48 hours ahead, carrying v1's records unchanged, DNS-only, with a 300-second TTL, so that the switch and any rollback are each one record change that takes effect within minutes, while v1 keeps serving.
-4. As the Operator, I want the v1 Snapshot refreshed from v1's GitHub repo just before the final v1 Import, and checked against what ofl.ink serves, so that every n8n Form edit up to the freeze reaches v2. The old repo is only read.
-5. As the Operator, I want no n8n Form submissions from that refresh until the switch, so that no v1 edit is lost on the way to v2.
-6. As the Operator, I want the final v1 Import run on the VPS from the refreshed v1 Snapshot and followed by Phase 2's parity check, so that I switch only once v2 shows every v1 Profile identically.
-7. As the Operator, I want a readiness gate before the switch, so that I switch only when v2 is ready. It covers parity, HTTPS on Phase 2's v2 host through the TLS Ask endpoint, the TLS Ask endpoint saying yes to ofl.ink, ports 80 and 443 reachable, backups on and a Spare Domain warmed.
+2. As the Operator, I want every record of the ofl.ink zone recorded before anything changes, as the DNS host defines it (type, name, value, TTL), as live answers and with any DS record the registrar holds, so that a rollback restores exactly what v1 had.
+3. As the Operator, I want the ofl.ink zone moved to Cloudflare at least 48 hours ahead, carrying v1's records unchanged, DNS-only, with a 300-second TTL, so that the switch and any rollback are each one change to the apex (and `www`) records that takes effect within minutes, while v1 keeps serving.
+4. As the Operator, I want the v1 Snapshot refreshed from v1's GitHub repo once the last n8n run and Netlify deploy before the freeze have finished, its commit recorded and matched to the one Netlify published, and its Profile files checked against what ofl.ink serves, so that every n8n Form edit up to the freeze reaches v2. The old repo is only read.
+5. As the Operator, I want no n8n Form submissions from the freeze on, through the 30 days and any rollback, so that no v1 edit is lost on the way to v2.
+6. As the Operator, I want the final v1 Import run on the VPS from the refreshed v1 Snapshot and followed by Phase 2's parity check, so that I switch only once v2 shows every v1 Profile identically. After the switch it is never run again, because v1 wins on v1's fields and would overwrite Creators' Editor edits.
+7. As the Operator, I want a readiness gate before the switch, so that I switch only when v2 is ready. It covers parity, the owners of ports 80 and 443 recorded, HTTPS on Phase 2's v2 host through the TLS Ask endpoint, the ask Caddy uses saying yes to ofl.ink and no to a stranger, ports 80 and 443 reachable, forged location and address headers ignored, backups on and a Spare Domain warmed.
 8. As the Operator, I want the Cutover to be a DNS change only, with nothing in Caddy or the app changing on the day, so that rolling back is the same DNS change in reverse.
 9. As a Visitor, I want every `ofl.ink/{username}` and `ofl.ink/{username}/{code}` URL already in a bio to keep working after the Cutover, so that tapping a Creator's bio link still opens their Profile with its Tracking Code.
 10. As the Operator, I want the runbook to warn me of three things that break or go stale at the Cutover, so that I can tell Creators what to replace.
@@ -42,17 +42,17 @@ Cutover
 11. As the Operator, I want post-switch checks, so that I know three things: ofl.ink is now answered by v2, its certificate was issued, and v1's secrets file is no longer what ofl.ink serves at its old path.
 12. As the Operator, I want to re-run the real-device matrix of plan section 4 on ofl.ink after the switch, so that every Mode still works in each In-App Browser and in Safari and Chrome, on iOS and Android.
 13. As the Operator, I want a rollback that re-creates the recorded records, so that Visitors get v1 back within one TTL if v2 misbehaves.
-14. As the Operator, I want to know what a rollback restores, so that I know what Visitors on ofl.ink lose meanwhile: ofl.ink alone moves back, and v2, its data, Custom Domains and Spare Domains keep running.
+14. As the Operator, I want to know what a rollback restores, so that I know what Visitors on ofl.ink lose meanwhile: ofl.ink alone moves back, v2, its data, Custom Domains and Spare Domains keep running, and ofl.ink serves v1's secrets file and v1's Link Ids again until I switch back.
 15. As the Operator, I want v1 left serving, unedited, for 30 days after the Cutover, so that the rollback has somewhere to go.
-16. As the Operator, I want a dated step after those 30 days to remove ofl.ink from the Netlify site on my side, so that v1 is off for ofl.ink and the DNS zone stays intact. Deleting the site stays my own separate call; it is what ends v1's exposure at `linkmeclone3.netlify.app` (ADR 0005).
-17. As a Creator of an imported Profile, I want readiness test traffic cleared from my Stats, so that my numbers start at the Cutover with real Visitors only.
-18. As the Operator, I want Visitor country to come only from Cloudflare and never from a header a Visitor sends, so that Geo Rules and Stats can trust it.
+16. As the Operator, I want a dated step after those 30 days to switch v1 off on my side, first removing ofl.ink from the Netlify site and then stopping the site serving at all, so that v1's secrets file is served nowhere (plan section 8) and the DNS zone stays intact.
+17. As the Operator, I want the switch time recorded in `RUN.md`, so that readiness test traffic in imported Profiles' Stats can be told apart from real Visitors. Nothing is deleted.
+18. As the Operator, I want Visitor country and US state to come only from Cloudflare and never from a header a Visitor sends, so that Geo Rules and Stats can trust it.
 19. As the Operator, I want the app to see the Visitor's own address rather than Cloudflare's, so that Reveal's rate limit (ADR 0004) still applies per Visitor once ofl.ink is proxied.
 
 Backups
 
 20. As the Operator, I want PocketBase to take a backup every day and keep the last 7, switched on before the switch, so that a bad edit or a corrupted database after the Cutover can be undone. v2 is then the only copy of Editor edits.
-21. As the Operator, I want one backup restored before the switch, so that I know the backups are usable before I depend on them.
+21. As the Operator, I want one backup checked complete and readable before the switch, so that I know the backups are usable before I depend on them.
 
 Custom Domains
 
@@ -122,8 +122,7 @@ Testing
     - Every request that is not for a primary host queries PocketBase. There is no cache.
       ASSUMPTION: rung 5, and it keeps Phase 2's "an edit in PocketBase admin is live instantly" (plan section 5). Overturned if load makes a short cache necessary.
     - The app's own routes match before this grammar on every host: Reveal, `/r`, Phase 4's Page View ping, the TLS Ask endpoint, Phase 3's Editor and proxy, and the public page's static files. On a Custom Domain, `/{code}` therefore only sees paths that no route claims.
-    - `internal` must be a reserved Username, so that no Profile shadows the TLS Ask endpoint. Phase 3 owns the reserved list, and this Phase adds `internal` if it is missing.
-      ASSUMPTION: rung 3, Phase 3 keeps a reserved-Username list for its routes. Overturned if Phase 3 has no list, in which case the route still wins by matching first and nothing more is needed.
+    - `internal` must be a reserved Username, so that no Profile shadows the TLS Ask endpoint. Phase 3 owns the reserved list, and its spec already reserves `internal` (`docs/spec/phase-03-auth-and-editor.md:206`; rung 1). If Phase 3 drops it, the route still wins by matching first and nothing more is needed.
   - **TLS Ask endpoint** `GET /internal/tls-ask?domain=<hostname>`:
     - 200 with an empty body when `resolveHost` gives `primary`, `spare` or `custom`
     - 404 for `unknown`
@@ -161,14 +160,18 @@ Testing
     - A global on-demand TLS policy points its ask URL at the TLS Ask endpoint over the Compose network.
     - The production site address becomes one `https://` catch-all with on-demand TLS, carrying the same routes as Phase 2's public site. It serves ofl.ink, Phase 2's v2 host, every Spare Domain and every Custom Domain.
     - Caddy's reverse proxy passes the original Host header to the app, which is Caddy's default. The spec proves it end to end.
-    - The local loop's plain-HTTP listener on the baseURL port accepts any Host header and carries none of the Cloudflare lines.
-  - **The Cloudflare lines,** present on the production catch-all from this Phase's deploy on, so that the switch changes nothing in Caddy:
-    - Caddy's trusted proxies are Cloudflare's published ranges, so the client address Caddy hands the app is the Visitor's, not Cloudflare's edge.
-    - From any direct peer outside those ranges (a `remote_ip` matcher), every country header the app reads is removed. A Visitor who reaches a DNS-only Custom Domain directly therefore cannot choose their country, and their Events record the unknown country.
-    - From Cloudflare's ranges, `CF-IPCountry` passes through in the form Phase 4 reads.
+    - The local loop's plain-HTTP listener on the baseURL port accepts any Host header and carries none of the Cloudflare lines, because Phase 2's parity spec and Phase 4's Stats spec inject location headers locally (`docs/spec/phase-02-vps-foundation.md:468`, `docs/spec/phase-04-stats.md:225`).
+  - **The Cloudflare lines,** present on the production catch-all from this Phase's deploy on, so that the switch changes nothing in Caddy. Each line was observed on the local `caddy:2-alpine` image (v2.11.4) in front of a header-echo upstream (rung 1; see ## Review, D2a):
+    - Caddy's trusted proxies are Cloudflare's published ranges, parsed strictly from the right (`trusted_proxies_strict`). With a trusted peer sending `X-Forwarded-For: 6.6.6.6, 1.2.3.4`, the default parsing made the client address the forged `6.6.6.6`. Strict parsing gave `1.2.3.4`, the address Cloudflare appends.
+    - The reverse proxy replaces `X-Forwarded-For` with that one address (`header_up X-Forwarded-For {client_ip}`). Phase 2's limiter keys on `X-Forwarded-For` (`docs/spec/phase-02-vps-foundation.md:370`), so it sees the Visitor's address behind Cloudflare and the direct peer's otherwise, whatever the Visitor sends.
+    - From any direct peer outside those ranges (a `remote_ip` matcher), `CF-IPCountry` and `CF-Region-Code` are removed. A Visitor who reaches a DNS-only Custom Domain directly therefore cannot choose their country, and their Events record the unknown country.
+    - v1's location headers `X-Country`, `X-Region` and `X-NF-Subdivision-Code` are removed from every request. Phase 2 reads them before Cloudflare's (`docs/spec/phase-02-vps-foundation.md:250-251`), and they pass through Cloudflare untouched, so leaving them would let any Visitor pick the Geo Rule that applies to them.
+    - From Cloudflare's ranges, `CF-IPCountry` and `CF-Region-Code` pass through in the form Phases 2 and 4 read.
     - The ranges come from the `CLOUDFLARE_RANGES` deploy setting, which the Operator fills from Cloudflare's published lists. The agent fetches nothing (floor 2), and Caddy needs no plugin.
+    - Phase 2's parity spec, run against the VPS in step 6, therefore leaves out its Geo Rule cases. Its local run proves them on the same code with the real Destinations (`docs/spec/phase-02-vps-foundation.md:430,468`).
     ASSUMPTION: peer-matched rather than trusting `CF-IPCountry` from anyone (rung 4: a plain copy trusts a header any Visitor can send on a DNS-only host). Overturned if Cloudflare changes its ranges; the setting is then refreshed by the same command.
-    ASSUMPTION: Phase 2's Reveal rate limit keys on the client address Caddy forwards (rung 3, Caddy's usual hand-off). Overturned by Phase 2's limiter reading something else, which this Phase then feeds instead.
+    ASSUMPTION: v1's headers are dropped from this Phase's deploy on, not from the switch (rung 4: the switch stays a DNS change only). Overturned if the Operator wants Geo Rule parity proven on the VPS; the drop then moves to a deploy after the switch.
+    ASSUMPTION: Phase 2's parity spec titles its Geo Rule cases so that `--grep-invert 'Geo Rule'` leaves them out (rung 6). Overturned by Phase 2's titles, which step 6 then uses.
   - **`PRIMARY_HOSTS`.** A comma-separated app setting.
     - production: `ofl.ink`, plus `www.ofl.ink` if it exists, plus the host of Phase 2's pre-Cutover v2 address. The catch-all now serves that host too, so its certificate must keep passing the ask.
     - local: `localhost`
@@ -192,39 +195,48 @@ Testing
   - Cloudflare's SSL/TLS mode is Full (strict), and Always Use HTTPS stays off. Let's Encrypt's HTTP-01 challenge then reaches Caddy, which redirects to HTTPS by itself.
   - Custom Domains get a DNS-only A record to the VPS's address, plus AAAA if the VPS has IPv6 (ADR 0001). Their Events record the unknown country.
   - Cloudflare replaces the `Server` header, so the post-switch check identifies v2 by the TLS Ask endpoint's empty 200, not by `Server: Caddy`.
-  ASSUMPTION: Phase 4's production country source is Cloudflare's `CF-IPCountry`. D5 names "VPS geo-ip or Cloudflare header", and this follows the run-1 precedent and the caller (rung 3; rung 5: no geo-IP database to ship or update). Overturned if Phase 4 picks VPS geo-IP. In that case every record is DNS-only, the zone need not move, and the Cloudflare lines drop.
+  ASSUMPTION: Phase 4's production country source is Cloudflare's `CF-IPCountry`. D5 names "VPS geo-ip or Cloudflare header", and Phase 4's spec chose the header (`docs/spec/phase-04-stats.md:153,158`; rung 3; rung 5: no geo-IP database to ship or update). Overturned if Phase 4 picks VPS geo-IP. In that case every record is DNS-only, the zone need not move, and the Cloudflare lines drop.
   ASSUMPTION (evidence blocked): neither HTTP-01 through Cloudflare's proxy nor on-demand issuance on Cloudflare's first origin handshake could be observed (live DNS is out of bounds). The post-switch certificate check settles it. If issuance fails, the runbook sets the record DNS-only once so that Caddy issues directly, then sets it back to Proxied.
 - **Moving the zone.** Cloudflare's proxy needs the zone on Cloudflare's nameservers, so the zone moves at least 48 hours before the switch, while v1 still serves.
   - Every recorded record is re-created there, DNS-only. Netlify-only types (NETLIFY, ALIAS) become an apex CNAME to `linkmeclone3.netlify.app` (the v1 address the n8n Form's texts name; `grep -o 'https://linkmeclone3.netlify.app[^"]*' n8n_oflink_Feb18.json`), which Cloudflare flattens.
   - Nothing in the Netlify site is changed. The delegation moves at the registrar.
+  - If the registrar holds a DS record for ofl.ink, DNSSEC is turned off there first and the DS record left to expire, because the old signatures would make the zone unresolvable once Cloudflare answers. Once the zone is Active in Cloudflare, DNSSEC is turned on there and its DS record added at the registrar.
+  - Cloudflare's "Add visitor location headers" Managed Transform is turned on with the zone, so that proxied requests carry `CF-Region-Code` for US-state Geo Rules (Phase 2 reads it, `docs/spec/phase-02-vps-foundation.md:251`).
+    ASSUMPTION (evidence blocked): Cloudflare overwrites a Visitor-sent `CF-IPCountry` and `CF-Region-Code` on proxied requests; no network reads. Overturned by step 7's check through the Spare Domain. A forged value that survives Cloudflare then needs the human, because no Caddy rule can tell it apart.
   - The Cloudflare records are written into `RUN.md` as the rollback target. The switch and the rollback are then one record change each, inside Cloudflare.
   ASSUMPTION: rung 4. Moving the nameservers early, while nothing is served differently, separates the slow, risky step from the switch. Overturned if ofl.ink's registrar cannot delegate to Cloudflare.
 - **Refreshing the v1 Snapshot and the final v1 Import.**
   - The v1 Snapshot is a clean clone of v1's GitHub repo, on `main`, tracking `origin/main`, with no local changes (`git -C linkme_clone3 remote -v`, `status --short` and `rev-parse --abbrev-ref @{u}`; rung 1).
   - The Operator refreshes it with `git -C linkme_clone3 pull --ff-only`. That reads the old repo and changes nothing there. Replacing the whole Snapshot with a newer copy of v1 is not editing it (ADR 0002).
-  - The refreshed Profile files are then compared byte for byte with what ofl.ink serves. That proves the branch pulled is the one v1 deploys.
+  - The refresh waits until the n8n Form's workflow has no running execution and Netlify's newest production deploy is Published, so that an edit submitted just before the freeze is both in the repo and on ofl.ink. The pulled commit is recorded in `RUN.md` and must match the commit Netlify's Published deploy names, which covers Profiles, Destinations and images at once.
+  - The refreshed Profile files are then compared byte for byte with what ofl.ink serves, and any difference or failed fetch stops the runbook. That proves the branch pulled is the one v1 deploys.
   ASSUMPTION: Netlify deploys v1 from `main` (plan section 1: n8n commits to GitHub and Netlify redeploys; the branch is not visible here). Overturned if the comparison reports differences; the Operator then pulls the branch Netlify deploys.
   - The final v1 Import is a re-run of Phase 2's v1 Import against a copy of the refreshed Snapshot on the VPS. It is re-runnable and v1 wins, until Cutover (the glossary's v1 Import).
   ASSUMPTION: the v1 Import runs on the VPS from a v1 Snapshot copy in the v2 directory; its command and that directory are Phase 2's (rung 3). Overturned by Phase 2's deploy procedure, whose command the runbook then uses.
   - A re-run overwrites any v2-side edit to an imported Profile. So Creators of imported Profiles get the Editor only after the switch. Profiles created only in v2 (public sign-up, D9) are not in v1 and survive it.
   ASSUMPTION: rung 4, no edit is lost. Overturned if the v1 Import is changed to skip Profiles already edited in v2.
+  - From the switch on, the v1 Import is never run again. v1 wins on v1's fields (`docs/spec/phase-02-vps-foundation.md:343-347`), so a re-run would overwrite Creators' Editor edits. The n8n freeze holds through the 30 days and any rollback, so no re-run is ever needed. `RUN.md`'s `## Cutover` says so above the import command.
+    ASSUMPTION: a written rule, not a guard in the import (rung 5; rung 4: the import is Phase 2's code). Overturned if a re-run after the switch ever happens; Phase 2's import then gains a guard.
 - **What a rollback restores.** Rolling back moves ofl.ink alone.
   - v2 keeps running with all its data, and Custom Domains and Spare Domains stay served by it.
   - While rolled back, ofl.ink shows v1 as it stood at the freeze. Profiles created only in v2, v2-side edits since the switch, and Stats are hidden there, not lost. They return when ofl.ink is switched back.
+  - While rolled back, ofl.ink also serves v1's secrets file again and v1's Link Ids reveal there again, while v2 Link Ids shared since the switch reveal nothing on v1 (ADR 0004). The n8n freeze still holds.
   - The trigger is a failed post-switch check, or a Mode that passed the device matrix on v1 and fails it on v2. Later in the 30 days, rolling back is the Operator's call.
   ASSUMPTION: rung 5. Overturned if a rollback must also carry v2-side edits back into v1, which section 8 forbids anyway.
 - **Backups.**
   - Before the switch, the Operator turns on PocketBase's scheduled backups in the admin UI (Settings → Backups): daily, keeping 7.
-  - One backup is taken by hand and downloaded to the Mac. Its database is integrity-checked and its Profiles counted, as proof that it restores.
-  ASSUMPTION (evidence blocked): the PocketBase release Phase 2 pins has built-in scheduled backups whose zip holds `data.db` at its root. No PocketBase binary or docs are on this machine. Overturned if it has none. A nightly cron job on the VPS then copies the PocketBase volume, stopped for the copy, into a dated directory.
+  - One backup is taken by hand and downloaded to the Mac. Its database must pass SQLite's integrity check and hold as many Profiles as the live admin UI shows, and the zip must hold uploaded files. That proves it is complete and readable.
+    ASSUMPTION: no full restore into a second PocketBase before the switch (rung 5; Phase 2's image and volume names are not fixed here). Overturned if the Operator wants a restore drill; it then runs Phase 2's PocketBase image on a copy of the backup.
+  ASSUMPTION (evidence blocked): the PocketBase release Phase 2 pins has built-in scheduled backups whose zip holds `data.db` at its root and uploaded files under `storage/`. No PocketBase binary or docs are on this machine. Overturned if it has none. A nightly cron job on the VPS then copies the PocketBase volume, stopped for the copy, into a dated directory.
   ASSUMPTION: backups stay on the VPS disk, apart from the one downloaded copy (rung 5); daily and 7 are rung 6. Overturned if the Operator wants an off-site copy, which PocketBase's S3 backup setting then takes.
-- **Readiness traffic leaves no Stats.** Before the switch, the parity runs, the readiness checks and the Spare Domain warm-up write Page Views and Clicks into imported Profiles. The runbook records the switch time. After the post-switch checks pass, it takes one backup and then deletes every Event created before that time that belongs to a Profile in the v1 Snapshot. Events of v2-only Profiles are kept.
-  ASSUMPTION: an imported Profile's real Visitors reach v1 until the switch, so its earlier v2 Events are test traffic. v2-only Profiles may already have real Visitors through public sign-up (rung 4: the backup keeps everything deleted). Overturned if the v2 host or a Spare Domain was shared for imported Profiles before the switch.
+- **Readiness traffic stays in Stats.** Before the switch, the parity runs, the readiness checks and the Spare Domain warm-up write Page Views and Clicks into imported Profiles. The runbook records the switch time in `RUN.md`, so Events before it can be told apart. Nothing is deleted.
+  ASSUMPTION: rung 5, the plan asks for no Stats reset; rung 4, a deletion is the harder undo. Overturned if Creators object to the test traffic. A filtered delete after a backup then follows, and Phase 4's `dailyStats`, a view computed on read (`docs/spec/phase-04-stats.md:138`), needs nothing more.
 - **Removing a Custom Domain** means clearing the field and restarting Caddy. From then on the TLS Ask endpoint says no, and Caddy re-asks before it uses the stored certificate (observed, Contracts). Until that restart, Caddy keeps serving the certificate it holds in memory.
-- **Turning Netlify off,** 30 days after the Cutover, is the Operator removing ofl.ink from the Netlify site's domains, on their side. Re-adding it undoes this, and the zone stays in Cloudflare. No agent and no Phase edits the Netlify site, its deploys or its config (section 8). There is no redirect deploy.
-  - `linkmeclone3.netlify.app` keeps serving v1, including its secrets file and its Reveal function, until the Operator deletes the site, which is their separate, irreversible decision.
-  - ADR 0005 accepts that exposure. v2's fresh Link Ids already make leaked v1 ids reveal nothing on ofl.ink.
-  ASSUMPTION: "off" is the reversible domain removal, with deletion left to the Operator (rung 4). Overturned if the Operator wants the site deleted outright at day 30.
+- **Turning Netlify off,** 30 days after the Cutover, is the Operator's, in two acts on their side. Plan section 5 says "cold backup for a month, then off", and section 8 keeps v1's exposure only "until Netlify is switched off" (rung 2).
+  - First, ofl.ink comes off the Netlify site's domains. Re-adding it undoes this, and the zone stays in Cloudflare.
+  - Then the site stops serving at every address, so that `linkmeclone3.netlify.app` no longer serves v1's secrets file or its Reveal function. That is what "off" means in section 8, and it is irreversible.
+  - No agent and no Phase edits the Netlify site, its deploys or its config (section 8). There is no redirect deploy. The old GitHub repo and its history stay as they are, because section 8 leaves them untouched.
+  ASSUMPTION (evidence blocked): deleting the site is the only Netlify control that stops it serving without a deploy; no network reads. Overturned if Netlify offers a reversible stop, which the Operator then uses. Either way, step 16's check that the secrets path no longer answers 200 is the proof.
 
 ## Testing Decisions
 
@@ -236,7 +248,7 @@ Testing
   - A failing assertion names the Link Id and never prints a Destination.
   - The spec saves a screenshot of `creator.test/` to `.scratch/goal_ai/shots/05-domains.png` (plan section 7; `playwright.config.ts` outputDir).
   ASSUMPTION: Phase 2's baseURL is Caddy's plain-HTTP listener, so the seam covers Caddy's Host pass-through as well as the app (rung 3: plan section 7 puts `docker compose up` behind the baseURL). Overturned if the baseURL points at the app directly. The spec then still covers Host Resolution, and Caddy's pass-through is left to the manual Custom Domain check.
-  ASSUMPTION: the ask URL Caddy is configured with is proven on the VPS rather than by a second local check (rung 5: one seam). The readiness step's `https://$V2_HOST` request fails if the ask URL is wrong, because Caddy re-asks before using a stored certificate (observed). Overturned if a wrong ask URL ever reaches the VPS; a `caddy adapt` wiring check then joins Acceptance.
+  ASSUMPTION: the ask URL Caddy is configured with is proven on the VPS rather than by a second local check (rung 5: one seam). Step 1 proves it both ways. Its `https://$V2_HOST` request fails if the ask refuses, because Caddy re-asks before using a stored certificate (observed). The endpoint that `caddy adapt` reports must say yes to ofl.ink and no to `unknown.invalid`, which catches an ask that says yes to everyone. On the local `caddy:2-alpine` image, `caddy adapt` prints the ask as `"permission":{"endpoint":"…","module":"http"}`, and the image has BusyBox `wget` (observed). Overturned if Phase 2 mounts its Caddyfile somewhere other than the image's default `/etc/caddy/Caddyfile`; step 1 then uses that path.
 - **Behaviour the spec asserts:**
   1. **TLS Ask.** It answers 200 for `creator.test`, `spare.test` and `localhost`, 404 for `unknown.test`, and 400 when `domain` is missing.
   2. **Custom Domain root, Tracking Code and Link Shortcut.**
@@ -245,7 +257,7 @@ Testing
      - `creator.test/?link={Link Id}` reveals that Link on load, as `localhost/{username}?link={Link Id}` does.
   3. **Attribution on every host.** Two numeric Tracking Codes, 111 and 222, each on `creator.test/{code}`, `spare.test/{username}/{code}` and `localhost/{username}/{code}`:
      - Tapping the Adult Link shows the Age Gate. Continue sends the Reveal request to the page's own host, and it answers 200 with a Destination ending in `/c{code}` for that page's code. D5 keeps the `/c{code}` suffix, and v1 appends it to numeric codes (`linkme_clone3/netlify/functions/reveal.js:25-36`).
-     - The Direct Mode Link ends at the same Destination on all three hosts.
+     - The Direct Mode Link, and a Deeplink Mode Link whose Mode the REST set-up sets, each end at the same Destination on all three hosts.
      - Navigation to a Destination is intercepted and fulfilled with a harmless page, as `00-smoke` does.
   4. **Spare Domain.** `spare.test/{username}` shows the Fixture Profile, and `spare.test/{username}?link={Link Id}` reveals that Link on load.
   5. **Escape keeps the host.**
@@ -254,9 +266,9 @@ Testing
      - With an Android Instagram User-Agent, the `intent://` target names `creator.test` the same way.
      - On `spare.test/{username}/{code}`, the target keeps `/{username}/{code}`.
      - Custom-scheme navigation is captured the way Phase 1's spec captures it.
-  6. **Page View.** Loading `creator.test/` adds one Page View Event for the Fixture Profile, read as a superuser through PocketBase's REST API.
+  6. **Page View and Click.** Loading `creator.test/` adds one Page View Event, and the Adult Link's Reveal on `creator.test/{code}` adds one Click Event, both for the Fixture Profile, read as a superuser through PocketBase's REST API.
      ASSUMPTION: Phase 4's events carry the Profile they belong to and their kind, as D5 lists them (rung 2 for the content, rung 3 for the field names). Overturned by Phase 4's schema, whose names the spec then uses.
-  7. **No cross-domain loads.** On `creator.test` and `spare.test`, no request goes to another of ofl.ink's hosts (`localhost:4173`, the other `.test` host). Third-party hosts the page already loads are left alone.
+  7. **No cross-domain loads.** On `creator.test` and `spare.test`, no request goes to another of ofl.ink's hosts (`localhost:4173`, the other `.test` host), and no request URL names `ofl.ink`. Third-party hosts the page already loads are left alone.
   8. **Cross-origin Reveal refused.** A `fetch` from a page on `creator.test` to Reveal on `spare.test:4173` cannot be read by the page (ADR 0004, same-origin).
   9. **Assignment is live, unique and ranked.** Each step goes through the REST set-up:
      - Changing the Fixture Profile's `customDomain` to `creator2.test` makes `creator2.test/` show the Profile on the next load, with no restart. The TLS Ask endpoint then answers 200 for `creator2.test` and 404 for `creator.test`.
@@ -266,7 +278,7 @@ Testing
   11. **Domains stay private.**
       - Loading `localhost/{username}`: no response body the page receives contains `creator.test`.
       - Without a token, at the baseURL, no response to `/api/collections/profiles/records` or `/api/collections/spareDomains/records` contains `creator.test` or `spare.test`.
-- **Not tested locally:** real certificate issuance, live DNS, Cloudflare and real devices. They are the `# manual:` steps of Acceptance.
+- **Not tested locally:** real certificate issuance, live DNS, Cloudflare, the Cloudflare lines (stories 18–19; see Caddy configuration) and real devices. They are the `# manual:` steps of Acceptance, and step 7 checks the Cloudflare lines at the origin and through Cloudflare.
 - **Prior art.**
   - `tests/e2e/00-smoke.spec.ts`: Reveal intercepted with `page.route` and navigation fulfilled with a harmless page, the User-Agent overridden with `test.use`, and the `#displayName` and `.link-card` selectors.
   - Phase 2's specs, for REST set-up.
@@ -276,24 +288,33 @@ Testing
 
 ```sh
 # --- automated, local, plain HTTP (the implementing agent) ---
-test -z "$(git -C linkme_clone3 status --porcelain)"   # the v1 Snapshot was read, never edited (ADR 0005)
+s="$(git -C linkme_clone3 status --porcelain)" && test -z "$s"   # the v1 Snapshot was read, never edited (ADR 0005); fails if git fails
 test -f tests/e2e/05-domains.spec.ts
 grep -q '^## Cutover' RUN.md
 
 # --- needs the human: live DNS, Cloudflare, the VPS, purchases, phones (floor 2); the same steps, in order, are RUN.md's ## Cutover ---
 # Set once: USERNAME=<an imported Username>  VPS=<ssh host>  V2_DIR=<v2's directory on the VPS>  V2_HOST=<Phase 2's v2 host>
 #           VPS_IPV4=<VPS IPv4>  SPARE=<a Spare Domain>  DOMAIN=<a Creator's Custom Domain>
-# manual: 1. deploy this Phase to the VPS by Phase 2's deploy procedure, with two lines in the VPS .env:
+#           LINK_ID=<a Link Id of $USERNAME's Profile>  LIMIT=<the VPS's REVEAL_LIMIT_PER_MINUTE>
+# manual: 1. record who holds ports 80 and 443 into RUN.md. Anything but v2's Caddy (Docker's proxy for it) blocks this Phase until the Operator chooses (ADR 0001):
+#   ssh "$VPS" "sudo ss -ltnp '( sport = :80 or sport = :443 )'"
+#   then deploy this Phase by Phase 2's deploy procedure, with two lines in the VPS .env:
 #   PRIMARY_HOSTS=ofl.ink,<V2_HOST>    (append ,www.ofl.ink if step 2 shows it exists)
 #   CLOUDFLARE_RANGES=<the output of: { curl -s https://www.cloudflare.com/ips-v4; echo; curl -s https://www.cloudflare.com/ips-v6; } | xargs>
+#   rsync -a --exclude node_modules --exclude .scratch ./ "$VPS:$V2_DIR/" && ssh "$VPS" "cd $V2_DIR && docker compose up -d --build --wait"
 #   then prove the ask wiring:  test "$(curl -s -o /dev/null -w '%{http_code}' "https://$V2_HOST/$USERNAME")" = 200
+#   E="$(ssh "$VPS" "cd $V2_DIR && docker compose exec -T caddy caddy adapt --config /etc/caddy/Caddyfile" | grep -o '"endpoint":"[^"]*"' | cut -d'"' -f4)"
+#   ssh "$VPS" "cd $V2_DIR && docker compose exec -T caddy wget -q -O /dev/null '$E?domain=ofl.ink'"              # the ask Caddy uses says yes
+#   ! ssh "$VPS" "cd $V2_DIR && docker compose exec -T caddy wget -q -O /dev/null '$E?domain=unknown.invalid'"   # and refuses a stranger
 # manual: 2. record v1's DNS in RUN.md. Copy every record of the ofl.ink zone as the DNS host lists it (type, name, value, TTL),
 #   NETLIFY and ALIAS records included, then the live answers and the registrar:
-#   dig +short NS ofl.ink; dig +noall +answer ofl.ink A ofl.ink AAAA www.ofl.ink CNAME www.ofl.ink A www.ofl.ink AAAA; whois ofl.ink | grep -i registrar
+#   dig +short NS ofl.ink; dig +noall +answer ofl.ink A ofl.ink AAAA www.ofl.ink CNAME www.ofl.ink A www.ofl.ink AAAA; dig +noall +answer DS ofl.ink; whois ofl.ink | grep -i registrar
 # manual: 3. at least 48 h before the switch, move the zone to Cloudflare with v1 still serving. Add ofl.ink to a Cloudflare account;
 #   re-create every recorded record DNS-only, TTL 300 on apex and www; NETLIFY or ALIAS records become an apex CNAME to linkmeclone3.netlify.app;
-#   SSL/TLS mode Full (strict); Always Use HTTPS off; Network -> IP Geolocation on. Write the Cloudflare records into RUN.md (the rollback target).
-#   At the registrar, set the NS to the pair Cloudflare names. Nothing in the Netlify site is changed. Then:
+#   SSL/TLS mode Full (strict); Always Use HTTPS off; Network -> IP Geolocation on; Rules -> Transform Rules -> Managed Transforms -> Add visitor location headers on.
+#   Write the Cloudflare records into RUN.md (the rollback target). If step 2 printed a DS record, turn DNSSEC off at the registrar first and wait until
+#   dig +short DS ofl.ink prints nothing and that record's TTL has passed. At the registrar, set the NS to the pair Cloudflare names. Nothing in the Netlify
+#   site is changed. Once Cloudflare shows the zone Active, and only if a DS record existed: DNSSEC on in Cloudflare, and its DS record at the registrar. Then:
 #   dig +short NS ofl.ink                                                                  # Cloudflare's pair
 #   curl -s -D - -o /dev/null "https://ofl.ink/$USERNAME" | grep -qi '^server: netlify'     # v1 still serves
 # manual: 4. buy at least one Spare Domain (payment). Add it to Cloudflare with ofl.ink's SSL/TLS settings and A -> $VPS_IPV4 Proxied; set its NS
@@ -301,17 +322,23 @@ grep -q '^## Cutover' RUN.md
 #   test "$(curl -s -o /dev/null -w '%{http_code}' "https://$SPARE/$USERNAME")" = 200     # the first call issues the certificate
 #   then open https://$SPARE/$USERNAME inside Instagram on a phone: the Profile opens with no Meta warning.
 # manual: 5. backups. PocketBase admin UI -> Settings -> Backups: auto backups on, cron 0 3 * * *, keep 7. Create one backup now and download it
-#   to the Mac as $B, then prove it restores:
-#   R="${TMPDIR:-/tmp}/pb-restore.db"; unzip -p "$B" data.db > "$R" && test "$(sqlite3 "$R" 'pragma integrity_check;')" = ok && sqlite3 "$R" 'select count(*) from profiles;'
-# manual: 6. freeze and final v1 Import. From now until step 8 nobody submits the n8n Form. Refresh the v1 Snapshot (reads the old repo, changes nothing there):
-#   git -C linkme_clone3 pull --ff-only
-#   for f in linkme_clone3/api/profiles/*.json; do curl -s "https://ofl.ink/api/profiles/${f##*/}" | cmp -s - "$f" || echo "differs from live v1: ${f##*/}"; done   # expect no output
+#   to the Mac as $B, then prove it is complete and readable:
+#   R="${TMPDIR:-/tmp}/pb-restore.db"; unzip -p "$B" data.db > "$R" && test "$(sqlite3 "$R" 'pragma integrity_check;')" = ok
+#   test "$(sqlite3 "$R" 'select count(*) from profiles;')" = <the Profiles count the admin UI shows> && unzip -l "$B" | grep -q ' storage/'   # every Profile, and uploaded files
+# manual: 6. freeze and final v1 Import. From now on nobody submits the n8n Form, through the 30 days and any rollback. Wait until n8n's Executions list shows
+#   no running execution of the Form's workflow and Netlify's Deploys page shows the newest production deploy Published. Then refresh the v1 Snapshot
+#   (reads the old repo, changes nothing there) and record its commit, which must match the commit that Published deploy names:
+#   git -C linkme_clone3 pull --ff-only && echo "v1 commit: $(git -C linkme_clone3 rev-parse HEAD)" >> RUN.md
+#   bad=0; for f in linkme_clone3/api/profiles/*.json; do curl -sf "https://ofl.ink/api/profiles/${f##*/}" | cmp -s - "$f" || { echo "differs from live v1: ${f##*/}"; bad=1; }; done; test "$bad" = 0
 #   rsync -a --delete --exclude .git linkme_clone3/ "$VPS:$V2_DIR/linkme_clone3/"
-#   ssh "$VPS" "cd $V2_DIR && <Phase 2's v1 Import command>"
-#   then run Phase 2's parity check against https://$V2_HOST; it must pass.
+#   ssh "$VPS" "cd $V2_DIR && docker compose run --rm -v \"\$PWD/linkme_clone3:/v1:ro\" app import-v1 --site /v1"   # Phase 2's command; never again after step 8
+#   PLAYWRIGHT_BASE_URL="https://$V2_HOST" npx playwright test tests/e2e/02-profile-parity.spec.ts --grep-invert 'Geo Rule'   # must pass; Geo Rule cases run locally only
 # manual: 7. readiness (steps 1, 4, 5 and 6 done, and):
 #   nc -zv "$VPS_IPV4" 80 && nc -zv "$VPS_IPV4" 443
 #   test "$(curl -s -o /dev/null -w '%{http_code}' "https://$V2_HOST/internal/tls-ask?domain=ofl.ink")" = 200
+#   curl -s -o /dev/null --resolve "$V2_HOST:443:$VPS_IPV4" -H 'CF-IPCountry: DE' -H 'X-Country: DE' "https://$V2_HOST/r/$LINK_ID"   # straight to the origin: the newest Click Event for that Link (admin UI) has country XX
+#   curl -s -o /dev/null -H 'CF-IPCountry: DE' -H 'X-Country: DE' "https://$SPARE/r/$LINK_ID"   # through Cloudflare: the newest Click Event has the Mac's own country (DE only if the Mac is in Germany)
+#   for i in $(seq 1 $((LIMIT + 1))); do curl -s -o /dev/null -w '%{http_code}\n' --resolve "$V2_HOST:443:$VPS_IPV4" -H "X-Forwarded-For: 198.51.100.$i" "https://$V2_HOST/r/$LINK_ID"; done | grep -q 429   # a forged address does not dodge the limit
 # manual: 8. switch. Record the time:  echo "switch: $(date -u +%FT%TZ)" >> RUN.md   then in Cloudflare replace the ofl.ink apex record with
 #   A ofl.ink -> $VPS_IPV4 Proxied (AAAA -> the VPS's IPv6, Proxied, only if it has one); if www existed, CNAME www -> ofl.ink Proxied.
 # manual: 9. verify from the Mac (the first request issues ofl.ink's certificate; retry a Cloudflare 52x once after a few seconds):
@@ -321,14 +348,15 @@ grep -q '^## Cutover' RUN.md
 #   node -e 'const fs=require("fs"),b=fs.readFileSync(process.argv[1],"utf8").replace(/\\\//g,"/");process.exit(Object.values(JSON.parse(fs.readFileSync("linkme_clone3/netlify/functions/secrets.json","utf8"))).filter(Boolean).some(u=>b.includes(u))?1:0)' "$S"   # no v1 Destination at the old path; prints none
 #   ssh "$VPS" "cd $V2_DIR && docker compose logs caddy" | grep -i 'certificate obtained successfully' | grep -q ofl.ink
 #   if no certificate was obtained: set the apex record DNS-only, repeat the first curl so Caddy issues directly, then set it Proxied again.
-# manual: 10. clear readiness traffic. Create one backup by hand, then print the filter and paste it into the PocketBase admin UI's events filter; select all; delete:
-#   node -e 'const u=require("fs").readdirSync("linkme_clone3/api/profiles").filter(f=>f.endsWith(".json")).map(f=>`profile.username = "${f.slice(0,-5)}"`);console.log(`created < "${process.argv[1]}" && (${u.join(" || ")})`)' "<switch time from RUN.md>"
+# manual: 10. no re-import and no clean-up. From the switch on the v1 Import is never run again (it would overwrite Editor edits); write that above
+#   step 6's import command in RUN.md. Readiness traffic stays in Stats; the switch time recorded in step 8 tells it apart.
 # manual: 11. real-device matrix (plan section 4) on https://ofl.ink/$USERNAME for every Mode, inside Instagram, Facebook, Threads and TikTok and in
 #   Safari and Chrome, on iOS and Android; record each cell in RUN.md.
 # manual: 12. tell Creators: Link Shortcuts carrying v1 Link Ids no longer reveal (ADR 0004) and must be re-shared; bio links on linkmeclone3.netlify.app
 #   show a frozen v1 and must move to ofl.ink; n8n Form edits no longer reach ofl.ink. Invite imported Profiles' Creators to the Editor now.
 # manual: 13. rollback, if step 9 fails or a Mode that passed on v1 fails step 11: in Cloudflare restore the records written in step 3 (DNS-only); then
-#   curl -s -D - -o /dev/null "https://ofl.ink/$USERNAME" | grep -qi '^server: netlify'     # within one TTL. v2 and its domains keep running.
+#   curl -s -D - -o /dev/null "https://ofl.ink/$USERNAME" | grep -qi '^server: netlify'     # within one TTL. v2 and its domains keep running; the n8n freeze still holds.
+#   While rolled back, ofl.ink serves v1's secrets file and v1 Link Ids again, and v2 Link Ids shared since step 8 reveal nothing there.
 # manual: 14. each Custom Domain. The Creator sets A $DOMAIN -> $VPS_IPV4, DNS-only (AAAA only if the VPS has IPv6). The Operator sets that Profile's
 #   customDomain in the PocketBase admin UI. Then:
 #   test "$(dig +short A "$DOMAIN")" = "$VPS_IPV4" && test "$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/")" = 200
@@ -336,9 +364,11 @@ grep -q '^## Cutover' RUN.md
 #   To remove one later: clear the field, then  ssh "$VPS" "cd $V2_DIR && docker compose restart caddy"
 # manual: 15. when ofl.ink is Flagged: the Operator and Creators replace ofl.ink with a warmed Spare Domain in every bio link; nothing in v2 changes.
 #   Links already posted outside bios keep ofl.ink and are not recovered. Then buy and warm the next Spare Domain (step 4).
-# manual: 16. Cutover + 30 days: in Netlify, the v1 site -> Domain management -> remove ofl.ink (re-adding it undoes this). The zone stays in Cloudflare:
+# manual: 16. Cutover + 30 days, the Operator switches v1 off (plan sections 5 and 8). First, in Netlify, the v1 site -> Domain management -> remove ofl.ink
+#   (re-adding it undoes this). The zone stays in Cloudflare:
 #   dig +short ofl.ink      # still Cloudflare's addresses
-#   Deleting the site is the Operator's own, irreversible call; until then linkmeclone3.netlify.app keeps serving v1 and its secrets file (ADR 0005).
+#   Then stop the site serving at every address: Site configuration -> General -> Danger zone -> Delete this site. Irreversible, and the Operator's own act:
+#   test "$(curl -s -o /dev/null -w '%{http_code}' https://linkmeclone3.netlify.app/netlify/functions/secrets.json)" != 200   # v1's secrets file is served nowhere
 
 ./check.sh
 ```
@@ -353,7 +383,8 @@ grep -q '^## Cutover' RUN.md
   - the re-runnable v1 Import, where v1 wins until Cutover
   - the parity check that "the VPS URL serves every existing profile identically"
   - the pre-Cutover v2 host
-  - the deploy procedure and the SSH tunnel to the PocketBase admin UI
+  - the deploy procedure and the v1 Import command (`docs/spec/phase-02-vps-foundation.md:569-574`), and the SSH tunnel to the PocketBase admin UI
+  - Visitor location, reading `cf-ipcountry` and `cf-region-code` after v1's headers (`:250-251`), with the real country source left to Cutover (`:646`); and Reveal's limit keyed on `X-Forwarded-For` (`:370`)
   - the local loop: `docker compose up` behind the baseURL, seeded with the Fixture Profile (plan section 7)
 
   Precondition: TLS on 443 must reach v2's Caddy, because on-demand TLS is Caddy's. ADR 0001 leaves open whether n8n's set-up already holds ports 80 and 443. Only the Operator's look at the live VPS settles that.
@@ -362,9 +393,9 @@ grep -q '^## Cutover' RUN.md
 - **Phase 3.** Provides:
   - the Profiles create and update rules, which this Phase extends with the Operator-only `customDomain` clause
   - the Editor and the API path it uses on the Profile origin, which behaviours 10 and 11 exercise
-  - the reserved-Username list, which gains `internal` if it is missing
+  - the reserved-Username list, which already holds `internal` (`docs/spec/phase-03-auth-and-editor.md:206`)
 - **Phase 4.** Provides the Page View ping and the events that behaviour 6 reads, and Stats.
-  ASSUMPTION: Phase 4's production country source is Cloudflare's `CF-IPCountry` (see DNS records). Overturned by Phase 4's choice.
+  Phase 4's spec reads country from `CF-IPCountry` only (`docs/spec/phase-04-stats.md:153`), by its own ASSUMPTION (`:158`). If Phase 4 switches to VPS geo-IP, see DNS records.
 - **Phase 0.** Nothing directly. Under section 8, its v1 data repairs ride inside Phase 2's v1 Import, which step 6 re-runs.
 
 ## Out of Scope
@@ -396,25 +427,67 @@ grep -q '^## Cutover' RUN.md
 - ASSUMPTION: a 300-second TTL, set at the zone move at least 48 hours before the switch, bounds both the switch and a rollback to about five minutes (rung 4). Overturned if the DNS host enforces a higher minimum TTL.
 - ASSUMPTION: one warmed Spare Domain is enough to call Spare Domains "ready" (rung 5: the smallest thing that meets "spare domains ready"). Overturned if the Operator wants several held at once.
 - ASSUMPTION: the Cutover runbook lives in `RUN.md` at the repo root, beside `check.sh` (rung 3: plan section 7 names `RUN.md` for manual items, and run 1 put it at the root). Overturned if another Phase places `RUN.md` elsewhere; the `## Cutover` section moves with it.
-- **Needs the human,** all in Acceptance with exact commands:
-  1. the deploy settings, including fetching Cloudflare's ranges (step 1)
-  2. reading live DNS and the registrar (step 2)
-  3. the Cloudflare account and the nameserver change (step 3)
+- **Needs the human,** all in Acceptance, with exact commands where a command exists and the screen named where only a dashboard does:
+  1. the port record, the deploy settings including fetching Cloudflare's ranges, and the ask check (step 1)
+  2. reading live DNS, DNSSEC and the registrar (step 2)
+  3. the Cloudflare account, any DNSSEC change and the nameserver change (step 3)
   4. buying a Spare Domain (step 4)
   5. backups (step 5)
   6. the n8n freeze, pulling v1's repo, the VPS import and parity (step 6)
-  7. the switch and the post-switch checks (steps 8–10)
+  7. the readiness checks, the switch and the post-switch checks (steps 7–9)
   8. real phones (steps 4, 11 and 14)
   9. telling Creators (step 12)
   10. the rollback, if needed (step 13)
   11. each Custom Domain (step 14)
   12. rotation (step 15)
-  13. removing ofl.ink from the Netlify site (step 16)
+  13. switching v1 off: removing ofl.ink from the Netlify site, then deleting the site, which is irreversible (step 16)
 
-  Deleting the Netlify site or the GitHub repo is never a step here. It is the Operator's own call.
-- **Needs the human, unresolved by evidence:** do Spare Domains recover traffic at all? Every Spare Domain serves the same pages from the same VPS. Cloudflare's proxy hides that address for ofl.ink and the Spare Domains, but DNS-only Custom Domains publish it. So a Flag aimed at content or at the address could carry over. D6 and section 4 bind the mitigation, and this Phase implements it. Evidence that settles it: on the first real Flag, open the warmed Spare Domain in Instagram on a phone. A warning there means rotation fails, and the Operator chooses another mitigation, such as a second server address.
+  Deleting the GitHub repo is never a step here; section 8 leaves it untouched.
+- **Needs the human, unresolved by evidence:** do Spare Domains recover traffic at all? Every Spare Domain serves the same pages from the same VPS. Cloudflare's proxy hides that address for ofl.ink and the Spare Domains, but DNS-only Custom Domains publish it. So a Flag aimed at content or at the address could carry over. D6 and section 4 bind the mitigation, and this Phase implements it. The review confirmed this as needs-human (## Review, D11). Rotation does change the origin, so a Flag on the hostname alone is escaped, but nothing here shows that Meta does not carry a Flag across. Evidence that settles it: on the first real Flag, open the warmed Spare Domain through the actual bio link in Instagram on a phone and follow a Link onward. A warning there means rotation fails, and the Operator chooses another mitigation. A second server address is a candidate, not a proven cure.
 - Evidence placed for this Phase:
   - `linkme_clone3/netlify.toml` holds no domain configuration, only `publish = "."`, a catch-all rewrite to `index.html` and headers.
   - The n8n export names `https://ofl.ink/{ID}` and `https://linkmeclone3.netlify.app/{ID}` in its form texts and has no domain handling.
   - No v1 code hard-codes ofl.ink apart from the footer text.
   - The link.me Template has no domain screen.
+
+## Review
+
+codex, 2026-10-02. A blind call (B) read the plan, CONTEXT.md, ADRs 0001–0005 and the harness, and then a draft call (D) read this spec. Neither could see docs/spec/, .scratch/ or linkme_clone3/. Totals: accept 13, partial 7, reject 10, needs-human 2.
+
+Blind call:
+
+- B1 Who binds a Custom Domain? Public sign-up does not settle it. **reject**: Schema already settles it (Operator only, rung 4), and behaviour 10 tests it.
+- B2 Hostname resolution must keep certificate admission and routing in step. **reject**: one `resolveHost` feeds both the TLS Ask endpoint and the page grammar, and behaviour 9 checks that they change together.
+- B3 Custom Domains need a route through Cloudflare (Creator proxying or Cloudflare for SaaS), or an explicit no-country policy. **reject**: DNS records already makes them DNS-only with the unknown country. Cloudflare for SaaS needs an account and a payment the plan never asks for.
+- B4 The final data boundary needs a conflict policy for imports after v2 editing starts. **partial**: the freeze, the final import and the Editor after the switch were already there. Added: the import is never re-run after the switch, and the freeze holds through a rollback (Refreshing the v1 Snapshot, step 10). See D12.
+- B5 The rollback must say what happens to v2-only data, the fresh Link Ids and v1's exposure. **accept**: What a rollback restores, story 14 and step 13 now say that ofl.ink serves v1's secrets file and v1 Link Ids again, and that v2 Link Ids reveal nothing there.
+- B6 Whether a Spare Domain is an alias or the preferred address is still a product decision. **reject**: settled as always-live aliases with no active-domain setting (Spare Domains are always live, rung 5).
+- B7 The domain lifecycle (normalisation, uniqueness, apex and `www`, removal, transfer) is undefined. **reject**: Interfaces covers normalisation, Schema covers the pattern and the unique index, Out of Scope covers `www`, and Removing a Custom Domain covers removal. A transfer is the Operator editing two fields.
+- B8 Removing a domain must stop service even while its certificate is cached, and a failed lookup must deny. **reject**: removal includes a Caddy restart, after which Caddy re-asks and refuses (observed, Contracts). If PocketBase is down the endpoint answers 503, which Caddy takes as no.
+- B9 Should the Editor, login and reset live on every origin or on one? **reject**: the rule is explicit (app routes match first on every host). No plan line restricts them, and nothing breaks.
+- B10 Which requests count as Cloudflare's, how forged forwarding and country headers are handled, and what `XX` and `T1` mean. **accept**: see D2a. `XX` and `T1` are Phase 4's (`docs/spec/phase-04-stats.md:114`, its behaviour 4).
+- B11 US-state Geo Rules (CONTEXT.md:104) need a trusted state source. **accept**: Phase 2 reads `cf-region-code` (`docs/spec/phase-02-vps-foundation.md:251`), and Cloudflare sends it only with the "Add visitor location headers" Managed Transform. Step 3 turns that on, and the Cloudflare lines treat the header like `CF-IPCountry`.
+- B12 DNS, IPv6, Cloudflare TLS and who owns ports 80/443 beside n8n (ADR 0001:16). **accept**: see D4. DNS records and Moving the zone already covered the rest.
+- B13 "Identical" parity needs interpreting. **reject**: Phase 2 owns the parity check and its cases (Depends on). This Phase only runs it.
+- B14 A Spare Domain must keep working while ofl.ink is down. **partial**: behaviour 7 already covered the local hosts. It now also fails on any request that names `ofl.ink` (D8).
+- B15 What do Visitors see on a stale v1 Link Shortcut? **reject**: ADR 0004 accepts the break, and the answer to an unknown `?link=` is Phase 2's.
+- B16 Calling the ask endpoint proves only its answer, not that Caddy consults it, so test real TLS. **partial**: local TLS stays out (Out of Scope). Step 1 now reads the endpoint Caddy actually uses and requires a yes for ofl.ink and a no for `unknown.invalid`. Observed: `caddy adapt` on `caddy:2-alpine` prints `"permission":{"endpoint":"http://app:3000/internal/tls-ask","module":"http"}`, and the image ships BusyBox `wget`.
+- B17 `check.sh` runs only Playwright (check.sh:1-3). **reject**: the loop belongs to Phases 0 and 2. This Phase adds one spec to it.
+- B18 Spare Domains are disproved if a real Flag blocks the spare too. **needs-human**: the same question as D11.
+
+Draft call:
+
+- D1 Removing ofl.ink from Netlify is not "then off". `linkmeclone3.netlify.app` would keep serving the secrets file for good (goal_ai.txt:162, :219). **accept**: rung 2, because section 8 ends the exposure when Netlify is switched off. Turning Netlify off, story 16 and step 16 now have two human acts: remove the domain, then delete the site. The check is that the secrets path no longer answers 200.
+- D2a Trusting Cloudflare's ranges with Caddy's default left-to-right `X-Forwarded-For` parsing lets a Visitor forge the rate-limit key. **accept**: reproduced locally with a header-echo upstream behind `caddy:2-alpine` v2.11.4. With a trusted peer and `X-Forwarded-For: 6.6.6.6, 1.2.3.4`, default parsing gave `xff=[6.6.6.6]` and `trusted_proxies_strict` gave `xff=[1.2.3.4]`. An untrusted peer gave `xff=[172.17.0.1] country=[]`. The Cloudflare lines now parse strictly and hand the app `{client_ip}` alone. The same check showed that Phase 2 reads `x-country` before `cf-ipcountry` (`docs/spec/phase-02-vps-foundation.md:250`), and that header passes through Cloudflare. v1's location headers are therefore now dropped on every request.
+- D2b Stories 18–19 have no assertion, and the local listener leaves the lines out, so test both kinds of peer locally. **partial**: not locally, because Phase 2's parity spec and Phase 4's Stats spec inject location headers on the local listener (`phase-02-vps-foundation.md:468`, `phase-04-stats.md:225`). Step 7 now checks both stories at the origin and through Cloudflare.
+- D3 Step 6's comparison exits 0 on a mismatch, the freeze does not prove the last edit landed, and only Profile JSON is compared. **accept**: the loop is now a gate that fails. Step 6 waits for n8n's running executions and Netlify's Published deploy to finish, then records the pulled commit. That commit must match the deploy's, which covers Destinations and images too.
+- D4 `nc` cannot tell v2's Caddy from n8n's proxy on ports 80/443. **accept**: step 1 records `ss -ltnp` for both ports before deploying. Anything but v2's Caddy blocks the Phase until the Operator decides (ADR 0001:16). Step 4's Spare warm-up proves that a new hostname reaches Caddy.
+- D5 A DS record at the registrar can turn the nameserver move into an outage, and step 8 contradicts "one DNS record change". **accept**: step 2 records the DS record, and step 3 turns DNSSEC off before the move and back on through Cloudflare. Solution and story 3 now say one change to the apex (and `www`) records.
+- D6 The backup check proves neither that it restores nor that it is complete. **partial**: step 5 now requires the live Profile count and uploaded files in the zip, and says "complete and readable" instead of "restores". A restore into a second PocketBase is not added (rung 5).
+- D7 Deleting the Events from before the switch is destructive scope nobody asked for, and it skips the aggregates. **accept**: removed from story 17, from Implementation Decisions and from step 10. The switch time in RUN.md tells test traffic apart. Aggregates were not the problem: Phase 4's `dailyStats` is a view computed on read (`phase-04-stats.md:138`).
+- D8 Stories 27, 28 and 25 are untested: a literal ofl.ink request, Click Events on a Custom Domain, and Deeplink Mode. **accept**: behaviours 7, 6 and 3 are extended. Stories 18–19 are D2b.
+- D9 The snapshot guard `test -z "$(git … status --porcelain)"` passes when git fails. **accept**: it is now `s="$(git …)" && test -z "$s"`.
+- D10 `<Phase 2's v1 Import command>` and "Phase 2's deploy procedure" are placeholders, so "all with exact commands" is false. **accept**: both are filled in from `docs/spec/phase-02-vps-foundation.md:569-574`. Further Notes now says that steps done only in a dashboard name the screen.
+- D11 Do Spare Domains survive a Meta Flag once their paths match ofl.ink's? **needs-human**, confirmed. For: a Spare Domain is a different origin, so a Flag on the hostname alone is escaped (codex; plan section 4 names D6 as the mitigation). Against: the same pages, Destinations and server sit behind it, and DNS-only Custom Domains publish the server's address, so a Flag on content or address may carry over (Further Notes). What settles it: after the first real Flag, open the warmed Spare Domain through the actual bio link in Instagram and follow a Link onward. Further Notes now calls a second server address a candidate, not a cure.
+- D12 "v1 wins until Cutover" can be tested without the live site, but this spec doesn't test it, and nothing stops a re-run after the switch. **partial**: Phase 2 already tests it locally with `tests/fixtures/v1-rerun-a/` and `-b/` (`docs/spec/phase-02-vps-foundation.md:494-499`), so the test is not repeated here. The rule that the import is never re-run is added (Refreshing the v1 Snapshot, step 10).
+- D13 Depends on treats Phase 4's Cloudflare choice and Phase 3's reserved list as facts. **partial**: both now cite their specs (`phase-04-stats.md:153,158`, `phase-03-auth-and-editor.md:206`) and stay conditional on them.

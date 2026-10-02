@@ -27,7 +27,7 @@ v1's public page (index, script, style, landing page and the stock Link icons) i
 11. As a test author, I want each fixture Link's title to name its Mode or Adult flag, so that a spec can find a Link card by its visible title.
 12. As a test author, I want every fixture Link's Destination held in a test-only secrets file, all on `example.com`, so that no test ever touches a real Destination.
 13. As the Operator, I want the Adult Link's Destination to be absent from the public fixture Profile file and present only in the test secrets file, so that the fixture keeps the Adult-Link rule of ADR 0004.
-14. As a Phase 2 implementer, I want fixture Link Ids that are already v2-shaped (random, at least 10 letters and digits, not derived from the Username), so that a seed can keep them unchanged (plan D8).
+14. As a Phase 2 implementer, I want fixture Link Ids that are random, at least 10 letters and digits and not derived from the Username, and specs that read Link Ids from the served Profile rather than from the fixture file, so that the fixture never models v1's guessable ids and the specs still pass once Phase 2's seed mints a fresh Link Id for every Link (ADR 0004).
 15. As a Phase 2 implementer, I want the fixtures in the same file format and directory layout as the v1 Snapshot's Profiles and secrets file, so that anything that reads the v1 Snapshot can also read the fixtures.
 16. As a test author, I want the stand-in's Reveal to answer from the test secrets file only, so that a Reveal in a test returns a test Destination and never a v1 one.
 17. As the Operator, I want the stand-in to never serve a secrets file as a static file, so that the local loop does not repeat v1's leak.
@@ -101,7 +101,7 @@ v1's public page (index, script, style, landing page and the stock Link icons) i
 
     ASSUMPTION: `example.com` test Destinations committed under `tests/fixtures/` are not "Destinations" in ADR 0004's sense ("no Destination ... in this repo's git history"), which means real Creator destinations. They are reserved test addresses that lead to no Creator (rung 5: one static file). Overturned if ADR 0004 is meant to cover test data too; then the Test Secrets would have to be generated at test time.
   - The fixture layout copies the v1 Snapshot's tree: Profiles in `api/profiles/`, the secrets file in `netlify/functions/`. That is why the verbatim Reveal and Geo Rule helper resolve both files without edits. Anything that reads the v1 Snapshot by its root can read the fixtures by `tests/fixtures/`.
-  - The fixture's Link Ids are random strings, fixed once in the file, of at least 10 letters and digits. They do not contain the Username (plan D8). Specs refer to Links by visible title, or read the ids from the fixture file. No spec hard-codes them twice.
+  - The fixture's Link Ids are random strings, fixed once in the file, of at least 10 letters and digits. They do not contain the Username (plan D8). They key Test Secrets for the Reveal Stand-in only: Phase 2's seed mints a fresh Link Id for every Link it imports, the fixture's included (ADR 0004). Specs therefore find a Link by its visible title and read its id from the served Profile JSON (`/api/profiles/fixture.json`), never from the fixture file or a literal.
 - The Page Copy is a copy, not a link. It does not import or reference the v1 Snapshot, so Phase 1's edits can never reach v1.
 - The smoke spec aborts every request whose host is not the stand-in's. Destinations (`example.com`), Font Awesome on cdnjs and the verified badge on Wikimedia therefore never leave the machine. A Visitor's onward navigation is asserted from the outgoing request, not from a loaded page. As a result, Font Awesome glyphs and the verified badge are missing from the screenshot.
 
@@ -117,8 +117,8 @@ v1's public page (index, script, style, landing page and the stock Link icons) i
   1. `/fixture` shows the display name "Fixture Profile" and four Link cards titled "Adult Link", "Direct Link", "Escape Link" and "Deeplink Link". The phone-sized screenshot is written.
   2. With an Instagram User-Agent, the Escape Overlay ("Open in System Browser") is visible.
   3. With the default desktop User-Agent, the Escape Overlay is hidden.
-  4. Tapping "Adult Link" shows the Age Gate ("Mature Content Disclaimer"). Pressing "Continue (18+)" sends a Reveal whose `id` is the Adult Link's id from the fixture file and whose `user` is `fixture`. The stand-in answers 200 with `realUrl` equal to the Adult Link's Destination from Test Secrets, and the page then requests exactly that URL (the request is blocked).
-  5. Neither `/netlify/functions/secrets.json` nor `/tests/fixtures/netlify/functions/secrets.json` returns the secrets file. Each answers the page's HTML, and neither body contains any Test Secrets Destination.
+  4. Tapping "Adult Link" shows the Age Gate ("Mature Content Disclaimer"). Pressing "Continue (18+)" sends a Reveal whose `id` is the id of the Link titled "Adult Link" in the served Profile JSON (the page's own `/api/profiles/fixture.json` response) and whose `user` is `fixture`. The stand-in answers 200 with `realUrl` equal to the Adult Link's Destination from Test Secrets, and the page then requests exactly that URL (the request is blocked).
+  5. Neither `/netlify/functions/secrets.json` nor `/tests/fixtures/netlify/functions/secrets.json` returns the secrets file. Each body is an HTML page (it contains `<html`, so an empty or error body fails) and contains no Test Secrets Destination. The status is not asserted: the stand-in answers with its 200 catch-all, Phase 2's app answers `/netlify/*` with 404 and landing.html, and the same spec holds on both.
   - Throughout the spec, every request to a host other than the stand-in's is aborted.
 - Facts that no browser can see are checked by the Acceptance commands, not by a second test seam: byte-identity of the copies, the contents of the Page Copy and the fixtures, the v1 Snapshot staying unedited and untracked, the fresh-clone run, and the scan for v1 leaks.
 - Prior art: `tests/e2e/00-smoke.spec.ts` (fake Instagram User-Agent through `test.use`, Reveal observed with `page.route`/`waitForRequest`), and `tests/dev-server.mjs` (the Netlify stand-in this Phase rewires).
@@ -126,11 +126,15 @@ v1's public page (index, script, style, landing page and the stock Link icons) i
 ## Acceptance
 ```sh
 # These checks describe the end of Phase 0. Phase 1 is expected to break the byte-identity checks once it edits the Page Copy.
+# Run as one bash script: the first failing line stops it.
+set -euo pipefail
 
-# The v1 Snapshot is unedited, git-ignored and untracked.
-test -z "$(git -C linkme_clone3 --no-optional-locks status --porcelain)"
+# The v1 Snapshot is its own git checkout, unedited, git-ignored here and untracked.
+# Each git output is assigned first, so a failing git stops the script instead of yielding an empty string.
+prefix="$(git -C linkme_clone3 rev-parse --show-prefix)"; test -z "$prefix"
+status="$(git -C linkme_clone3 --no-optional-locks status --porcelain)"; test -z "$status"
 git check-ignore -q linkme_clone3/netlify/functions/secrets.json
-test -z "$(git ls-files linkme_clone3)"
+tracked="$(git ls-files linkme_clone3)"; test -z "$tracked"
 
 # The Page Copy is v1's public page plus the four stock icons, byte for byte, and nothing else.
 for f in index.html script.js style.css landing.html images/igicon.webp images/onlyicon.webp images/linkicon.webp images/twitchicon.webp; do
@@ -154,6 +158,8 @@ assert.strictEqual(p.profile.mode, "escape_ig");
 const nonAdult = p.links.filter((l) => !l.isAdult), adult = p.links.filter((l) => l.isAdult);
 assert.deepStrictEqual(nonAdult.map((l) => l.mode).sort(), ["deeplink", "direct", "escape_ig"]);
 assert.strictEqual(adult.length, 1);
+assert.strictEqual(adult[0].tracking, true);
+assert.ok(adult[0].geo && adult[0].geo.default && adult[0].geo.US && adult[0].geo.US.default);
 assert.deepStrictEqual(Object.keys(s).sort(), p.links.map((l) => l.id).sort());
 for (const l of p.links) {
   assert.ok(["direct", "escape_ig", "deeplink"].includes(l.mode));
@@ -170,22 +176,26 @@ npx playwright test tests/e2e/00-smoke.spec.ts
 test -s .scratch/goal_ai/shots/00-smoke.png
 # manual: glance at .scratch/goal_ai/shots/00-smoke.png; it should look like v1's juliafilippo_ page, minus Font Awesome glyphs and the verified badge.
 
-# A fresh copy of what this repo tracks, without the v1 Snapshot, passes the smoke spec on its own server.
+# A fresh copy of what this repo tracks (the git index: committed or staged files only), without the v1 Snapshot, passes the smoke spec on its own server.
 fresh="$(mktemp -d)"
-git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -xf - -C "$fresh"
+git ls-files -z | tar --null -T - -cf - | tar -xf - -C "$fresh"
 test ! -e "$fresh/linkme_clone3"
 ln -s "$PWD/node_modules" "$fresh/node_modules"
 (cd "$fresh" && CI=1 npx playwright test tests/e2e/00-smoke.spec.ts)
 
 # No v1 Destination in any file git would take, in git history or in test output; no v1 Link Id in tests/.
+# v1 Destinations are secrets.json's values plus every http(s) `url` in v1's Profile files (plan §9: v1's non-Adult Links keep a public url).
+# Test output is scanned as text. PNG screenshots cannot be; they rest on the loop reading no v1 file (Interfaces, and the fresh-copy run above).
 # Prints file names only, never a value.
 node -e '
 const fs = require("fs"), { execSync } = require("child_process");
 const sh = (c) => execSync(c, { encoding: "utf8", maxBuffer: 1 << 28 });
 const v1 = require("./linkme_clone3/netlify/functions/secrets.json");
-const destinations = Object.values(v1).filter(Boolean);
-const linkIds = Object.keys(v1).filter((id) => id.length >= 6);
 const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
+const profileUrls = fs.readdirSync("linkme_clone3/api/profiles").filter((f) => f.endsWith(".json"))
+  .flatMap((f) => [...read("linkme_clone3/api/profiles/" + f).matchAll(/"url"\s*:\s*"(https?:\/\/[^"]+)"/g)].map((m) => m[1]));
+const destinations = [...new Set([...Object.values(v1), ...profileUrls])].filter((d) => typeof d === "string" && d.length > 12);
+const linkIds = Object.keys(v1).filter((id) => id.length >= 6);
 const repoFiles = sh("git ls-files -co --exclude-standard").split("\n").filter(Boolean);
 const testOutput = sh("find .scratch/goal_ai/shots test-results -type f 2>/dev/null || true").split("\n").filter(Boolean);
 const bad = [];
@@ -199,10 +209,14 @@ if (bad.length) { console.error(bad.join("\n")); process.exit(1); }
 ```
 
 ## Depends on
-None. The test harness this Phase rewires is already committed (`package.json`, `playwright.config.ts`, `check.sh`, the dev-server stand-in and the smoke spec, in commit `ee0d4b6`), and the v1 Snapshot is already git-ignored. What Phase 0 provides to later Phases:
+None among the Phases. The test harness this Phase rewires is already committed (`package.json`, `playwright.config.ts`, `check.sh`, the dev-server stand-in and the smoke spec, in commit `ee0d4b6`), and the v1 Snapshot is already git-ignored.
+
+Input, not a Phase: the v1 Snapshot at `linkme_clone3/` must be present in the implementing checkout. Making the copies reads it, and so do the Acceptance's byte-identity, unedited and leak checks. `./check.sh` and the fresh-copy run do not.
+
+What Phase 0 provides to later Phases:
 - Phase 1 gets the Page Copy to edit and the Fixture Profile with a Link per Mode.
 - Phase 2 gets the Page Copy for its app to serve, plus the Fixture Profile and Test Secrets in v1 format and layout.
-- Phases 1 and 2 both get a smoke spec that never touches v1 data.
+- Phases 1 and 2 both get a smoke spec that never touches v1 data, reads Link Ids from the served Profile and leaves the secrets paths' status unasserted, so it runs on Phase 2's app unchanged.
 
 Plan §7 says Phase 2 replaces the stand-in ("same specs, same baseURL").
 
@@ -233,6 +247,7 @@ Cut (YAGNI or by the plan):
 - Rung 1 (stale ADR text): ADR 0004's consequence that the v1 Snapshot "is untracked but not git-ignored" is out of date. `.gitignore:4` now lists `linkme_clone3/`, and `git check-ignore -v` confirms it covers the secrets file. Whoever owns the ADRs may want to update that line.
 - Rung 1 (the icon set): the four stock icons are the only `/images/` files used as Link icons by v1 Profiles (`grep -ho '/images/[A-Za-z0-9_.-]*' linkme_clone3/api/profiles/*.json | sort | uniq -c`). `onlyicon2.webp` is a byte-identical duplicate of `onlyicon.webp` that no Profile references.
 - Rung 1 (today's state): no v1 Destination appears in this repo's git history or in any file git would take. The only v1 data in `tests/` is the smoke spec's v1 Link Ids (the Acceptance leak scan, run before Phase 0, reports only "v1 Link Id in tests/e2e/00-smoke.spec.ts"). Phase 0 removes those.
+- Cross-spec, for whoever owns Phase 2's spec: with the Page Copy at `app/public/`, Phase 2's claim that an `app/` build context keeps the page copy out of the image no longer holds, and its `public/` mount follows this location (its own ASSUMPTION defers to Phase 0). Its planned edit to `00-smoke.spec.ts` is superseded: this Phase removes the v1 id, reads ids from the served Profile and leaves the secrets paths' status unasserted.
 - Every decision below rung 2 is flagged inline, beside the decision it qualifies:
   - Page Copy location: Owns.
   - The stand-in reading nothing from the v1 Snapshot, and the stand-in instead of `netlify dev`: Interfaces.
@@ -241,3 +256,39 @@ Cut (YAGNI or by the plan):
   - `example.com` test Destinations versus ADR 0004: Contracts.
   - Blocking all off-machine requests in tests, and the spec-written screenshot: the decisions after Contracts.
   - Leaving out `example.webm`: Out of Scope.
+
+## Review
+codex (`codex exec`, reasoning high, read-only on a docs-and-harness workspace without the v1 Snapshot), 2026-10-02. Blind call first (B), then a draft call (D).
+
+- B1 **reject**. B1 listed the alternatives for Phase 0: no standalone Phase, repo safeguards only, safeguards plus a synthetic fixture, or pulling Phase 2's app forward. The spec stays with the third, plus the Page Copy. §8 has Phase 1 land in "the NEW repo's copy of the public page", so that copy has to exist before Phase 1, which rules out the first two. Pulling the app forward breaks §5's order and §9's Operator-run installs.
+- B2 **reject**. B2 suggested keeping the Snapshot outside the checkout. §8 names `linkme_clone3/` in this workspace as the read-only Snapshot (rung 2).
+- B3 **accept**. B3 asked for a contract for when the Snapshot is absent. Depends on now names the Snapshot as an input of the implementing checkout. Under `set -euo pipefail`, every Acceptance line that reads the Snapshot now fails loudly when it is missing. `./check.sh` still needs no Snapshot.
+- B4 **partial**. B4 asked for "read-only" and "not published" to be defined. Phase 0 defines its own serving root (Page Copy only, nothing read from the Snapshot) and its tracked-file checks. Refreshing the Snapshot and the rules for images and packages belong to Phase 2's v1 Import.
+- B5 **reject**. B5 raised the Reveal-returns-a-Destination exception. Phase 0's only Reveal is the test stand-in over `example.com`. Where the line falls for v2's Reveal is ADR 0004's call and Phase 2's work.
+- B6 **partial**. B6 noted that `reuseExistingServer` (playwright.config.ts:13) can attach to a server the run did not start. This is already handled: the fresh-copy run sets `CI=1`, and Implementation Decisions tells implementers to stop any server on port 4173. No further change.
+- B7 **accept**. B7 said Adult is independent of Mode, so the fixture needs a Deeplink Link. It already has one (Contracts, four Links). No rewrite.
+- B8 **accept**. B8 asked that every negative check be paired with a positive one, because the stand-in's fallback answers 200 (tests/dev-server.mjs:56-58). Testing Decisions item 5 now asserts an HTML body and no Test Secrets Destination.
+- B9 **accept**. B9 noted that today's Reveal test checks only the status (00-smoke.spec.ts:36-37). This is already covered: item 4 asserts `realUrl` and the outgoing request. No rewrite.
+- B10 **accept**. B10 noted that a fake Instagram User-Agent is not a real device. The real-device matrix is already Out of Scope and goes to Phase 1.
+- B11 **accept**. B11 placed PocketBase public-read isolation at PocketBase's own boundary. It is already Phase 2's.
+- B12 **accept**. B12 found ADR 0004:19 stale ("not git-ignored"). This is already recorded under Further Notes (rung 1).
+- B13 **partial**. B13 found the harness unrunnable in the workspace. Its first part, that the stand-in needs the Snapshot (tests/dev-server.mjs:10), confirms this Phase's premise. The missing `@playwright/test` is a feature of the docs-only review workspace, not of the repo.
+- B14 **partial**. B14 found that the stand-in writes a 200 before it reads the file, so a read failure answers 200 "Internal error" (tests/dev-server.mjs:58-59, 68-71). The finding is real. The smoke assertions check content (display name, an `<html` body), so such a response cannot pass. No stand-in requirement added (YAGNI).
+- B15 **accept**. B15 named three falsifiers: a clean checkout that needs v1 files, a sentinel showing up in output, and an edited Snapshot. Acceptance checks all three. They are made binding by D3 and D4 below.
+- B16 **accept**. B16 said Phase 0 neither fixes v1's exposure nor proves parity. Both are already Out of Scope (§8, ADR 0005).
+- B17 **reject**. B17 was an aside that public sign-up is already settled (§9). It is not a Phase 0 matter, and nothing changes.
+- D1a **accept**. D1a: Phase 2's seed mints fresh Link Ids for the fixture too, and its specs read ids from the served Profile. So reading the id from the fixture file breaks on v2. Story 14, the Contracts id bullet and item 4 now read the id from the served `/api/profiles/fixture.json`.
+- D1b **accept**. D1b: Phase 2 answers `/netlify/*` with 404 and landing.html, so asserting "the page's HTML" ties the spec to the stand-in. Item 5 no longer asserts the status.
+- D2a **accept**. D2a: the leak scan drew its needles only from secrets.json. §9 keeps v1's non-Adult urls public in Profile files. The scan now adds every http(s) `url` in v1's Profiles, pulled by regex so that invalid JSON is still read.
+- D2b **partial**. D2b: a raw-text scan cannot certify images or zipped traces. The config records no traces (playwright.config.ts:8). The claim is narrowed: test output is scanned as text, and the PNGs rest on the loop reading no v1 file.
+- D2c **reject**. D2c wanted the scan after the final `./check.sh`. §7 requires Acceptance to end with `./check.sh` (rung 2). At the end of Phase 0 that runs the same single spec whose output the scan has already read.
+- D3a **accept**. D3a: the Acceptance block did not stop on failure. It now opens with `set -euo pipefail`.
+- D3b **accept**. D3b: `test -z "$(git -C linkme_clone3 …)"` exited 0 when the directory was missing (shown by the reviewer). Each git output is now assigned before it is tested. A `rev-parse --show-prefix` check also proves the Snapshot is its own checkout, so its status is not the parent repo's.
+- D3c **reject**. D3c wanted a before/after baseline against a commit made inside the Snapshot. Committing inside v1 is already forbidden by §8 and ADR 0005, and would show in its own `git log`. A baseline step adds work for a case nobody has observed. Overturned if the Snapshot is ever found changed.
+- D4 **accept**. D4: `git ls-files -co` copies untracked files, so a Page Copy that was never added would still pass. The fresh copy now takes the git index only.
+- D5 **partial**. D5: the Adult Link's `tracking` and Geo Rule were never enforced. The fixture check now asserts both. Rejected: new HTTP tests for Tracking Codes. Phase 0 copies v1's Reveal verbatim, Phase 1 owns Tracking Code behaviour, and story 10 promises the fixture makes them testable, not that this Phase tests them.
+- D6a **accept**. D6a: Depends on omitted the Snapshot as an input. That input is now stated, separately from Phase order.
+- D6b **partial**. D6b: the reviewer could not verify the Snapshot observations in Further Notes, because the Snapshot is absent from its workspace by design. They stand as observations made in the repo checkout, and the Acceptance commands re-check each one (`cmp`/`find` for the icons, `git check-ignore`, the leak scan).
+- (a) **accept**. (a): `app/public/` is justified. §9's `pnpm --dir app` puts the app in `app/`, and Phase 2's own ASSUMPTION defers to Phase 0's location. Kept. Phase 2's "build context `app/` excludes the page copy" line no longer holds; this is noted in Further Notes for Phase 2's owner.
+- (b) **accept**. (b): four Links are justified. §7's "so every mode is testable" needs a Deeplink Link, and Phase 1's spec requires one. Kept. CONTEXT.md's entry is for its owner to widen.
+- (c) **accept**. (c): rewriting the smoke spec is justified, and Phase 2's conditional edit is superseded. The id and status points are resolved by D1a and D1b, and the cross-spec note is in Further Notes.

@@ -33,7 +33,7 @@ Images upload in any common format and come out as webp. A save shows on the pub
 - a Destination is an http(s) URL or a root-relative path, never a script
 - only the Operator can change the verified badge, the Username or ownership
 
-A v1 Creator does not start over. Once they have an account, the Operator hands them their imported Profile by setting its owner in PocketBase's admin UI.
+A v1 Creator does not start over. Once they have an account, the Operator hands them their imported Profile by setting its owner in PocketBase's admin UI, after the last v1 Import at Cutover.
 
 ## User Stories
 
@@ -43,7 +43,7 @@ Sign-up and verification
 2. As a Creator signing up, I want the Username I type to be lowercased as I type it, so that "Julia" becomes "julia" instead of an error.
 3. As a Creator signing up, I want to be told when my Username is taken, is shorter than 3 or longer than 30 characters, uses anything but lowercase letters, digits and underscore, or is a reserved word, so that I can pick a valid one.
 4. As a Creator whose Username was refused after my account was made, I want to land, signed in, on the claim step and try again, so that a clash never leaves me with an account and no way forward.
-5. As a v1 Creator who tries my old Username, I want the refusal to say that the Operator hands over Usernames held on v1, so that I ask for mine instead of claiming a second, empty Profile.
+5. As a v1 Creator who tries my old Username, I want the refusal to say that the Operator hands over Usernames held on v1 at Cutover, so that I ask for mine instead of claiming a second, empty Profile.
 6. As a Creator, I want a verification email as soon as my account exists, so that my account is tied to a mailbox I control and a password reset can reach me.
 7. As a Creator who has claimed a Username but not verified, I want Onboarding to wait on a "verify your email" screen with "Resend email" and "Continue" buttons, so that I can carry on once I have followed the link.
 8. As a Creator, I want the verification link to open a screen that says either that my email is verified, or that the link is invalid or expired with a way to resend it, so that I know where I stand.
@@ -108,9 +108,9 @@ Ownership and safety
 v1 Creators
 
 51. As a v1 Creator, I want the Operator to hand my imported Profile to my new account, so that I edit my existing page instead of starting a new one.
-52. As the Operator, I want to hand over an imported Profile by setting its owner in PocketBase's admin UI whenever I choose, so that a hand-over needs no code and no special timing.
+52. As the Operator, I want to hand over an imported Profile by setting its owner in PocketBase's admin UI once the last v1 Import has run, so that a hand-over needs no code and no v1 Import overwrites the Creator's edits (ADR 0002: v1 wins until Cutover).
 53. As a v1 Creator whose Profile has been handed over, I want log-in to land me in the Editor on that Profile with its Links, so that I skip Onboarding.
-54. As a v1 Creator whose Profile has been handed over, I want later v1 Imports to leave it alone, so that my Editor changes are not overwritten.
+54. As a v1 Creator whose Profile has been handed over, I want no v1 Import to run after the hand-over, so that my Editor changes are not overwritten.
 
 Operator
 
@@ -127,6 +127,10 @@ Operator
     - the verify-email and reset-password confirmations
     - Onboarding: claim Username, then verify, then Profile, then first Link, then the live address
     - the Editor itself: Bio Link, Profile panel, Quick Settings, Links list and Link form
+
+    Its files live in `app/editor/`, outside the Page Copy at `app/public/` (Phase 0), which stays the public page alone.
+
+    ASSUMPTION: `app/editor/` (rung 5: inside the app's own directory, and outside the Page Copy whose file list Phase 0 pins). Overturned if Phase 2 lays out the app's static files differently; only the Editor route's directory changes.
   - **Editor route** (a change to Phase 2's app). Serves the Editor client under one path prefix, `/edit`.
   - **PocketBase API proxy** (a change to Phase 2's app). Forwards an allow-list of PocketBase's REST paths on the Profile origin, so the Editor reaches PocketBase same-origin.
   - **Auth-and-ownership migration** (a new PocketBase migration). It holds:
@@ -135,6 +139,7 @@ Operator
     - the Username validation and the reserved Usernames
     - the Destination check and the webp-only file fields
     - the action URLs in the verification and reset emails
+  - **Local mail catcher** (a change to Phase 2's local stack and seed). Mailpit, set as PocketBase's SMTP in local runs only (see Mail).
   - **Spec** `tests/e2e/03-auth-and-editor.spec.ts`.
 - **Interfaces.**
   - **Editor client.** It exposes screens, not code. Three URLs are fixed:
@@ -150,30 +155,36 @@ Operator
   ```
   users     create        anyone; the request sets nothing but email, password, passwordConfirm
             auth          anyone with an account, verified email or not
-            list/view     own record only
+            list/view     signed in AND own record only
             update/delete/manage   superuser only
   profiles  owner         → users, optional (imported Profiles have none);
                           UNIQUE INDEX ON profiles(owner) WHERE owner != ''
             username      ^[a-z0-9_]{3,30}$, unique
             avatar        file, image/webp only
-            list/view     owner = self
+            list/view     signed in AND owner = self
             create        signed in AND owner = self AND username not reserved
                           AND the request sets nothing but username, owner, default Mode
-            update        owner = self AND email verified
+            update        signed in AND owner = self AND email verified
                           AND the request sets none of username, owner, verified badge
             delete        superuser only
   links     background    file, image/webp only (icon too, where Phase 2 stores it as a file)
-            list/view     profile.owner = self
-            create        profile.owner = self AND email verified AND the request sets no id
+            list/view     signed in AND profile.owner = self
+            create        signed in AND profile.owner = self AND email verified
+                          AND the request sets neither the record id nor the Link Id
                           AND destination starts with https://, http:// or /
-            update        profile.owner = self AND email verified AND the request sets no profile
+            update        signed in AND profile.owner = self AND email verified
+                          AND the request sets neither profile nor the Link Id
                           AND destination, when sent, starts with https://, http:// or /
-            delete        profile.owner = self AND email verified
+            delete        signed in AND profile.owner = self AND email verified
   ```
+
+  "Signed in" is `@request.auth.id != ""`, and it opens every rule that compares an owner. Imported Profiles have an empty owner, and an anonymous caller's `@request.auth.id` is empty too. So `owner = @request.auth.id` on its own would match every imported Profile for anyone, and the links read rule would hand out their Destinations (ADR 0004). The Link Id is Phase 2's own autogenerated `linkId` field, separate from the record id (observed: `docs/spec/phase-02-vps-foundation.md:175`). The rules refuse a sent `linkId` as well as a sent `id`, so the Creator cannot choose the Link Id, whatever PocketBase does with a sent value.
 
   Phase 2 closes every rule to superusers, and its app reads PocketBase as a superuser to render public Profiles. Visitors therefore never meet these rules, and opening the owner read rules changes nothing they see. PocketBase rules apply per record, not per field, so the links read rule is what keeps every Destination to its owner and the Operator. Superusers bypass every rule, so the Operator in the admin UI and Phase 2's v1 Import are not bound by the reserved-name or Destination checks. They are bound by the field validations (the Username pattern and webp-only files).
 - **Contracts.**
-  - **Editor ↔ PocketBase.** The Editor calls PocketBase's REST API same-origin, with plain `fetch` and no SDK (rung 5: no new dependency, and installing one is a network fetch). It keeps the auth token in `localStorage` and sends it as the `Authorization` header. Each time the Editor opens, it refreshes the token, so a Creator who comes back within the token's lifetime stays logged in (story 11). A 401 answer sends the Creator to log-in with a return path.
+  - **Editor ↔ PocketBase.** The Editor calls PocketBase's REST API same-origin, with plain `fetch` and no SDK (rung 5: no new dependency, and installing one is a network fetch). It keeps the auth token in `localStorage` and sends it as the `Authorization` header. Each time the Editor opens, it refreshes the token, so a Creator who comes back within the token's lifetime stays logged in (story 11). A 401 answer sends the Creator to log-in with a return path. Each form saves on its own Save button, with no autosave, and the last save wins.
+
+    ASSUMPTION: no conflict check between two open tabs (rung 5). Overturned if two people edit one Profile at once.
     - The allow-list holds the three collections the Editor calls, records and auth paths alike. Phase 4 adds its own Stats collection in its own migration and proxy change.
     - Nothing else is forwarded: not `_superusers` or any other collection, not `/api/realtime`, `/api/batch`, `/api/settings` or `/api/logs`, not PocketBase's own `/api/files/…`, and not the admin UI at `/_/`. Phase 2's own `/api/…` routes keep their answers.
 
@@ -222,16 +233,20 @@ Operator
   - no Link → the first-Link step
   - otherwise → the Editor
 
-  A handed-over imported Profile therefore lands in the Editor.
+  A handed-over imported Profile therefore lands in the Editor. Two consequences are intended:
+  - A Creator who deletes every Link lands on the first-Link step at the next log-in. That step is the Editor's own Link form, followed by the live address.
+  - A Creator who leaves on the live-address screen lands in the Editor, whose Bio Link shows the same address with Copy (story 22).
+
+  ASSUMPTION: derived progress rather than a stored "onboarded" flag (rung 5: no new field). Overturned if the Operator wants a Creator with no Links kept in the Editor; that adds one boolean to profiles.
   ASSUMPTION: a half-onboarded Profile being publicly reachable is harmless (rung 5). Overturned if Profiles must stay hidden until published; that adds a published flag that Phase 2's public page checks.
 - **New Profiles start on Escape Mode.** The claim sets the default Mode to `escape_ig`, so no Profile is ever without one.
   ASSUMPTION: Escape Mode, the default every imported Profile takes (rung 3: CONTEXT.md, v1 Import; plan §8). Overturned if the Operator wants Direct Mode for new Creators; that is one value in the claim.
-- **v1 Profiles are handed over when the Operator sets `owner` in PocketBase's admin UI, whenever the Operator chooses** (rung 5: no code and no claim-by-email logic). Phase 2's v1 Import re-runs with v1 winning only for ownerless Profiles. An owned Profile belongs to its Creator, and the import leaves it alone.
-  - **Before Cutover.** ofl.ink serves v1 until Cutover. So an n8n Form edit to a handed-over Profile changes v1 only and is gone at Cutover; the Operator stops editing that Profile in the n8n Form.
+- **v1 Profiles are handed over when the Operator sets `owner` in PocketBase's admin UI, after the last v1 Import, at Cutover** (rung 3: ADR 0002 and CONTEXT.md's v1 Import keep v1 winning until Cutover; rung 4: an import that overwrites a Creator's edits cannot be undone; rung 5: no code and no claim-by-email logic). Phase 2's re-runs keep `owner` but overwrite every v1 field of an imported Profile (observed: `docs/spec/phase-02-vps-foundation.md:345–346`). A hand-over before the last run would therefore lose the Creator's Editor changes.
+  - **Before Cutover.** ofl.ink serves v1, so a v1 Creator keeps editing through the n8n Form as today. An earlier hand-over would gain them nothing, because a v2 save shows only on v2's own address until Cutover.
   - **Before the hand-over.** A v1 Creator who tries their old Username sees story 5's message and stays on the claim step, so the hand-over still fits one Profile per Creator. If they claimed another Username meanwhile, the Operator deletes that bare Profile before setting the owner.
 
-  ASSUMPTION: the hand-over can happen at any time, because Phase 2's v1 Import skips Profiles that have an owner (rung 5; rung 4: clearing the owner returns a Profile to v1-wins). Overturned if Phase 2's import overwrites owned Profiles. The Operator then hands over only after the last v1 Import before Cutover.
-- **The Editor is static vanilla HTML, CSS and JS, with no build step and no new dependency** (rung 3: the v1 Snapshot has no package.json and no build). Creator-entered text is always rendered as text, never as HTML, as v1's `script.js` does at lines 124–125 and 155 (rung 3). With public sign-up, every Profile shares one origin with the Editor's stored token. Three things stop one Creator's content from running script in another's session: text-only rendering, the Destination check and webp-only files.
+  ASSUMPTION: the hand-over waits for the last v1 Import (rungs 3 and 4). Overturned if the Operator wants v1 Creators editing in v2 before Cutover. That needs a v1 Import that skips owned Profiles, which changes ADR 0002 and Phase 2.
+- **The Editor is static vanilla HTML, CSS and JS, with no build step and no new dependency** (rung 3: the v1 Snapshot has no package.json and no build). Creator-entered text is always rendered as text, never as HTML, as v1's `script.js` does at lines 124–125 and 155, and so the Page Copy's `app/public/script.js` does too (rung 3). With public sign-up, every Profile shares one origin with the Editor's stored token. Three things stop one Creator's content from running script in another's session: text-only rendering, the Destination check and webp-only files.
 - **The layout copies the link.me Template's "Edit Profile" screen, phone-first, and nothing more** (plan §6). The parts kept (observed in `link.me/profile/edit.html`):
   - "Your Bio Link", with a copy button
   - "Change Profile Picture"
@@ -242,28 +257,28 @@ Operator
   - "Age Gate" ("Add an age gate to this page"), which becomes the per-Link 18+ toggle in the Link form
 
   The log-in and sign-up screens reuse the Editor's look, because there is no form to copy. `link.me/signup/ref/bC2M72Su.html` is a paid-plan upsell ("You've been invited to Linkme Pro … Choose your plan"), as observed. Every other Template section is cut (Out of Scope).
-- **Reorder uses up/down buttons that swap a Link's order with its neighbour's** (rung 5: touch drag-and-drop needs a library or custom touch code).
+- **Reorder uses up/down buttons that swap a Link's order with its neighbour's** (rung 5: touch drag-and-drop needs a library or custom touch code). A move is two writes, one per Link. If either fails, the Editor shows the reason and reloads the list from PocketBase, so it never shows an order the page does not.
   ASSUMPTION: buttons are acceptable in place of the Template's drag handle (rung 5). Overturned if the Operator wants touch drag-and-drop.
 - **A Link's Mode may stay on "Profile default", which stores no Mode.** The Link form's Mode selector offers "Profile default (currently …)", Direct, Escape and Deeplink, and a new Link starts on Profile default. Changing the Profile default moves every Link left on it, imported Links included.
-  ASSUMPTION: Phase 2's public page reads an empty Link Mode as the Profile's default Mode (rung 3: imported v1 Links carry no Mode and follow the Profile default until a Creator changes it, per CONTEXT.md, v1 Import). Overturned if Phase 2 stores a concrete Mode on every Link. The form then drops "Profile default" and preselects the Profile's default Mode.
+  Phase 2 stores an empty Link Mode as "the Profile's default Mode", and its Profile JSON serves each Link's effective Mode (observed: `docs/spec/phase-02-vps-foundation.md:179`, `:232`). Inheritance is therefore a dependency, not a fallback (see Depends on).
 - **OnlyFans tracking and the default Tracking Code are fields in the Link form.** The plan's §6 field list leaves them out. But v1 has both: the n8n Form's "click if its OF link (enables /6 -> /c6 tracking)" and `default_tracknumber`. D5 also keeps the `/c{code}` suffix. Leaving them out would lose attribution on every Link made in the Editor, so they are specced here and flagged.
   ASSUMPTION: Phase 2's links collection keeps v1's tracking flag and default Tracking Code (rung 3). Overturned if Phase 2 folds both into the Geo Rule; the two inputs then go, and the textarea covers them.
 - **The Geo Rule is a textarea checked in the browser.** It is filled with the current rule, pretty-printed, and must parse as a JSON object or be empty for "no Geo Rule". Anything else blocks the save with a message and leaves the Link unchanged. There is no deeper schema check (rung 2: plan Phase 3, "raw JSON textarea (no UI yet)").
 - **The Destination is editable by its owner, and PocketBase's links rules check its scheme.** The Link form shows it.
-  - **Why.** The page script hands a revealed Destination to `window.location.href` (observed: v1 `script.js:40`, `:200`). The Editor's token sits in `localStorage` on that same origin, so a `javascript:` Destination would run script against any Creator who opens the Link.
+  - **Why.** The page script, the Page Copy's `app/public/script.js` copied from v1, hands a revealed Destination to `window.location.href` (observed in v1: `script.js:40`, `:200`). The Editor's token sits in `localStorage` on that same origin, so a `javascript:` Destination would run script against any Creator who opens the Link.
   - **One check, at the boundary.** The Editor does not pre-check the prefix; it shows PocketBase's refusal (rung 5).
   - **Only Creator writes are checked.** The check lives in API rules, which superusers bypass, so imported Destinations stay as Phase 2 stored them.
 
   ASSUMPTION: a Creator who saves an imported Link whose Destination lacks an allowed prefix (v1 has relative `landing.html`; observed in `juliafilippo_.json`) is refused until they write `/landing.html` (rung 5: this Phase rewrites no imported data). Overturned if Phase 2's import already normalises such Destinations, in which case nothing here changes.
-  ASSUMPTION: Phase 2 keeps the Destination in a field its owner may read under a rule (rung 3: D2's owner rules). Overturned if Phase 2 makes it a superuser-only hidden field. The Editor then treats the Destination as write-only ("leave blank to keep the current one").
+  - **The owner reads it back.** Phase 2 keeps the Destination in an ordinary text field (observed: `docs/spec/phase-02-vps-foundation.md:180`), so the owner read rules let the Link form show it. ADR 0004 bars public reads, not the owner's. An owner-readable Destination is a dependency (see Depends on), and the Editor has no write-only mode.
 - **File fields take webp only.** The proxy forwards PocketBase's records API, and that API takes multipart file uploads directly, skipping Phase 2's converter. So the migration limits the avatar and background file fields (and the icon, where it is a file) to `image/webp`. The users create rule also refuses every field but email and password, because PocketBase's stock users collection carries its own avatar file field.
   ASSUMPTION: enforced at the boundary ADR 0002 names, PocketBase itself, rather than by refusing multipart in the proxy (rung 4). Overturned if Phase 2 already restricts these fields, which makes this a no-op.
   ASSUMPTION (evidence blocked): PocketBase checks a file field's type from the file's content, not from the client's header. Overturned if it trusts the header; the proxy then also refuses multipart bodies on the forwarded paths.
 - **Mail.** SMTP is the Operator's credential. It is set by hand in PocketBase's settings on the VPS and never stored in the repo (`# manual:`).
-  - **Local runs** have no SMTP and use PocketBase's no-SMTP path: requests for verification and reset emails succeed, and only the delivery fails.
-  - **In tests,** marking the account verified as a superuser stands in for the email link.
+  - **Local runs** send mail to a mail catcher, Mailpit, added to the local stack only and set as PocketBase's SMTP by the local seed. Its image is a pull for the human (`docker pull axllent/mailpit`), like every other image (plan §9).
+  - **In tests,** the spec reads the newest message for an address from Mailpit's HTTP API on loopback and follows its verification or reset link in the browser. The success screens are tested, not only the "invalid or expired" ones. Marking an account verified as a superuser remains only for arranging the hand-over.
 
-  ASSUMPTION (evidence blocked): with no SMTP configured, PocketBase still answers the verification and password-reset requests with success. Nothing here can check it: `which pocketbase` finds nothing, `docker images` lists no PocketBase or mail-catcher image, and network fetches are out of bounds. Overturned if PocketBase returns an error. The local stack then needs a mail catcher as its SMTP. That is an image pull parked for the human (`docker pull axllent/mailpit`), wired into the local stack only, and the spec then follows the real email links.
+  ASSUMPTION: a mail catcher in the local stack (rung 4: a local-only service that leaves production untouched and comes out with one Compose entry; rung 5 over a PocketBase mail hook, which would be test code inside the stack). Overturned if the Operator declines the image. Verify and reset success then fall back to the manual Acceptance lines, and a superuser marks test accounts verified.
 - **n8n is untouched, and the Editor is the only v2 editing surface.** The plan's Phase 3 DONE clause "n8n becomes admin-only" is moot (Out of Scope). The n8n Form keeps editing v1 until Cutover.
 
 ## Testing Decisions
@@ -272,11 +287,11 @@ One seam: **the running v2 stack at Playwright's `baseURL`**, which is the publi
 
 - **Creator journeys** run in Playwright's browser at a phone-sized viewport (390×844) and assert only what a Creator or Visitor sees. The Visitor side always runs in a fresh browser context with no Editor session.
 - **Rule checks** use Playwright's `request` fixture at the same origin, calling the proxy exactly as the Editor does. This is the same seam at the HTTP level. The rules offer no screen on which a non-owner could even try, so HTTP is the highest seam that reaches them.
-- **Operator steps arrange state; they are not a second seam under test.** They are marking an account verified (the stand-in for the email link), creating an ownerless Profile the way the v1 Import does, and setting an owner. They go to PocketBase's own API as a superuser, at the loopback address that Phase 2's local stack exposes, just as the Operator works in the admin UI. The proxy forwards neither `_superusers` nor anything but the three collections, so these steps cannot go through the public origin.
+- **Operator steps arrange state; they are not a second seam under test.** They are marking an account verified (for the hand-over only), creating an ownerless Profile the way the v1 Import does, and setting an owner. They go to PocketBase's own API as a superuser, at the loopback address that Phase 2's local stack exposes, just as the Operator works in the admin UI. The proxy forwards neither `_superusers` nor anything but the three collections, so these steps cannot go through the public origin.
   ASSUMPTION: Phase 2's local seed creates a local-only superuser, whose credentials the spec reads from environment variables with local defaults, and its stack publishes PocketBase's port on loopback (rung 3: the Operator's own path is the admin UI on PocketBase directly). Overturned if Phase 2 gives tests another Operator path; the spec uses that instead. If Phase 2 provides neither, this Phase adds both to the local stack only.
 - **Every test uses unique email addresses and Usernames** (a timestamp suffix), so tests in one run never collide.
 - **Images** are built in the test as an in-memory PNG and passed with `setInputFiles`. This needs no fixture file and proves that a non-webp input comes out as webp.
-- **Mail-less.** The spec asserts what the Creator sees and that PocketBase accepts the verification, resend and reset requests. It opens the verify and reset screens with a bad token and expects the "invalid or expired" message. The real email round trip is `# manual:`.
+- **Mail.** The spec follows the real verification and reset links from the local mail catcher, and also opens both screens with a bad token and expects the "invalid or expired" message. Delivery through the Operator's SMTP is `# manual:`.
 - **Screenshot.** The spec saves the finished Editor to `.scratch/goal_ai/shots/03-auth-and-editor.png` (plan §7, step 2; the directory is `outputDir` in `playwright.config.ts:7`).
 
 Behaviours the spec covers:
@@ -284,26 +299,30 @@ Behaviours the spec covers:
 1. **Tracer bullet, the plan's DONE** ("new user signs up, adds a link with image, page live"):
    - A stranger signs up with no invitation, claims a new Username and lands on "verify your email".
    - While the account is unverified, its token can create nothing but the claim. Over HTTP it can neither update the Profile, add a Link nor upload an avatar.
-   - A superuser marks the account verified, and "Continue" moves on.
+   - The verification email reaches the local mail catcher. Following its link shows "verified", and "Continue" moves on.
    - The Profile step takes a display name and a PNG avatar.
    - The first-Link step takes a title, an OnlyFans-style Destination, the OnlyFans stock icon, a PNG background, Adult on, Escape Mode, tracking on and default Tracking Code `7`.
    - The last screen shows the live address with Open and Copy.
-   - In a fresh browser context, `/{username}` shows the display name and the Link title, and serves the avatar and background as `image/webp`.
-   - The Destination string appears nowhere in that page's HTML or its network responses before the Link is pressed.
-   - Pressing the Link shows the Age Gate. "Continue (18+)" calls Reveal, whose real answer is the entered Destination followed by `/c7`. The navigation itself is intercepted, as in `00-smoke.spec.ts`.
+   - In the Editor, the Creator adds a second Link: Adult off, Direct Mode, a different Destination.
+   - In a fresh browser context, `/{username}` shows the display name and both Link titles, and serves the avatar and background as `image/webp`.
+   - Neither Destination string appears in that page's HTML, its Profile JSON or any of its network responses before a Link is pressed.
+   - The non-Adult Link's `/r/{Link Id}` answers 302 to its Destination.
+   - Pressing the Adult Link shows the Age Gate. "Continue (18+)" calls Reveal, whose real answer is the entered Destination followed by `/c7`. The navigation itself is intercepted, as in `00-smoke.spec.ts`.
 2. **Username refusals.** A taken Username (the Fixture Profile's `juliafilippo_`), a reserved one (`edit`), a too-short one (`ab`) and an invalid one (`bad.name`) are each refused with their reason. The Creator stays on the claim step and then claims a valid one. "Julia" typed in the field shows as "julia".
 3. **Editor edits.** The Creator does each of these, and the public Profile shows the result on the next load:
    - edits the display name, the bio and a Link title
-   - adds a second Link, which appears last, and moves it up
+   - replaces the avatar, and replaces and then removes a Link's background
+   - reopens a Link, sees its current Destination in the form, changes it, and Reveal then answers the new one
+   - adds another Link, which appears last, and moves it up
    - deletes a Link: cancelling the confirmation keeps it, confirming removes it
    - changes the Profile default Mode, after which a new Link's form starts on "Profile default" naming the new Mode
-4. **Mode reaches the page.** With an Instagram User-Agent in a fresh context, the Escape Overlay shows when the page opens while the Profile default is Escape Mode. After the Creator switches the default to Direct Mode, it does not.
+4. **Mode reaches the page.** With an Instagram User-Agent in a fresh context, the Escape Overlay shows when the page opens while the Profile default is Escape Mode. After the Creator switches the default to Direct Mode, it does not. With one Link left on "Profile default" and one set to Escape, the public Profile JSON then gives the first Link Direct and keeps the second on Escape.
 5. **Geo Rule.** Invalid Geo Rule JSON shows an error and leaves the Link unchanged. A valid object saves and fills the textarea after a reload. Emptying the textarea clears the rule.
 6. **Session.**
    - Log out sends the Creator to log-in, and logging in again lands in the Editor.
    - A Creator who logs in partway through Onboarding resumes at the right step.
    - With the stored token replaced by an invalid one, a save sends the Creator to log-in, and logging in returns them to the Editor.
-7. **Forgot password and email links.** "Forgot password" shows the same "check your inbox" message for a known and an unknown address. The verify and reset screens reject a bad token and offer a resend.
+7. **Forgot password and email links.** "Forgot password" shows the same "check your inbox" message for a known and an unknown address. The reset email's link, from the mail catcher, opens the reset screen. The Creator sets a new password, logging in with it lands in the Editor, and the old one is refused. The verify and reset screens reject a bad token and offer a resend.
 8. **Destination check.** A Link saved with a `javascript:` Destination is refused by PocketBase. The Editor shows the reason and keeps every field as typed.
 9. **Hand-over.**
    - A superuser creates an ownerless Profile with a display name and a Link, as the v1 Import does.
@@ -314,12 +333,13 @@ Behaviours the spec covers:
     - another Creator cannot update or delete the first Creator's Profile, and cannot update, delete or add a Link to it
     - neither Creator can move a Link onto the other's Profile
     - another Creator and an anonymous caller get no Destination from a list, a view, or a Profile read that expands its Links
-    - an anonymous caller lists no accounts and no Profiles
+    - an anonymous caller and a signed-in Creator get nothing from a list or view of the ownerless Fixture Profile or its Links, expanded or not
+    - an anonymous caller lists no accounts and no Profiles, and another Creator cannot list or view the first Creator's account or email
     - another Creator cannot replace the first Creator's avatar or a Link's background through the upload endpoint
     - a direct multipart upload of a PNG to a file field through the proxy is refused
     - a Profile created with the verified badge or a display name set is refused, and the owner cannot change their own Username, owner or verified badge afterwards
     - a sign-up that sets `verified: true` either is refused or yields an unverified account
-    - a Link created with a chosen `id` is refused
+    - a Link created with a chosen record id or Link Id is refused, and so is a Link Id sent in an update
     - a second Profile for the same Creator is refused
     - a Destination that does not start with `https://`, `http://` or `/` is refused
     - the owner cannot delete their own Profile
@@ -330,15 +350,16 @@ Prior art: `tests/e2e/00-smoke.spec.ts`. It tests through a real browser against
 ## Acceptance
 
 ```sh
+set -e
 cd "$(git rev-parse --show-toplevel)"
+# manual: docker pull axllent/mailpit   (the local mail catcher's image; the human runs image pulls, plan §9)
 test -f tests/e2e/03-auth-and-editor.spec.ts
 npx playwright test tests/e2e/03-auth-and-editor.spec.ts
 test -s .scratch/goal_ai/shots/03-auth-and-editor.png
 # manual: in PocketBase's admin UI on the VPS, set Settings -> Application URL to the public origin and Settings -> Mail to the Operator's SMTP sender (host, port, user, password, from-address); a human-held credential, never committed.
 # manual: with SMTP set, sign up with a real inbox, follow the verification link (the screen says verified), then "Forgot password" -> follow the email link -> set a new password -> log in with it.
 # manual: on a real iPhone (Safari) and Android phone (Chrome), complete Onboarding with a camera photo (HEIC on iOS) as avatar and background; the public Profile shows both as webp.
-# manual: for each v1 Creator who has signed up, set their imported Profile's owner to their account in PocketBase's admin UI (any time), and stop editing that Profile through the n8n Form.
-# manual (only if the local no-SMTP path fails): docker pull axllent/mailpit
+# manual: for each v1 Creator who has signed up, set their imported Profile's owner to their account in PocketBase's admin UI after the last v1 Import, at Cutover.
 ./check.sh
 ```
 
@@ -350,18 +371,19 @@ test -s .scratch/goal_ai/shots/03-auth-and-editor.png
     - profiles: an optional `owner` relation to users, a unique Username, a default Mode, the verified badge, display name, bio and avatar file
     - links: a relation to their Profile, title, Destination (the plan's "secret url"), Mode (empty means the Profile default), Adult flag, Geo Rule, order, icon, background file, OnlyFans tracking flag and default Tracking Code
 
+    The Destination is an ordinary field that a rule can open to its owner, and an empty Link Mode means the Profile's default Mode (observed in Phase 2's spec: `docs/spec/phase-02-vps-foundation.md:179–180`).
+
     ASSUMPTION: Phase 2 has these fields under its own names (rung 3: the plan's Phase 2 collection list names some, and v1's Profile and Link files hold the rest). Overturned by Phase 2 naming or modelling them differently. The rules bind to Phase 2's names, and this Phase's migration adds `owner` (optional) or the default Mode only if they are missing, which is additive and keeps the v1 Import valid.
-  - Link Ids: random, at least 10 characters, minted for every new links record without the client supplying one (ADR 0004).
-    ASSUMPTION: the Link Id is the record id or a field PocketBase or Phase 2 fills by itself, so refusing a client-set `id` is enough (rung 5). Overturned if Phase 2 mints Link Ids in its import only; this Phase's migration then gives the field an autogenerate pattern.
-  - The v1 Import: ownerless imported Profiles stored under their lowercase file-name Usernames, and re-runs that skip Profiles which have an owner.
-    ASSUMPTION: Phase 2's v1 Import keys each Profile by its lowercase file name and skips owned Profiles on re-run (rung 4: an owned Profile's edits are the Creator's, and overwriting them cannot be undone). `cleocash.json` and `hannah.json` carry the capitalised names "Cleocash" and "Hannah" inside (observed), so a Phase 2 that uses the inner name would break this Phase's pattern. Overturned if Phase 2 does otherwise. The pattern then admits uppercase, or the hand-over waits for the last v1 Import (see Implementation Decisions).
+  - Link Ids: Phase 2's `linkId` field, 12 random `[a-z0-9]` characters, autogenerated for every new links record (ADR 0004; observed in Phase 2's spec: `docs/spec/phase-02-vps-foundation.md:175`). This Phase's rules refuse a client-sent `linkId`.
+  - The v1 Import: ownerless imported Profiles stored under their lowercase file-name Usernames. Re-runs overwrite v1's fields until Cutover (ADR 0002), which is why the hand-over waits for the last one.
+    ASSUMPTION: Phase 2's v1 Import keys each Profile by its lowercase file name (rung 3: every v1 file name is lowercase). `cleocash.json` and `hannah.json` carry the capitalised names "Cleocash" and "Hannah" inside (observed), so a Phase 2 that uses the inner name would break this Phase's pattern. Overturned if Phase 2 does otherwise; the pattern then admits uppercase.
   - The app container:
     - serves public Profiles at `/{username}`, reading PocketBase as a superuser and never sending a Destination, with Reveal and the `/r/{Link Id}` redirect server-side
     - serves v1's stock icons at `/images/…` and the stored images
     - provides the image upload endpoint: any format in, webp out (D4), written with the caller's token (ADR 0002)
 
     HEIC decoding is the endpoint's job under D4.
-  - The local Docker Compose stack plus seed, with the Fixture Profile, as `playwright.config.ts`'s `webServer` at the same `baseURL` (plan §7). It also needs a local-only superuser and PocketBase's port on loopback (see Testing Decisions).
+  - The local Docker Compose stack plus seed, with the Fixture Profile, as `playwright.config.ts`'s `webServer` at the same `baseURL` (plan §7). It also needs a local-only superuser and PocketBase's port on loopback (see Testing Decisions). `./check.sh` must already pass on it, `00-smoke.spec.ts` included, whose pinned v1 Link Id Phase 2 replaces (`docs/spec/phase-02-vps-foundation.md:452–455`).
 - **Phase 1**: the three Modes, the Escape Overlay on page open following the Profile default Mode, and the Age Gate, carried into v2's public page by Phase 2. The Editor only writes the values.
 - **Phase 0**: nothing directly. Under the amendment (plan §8), its v1 data repairs happen inside Phase 2's v1 Import.
 
@@ -396,12 +418,10 @@ test -s .scratch/goal_ai/shots/03-auth-and-editor.png
 ## Further Notes
 
 - **Between this Phase and Cutover, saves show only on v2's own address.** ofl.ink serves v1 until Phase 5, and live v1 edits still go through the n8n Form. This is the plan's own sequencing (D1, Phase 5), recorded here and not reopened.
-- **Phase 5's parity check and handed-over Profiles.** CONTEXT.md defines Cutover as done "only once v2 shows every v1 Profile identically". A Profile the Operator has handed over is its Creator's from then on and may differ from v1 by design.
-  ASSUMPTION: Phase 5's parity check covers ownerless Profiles only (rung 4: a handed-over Profile's edits are the Creator's, and overwriting them cannot be undone). Overturned if parity must hold for every Profile at Cutover; the Operator then hands over only after Cutover.
+- **Phase 5's parity check and handed-over Profiles.** CONTEXT.md defines Cutover as done "only once v2 shows every v1 Profile identically". The hand-over waits for the last v1 Import, so parity is checked on every Profile before any is handed over. A handed-over Profile may differ from v1 afterwards, by design.
 - **Someone may sign up with another person's email address.** Such an account cannot verify, so it can hold at most a bare Username. The real owner of the address uses "Forgot password", which reaches their mailbox, to take the account over. The Operator deletes or renames the squatted Username in the admin UI.
   ASSUMPTION (evidence blocked): a password reset in PocketBase ends the account's other sessions. Overturned if the pinned version does not; the Operator then deletes the account in the admin UI instead.
 - **PocketBase behaviours this spec relies on but could not observe.** No PocketBase binary or image is on this machine, and network fetches are out of bounds. Each is flagged where it is used:
-  - a mail-less request still succeeds
   - an unverified account can sign in
   - rules can read request-body fields, test whether a field was sent, and follow relations (`profile.owner`)
   - unique indexes may be partial
@@ -409,3 +429,50 @@ test -s .scratch/goal_ai/shots/03-auth-and-editor.png
   - a password reset ends other sessions
 
   ASSUMPTION (evidence blocked): realtime and `expand` apply the same list and view rules as plain reads. Overturned by a PocketBase version where they do not. Realtime is not proxied anyway, and behaviour 10 checks `expand`.
+
+## Review
+
+Reviewer: codex (`codex exec`, model_reasoning_effort=high, read-only sandbox, blind workspace without docs/spec/, .scratch/, .claude/, linkme_clone3/ or link.me/). Date: 2026-10-02. Two calls: B = blind (no spec shown), D = draft. R = found by the reconciler while checking a D finding against `docs/spec/phase-02-vps-foundation.md`. Counts: 9 accept, 8 partial, 19 reject, 0 needs-human.
+
+Blind call
+
+- B1 `./check.sh` fails in the workspace (`error: unknown command 'test'`) and the harness still serves v1. **reject**: the workspace has no `node_modules`, so `npx playwright` cannot run there. This Phase runs on Phase 2's Compose `webServer` (Depends on).
+- B2 Creator request path: browser to PocketBase, or Node mediating. **reject**: decided. The browser calls the same-origin proxy with the Creator's token, and the upload endpoint writes with that token (ADR 0002:3).
+- B3 Publication model, draft or progressive. **reject**: decided and flagged. "Publish" is a screen, and a Profile is live on creation (plan §6, "live instantly").
+- B4 Save model unspecified. **partial**: each form now saves on its own button, with no autosave and last save wins (Contracts, flagged). No other change.
+- B5 Public data model. **reject**: decided. Owner-only read rules, and Phase 2's app reads as superuser and never sends a Destination (`docs/spec/phase-02-vps-foundation.md:234`).
+- B6 Imported Profile access, Operator assignment or a proof-based claim. **reject**: decided (the Operator sets owner). Its timing changed under B15/D1.
+- B7 Editor implementation, server-rendered or browser app. **reject**: decided. Static vanilla JS, rung 3.
+- B8 Verification and session lifecycle. **reject**: stories 6–15 and the sign-up sequence cover it. The success paths are now tested under D5.
+- B9 Username allocation. **reject**: covered by the pattern, lowercasing, reserved names, the unique index (concurrent claims), no rename, squatters deleted by the Operator, and story 5 for v1 names.
+- B10 Profile cardinality and writable fields. **reject**: covered. One Profile per Creator, and badge, Username and owner are superuser-only.
+- B11 Draft/public lifecycle. **reject**: decided. Live on existence, derived Onboarding, and a deleted Link's `/r` answers 404 in Phase 2. Link Shortcut copying is Out of Scope.
+- B12 Link validation and inheritance. **partial**: the Destination scheme and inheritance were already decided, and inheritance is now tested (D7). Field limits and Tracking Code precedence stay with Phase 2's schema and resolver.
+- B13 Media lifecycle. **reject**: Phase 2's upload contract fixes the limits (20 MB, 415) and old-file deletion (`docs/spec/phase-02-vps-foundation.md:217`, `:383`). Replacement and removal are now tested under D8.
+- B14 Concurrent edits and reorder atomicity. **partial**: a move is two writes, and on failure the Editor now shows the reason and reloads the list. Last save wins is flagged. Atomic batch writes stay out (`/api/batch` is not proxied).
+- B15 v1 Import "v1 wins until Cutover" conflicts with Creator edits (ADR 0002:12). **accept**: the hand-over now waits for the last v1 Import, at Cutover. Stories 5, 52 and 54, the Solution, the hand-over decision, Depends on, Acceptance and Further Notes were rewritten (same as D1).
+- B16 No measurable mobile or usability criteria. **reject**: plan §6 says "nothing more". §7's check is a phone viewport plus a screenshot, which the spec has.
+- B17 "n8n becomes admin-only" vs §8. **reject**: already moot in Out of Scope.
+- B18 The Destination test must tell Reveal apart from public payloads. **reject**: behaviour 1 already scopes the check to "before a Link is pressed" and then asserts Reveal's answer.
+- B19 The harness is Desktop Chrome on the v1 dev server. **reject**: the spec sets a 390×844 viewport per test, and Phase 2 swaps the `webServer` (Depends on).
+- B20 The smoke test stubs Reveal. **reject**: behaviour 1 asserts Reveal's real answer and intercepts only the navigation.
+- B21 Real-device escape. **reject**: manual Acceptance line, plus Phase 1's device matrix.
+- B22 Falsifiers: foundation missing, privileged Node, a newcomer needing the Operator, Editor controls. **partial**: each maps to Depends on or to behaviours 1, 3, 4 and 10. "Needs the Operator" held for the tracer, which used a superuser to verify; fixed under D5.
+- B23 Obfuscation does not stop Flagging. **reject**: ADR 0004:14 already says so, and Spare Domains are Phase 5.
+
+Draft call
+
+- D0 Public sign-up is consistent throughout (codex cites spec lines 151, 192, 285, 373). Noted; no change.
+- D1 The hand-over assumed imports skip owned Profiles, against ADR 0002:12 and CONTEXT.md's Cutover parity. **accept**: Phase 2's re-runs overwrite v1 fields and keep only mode, owner and linkId (`docs/spec/phase-02-vps-foundation.md:345–346`), so the assumption was false. The hand-over now follows the last v1 Import, and the parity assumption in Further Notes is gone (see B15).
+- D2 Read rules `owner = self` match an anonymous caller on ownerless imported Profiles, so their Destinations would leak. **accept**: every owner rule now starts with `@request.auth.id != ""` (Schema). Behaviour 10 now probes the ownerless Fixture Profile anonymously and as a signed-in Creator.
+- D3 The write-only Destination fallback contradicts an Editor that shows it. **accept**: the fallback is removed. Phase 2's Destination is an ordinary text field (`docs/spec/phase-02-vps-foundation.md:180`), and Depends on now requires it owner-readable. Behaviour 3 now reopens a Link, sees its Destination, changes it and checks Reveal.
+- D4 The privacy check covers one loaded Adult page, not non-Adult Links or other public files. **partial**: accepted for non-Adult Links. The tracer adds a Direct, non-Adult Link, checks the Profile JSON for both Destinations, and checks `/r/{Link Id}` → 302. Rejected for "every published file": this Phase publishes no file that can hold a Destination. The Editor is static code whose only data path is the proxy (behaviour 10), and the public file surface is Phase 2's (ADR 0004).
+- D5 Verify and reset success have no local test. **accept**: a local-only Mailpit becomes PocketBase's SMTP. The tracer and behaviour 7 follow the real verification and reset links, and the evidence-blocked "mail-less request succeeds" assumption is gone. `docker pull axllent/mailpit` is now an unconditional `# manual:` line: building parks on it for the human (plan §9), and design does not.
+- D6 Derived Onboarding sends a Creator who deleted every Link back to the first-Link step, and cannot tell "live-address step unseen" from done. **partial**: the derived rule stays (rung 5, no new field). Both consequences are now stated as intended and flagged: a zero-Link Creator lands on a Link form, and the live address sits in the Editor's Bio Link.
+- D7 The Mode fallback would drop "Profile default". **accept**: the fallback is removed. Phase 2 stores empty as the Profile default and serves the effective Mode (`docs/spec/phase-02-vps-foundation.md:179`, `:232`). Behaviour 4 now asserts that an inheriting Link follows the new default while an explicit Link keeps its own.
+- D8 Untested promises: avatar and background replacement, per-Link Mode, Adult and Geo effect, and another Creator reading an account. **partial**: avatar replace, background replace and remove, and another Creator's account read were added (behaviours 3 and 10). Adult/Mode independence is covered by the tracer's Adult+Escape and non-Adult+Direct Links. Rejected for the Geo effect: Geo resolution is Phase 2's resolver, and this Phase only stores the JSON, which behaviour 5 round-trips.
+- D9 The Acceptance block can exit 0 after a failed prerequisite (codex: `bash -c 'test -s /nope; bash -c "set -e; true"'` → 0). **accept**: `set -e` added. House precedent: Phase 1's Acceptance uses it.
+- D10 "Phase 4 adds its own Stats collection" is false; events belong to Phase 2. **reject**: Phase 4's spec adds its own `dailyStats` collection to the allow-list and keeps `events` off it (`docs/spec/phase-04-stats.md:82`, `:354`).
+- D11 `00-smoke.spec.ts` pins a v1 Link Id that v2 cannot serve. **partial**: Phase 2 owns that edit (`docs/spec/phase-02-vps-foundation.md:452–455`). Depends on now requires `./check.sh` green on Compose with it, and this Phase does not touch the smoke spec.
+- D12 The Page Copy location `app/public/` is never named. **accept**: the spec now names the Page Copy at `app/public/` (`docs/spec/phase-00-new-repo-ground.md:46`) for the page script and text rendering. It places the Editor in `app/editor/` (flagged), outside the file list Phase 0 pins. Phase 2's spec still assumes `public/` at the repo root (`docs/spec/phase-02-vps-foundation.md:361`), a conflict outside this file.
+- R1 The Link Id is Phase 2's autogenerated `linkId`, not the record id (`docs/spec/phase-02-vps-foundation.md:175`), so refusing a sent `id` left it choosable on create and update. **accept**: the links create and update rules now refuse a sent `linkId`, behaviour 10 tests both, and the Depends on assumption is replaced by the observation.
