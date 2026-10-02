@@ -1,0 +1,202 @@
+ofl.ink — GOAL PLAN (AI-reviewed)
+Date: 2026-10-02
+Inputs: goal.txt (your plan, kept verbatim below), repo survey, devil's advocate, six thinking hats, Codex second opinion.
+
+================================================================
+0. YOUR PLAN (verbatim, unchanged)
+================================================================
+site option ability:
+- deeplink checkbox
+- move out of ig chackx
+-nothing from above
+
+--ffmpeg for image conversinog
+-nice way of traffic tracking 
+-login page
+-nice way of login register and site creation
+-niceway of adding links
+-simplistic layout ui for adding we have linkme as template
+
+
+option for people ro register on my site or docker to the hostinger
+oprion to add custom urls and or proxies 
+secret links are send via js, it's just a lil protection till the instagram so he doesnt track our perosonal websites
+
+================================================================
+1. WHAT EXISTS TODAY (facts from the repo)
+================================================================
+link.me/            Saved copy of the link.me dashboard (React+Vite SSR output, JS does not run).
+                    Use only as a visual template: profile/edit.html (Add link, Age Gate,
+                    "Deeplink Banner" toggle), analytics.html, signup/, ambassador.html (public page).
+linkme_clone3/      The real product. Static vanilla HTML/JS on Netlify, no package.json, no build.
+  index.html        Full-screen "open in external browser" overlay for every Instagram visitor.
+  script.js         Reads /user[/trackId], stores trackId in localStorage, renders profile from
+                    /api/profiles/{user}.json, 18+ overlay, performBounce():
+                    iOS -> x-safari-https://   Android -> intent://...package=com.android.chrome
+  netlify/functions/reveal.js    id -> real URL from secrets.json, appends /c{trackId}
+  netlify/functions/geo_utils.js country/US-state -> tracking id
+  netlify/functions/secrets.json linkId -> real OnlyFans URL (29 keys)
+  api/profiles/*.json 27-29 profiles {profile, links[{id,url,title,isAdult,icon,backgroundImage,geo}]}
+  optimize.py       Pillow -> webp, runs locally only
+n8n ofl.ink Feb18.json  57 nodes on Hostinger VPS (n8n.srv1395798.hstgr.cloud). Form -> GitHub
+                    delete+create file -> Netlify redeploy. Only talks to GitHub. Avatar must be .webp.
+
+NOT present: auth, database, in-browser editor, click/visit counting, ffmpeg, custom domains, proxies.
+
+================================================================
+2. URGENT — FIX BEFORE ANY NEW FEATURE (all 3 reviewers agree)
+================================================================
+[!] secrets.json is PUBLIC. netlify.toml has publish = "." so
+    https://ofl.ink/netlify/functions/secrets.json returns 200 with every real OF URL.
+    Also public: Feb18.json, n8nWorkflow.json, sdf, txt_replacement_dmca.
+    GitHub repo BlackPhoenixSlo/linkme_clone3 is public and has secrets.json in history.
+    7 of 25 adult links also have the real URL in the public profile JSON.
+    reveal.js: Access-Control-Allow-Origin: *, no rate limit, guessable ids (username+3 digits).
+    -> "secret links" are theatre right now.
+[!] Data corruption from n8n:
+    - secrets keys get prefix repeated: juliafilippo_juliafilippo_juliafilippo_1
+    - duplicate link ids in juliafilippo_, jaka7q, jaka6q
+    - jaka7q displayName = literal "$('Extract from Upload File')..."
+    - weiwei.json invalid JSON (trailing comma) -> falls to landing.html
+[!] GitHub-as-database: delete-then-create is not atomic; one shared secrets.json means
+    concurrent edits overwrite each other; ~5 commits + 1 Netlify build per edit.
+
+Phase 0 fix (approx. 30-60 min):
+  - Move site into public/ and set publish = "public"; keep functions outside it.
+  - Make repo private; purge secrets.json from git history; rotate (regenerate) link ids.
+  - Fix the 4 corrupted profiles + prefix bug in n8n.
+  DONE = ofl.ink/netlify/functions/secrets.json returns 404; all profiles parse.
+
+================================================================
+3. DECISIONS (your calls applied 2026-10-02)
+================================================================
+D1 Hosting: MOVE TO VPS NOW. Hostinger VPS, Docker Compose. Netlify + GitHub + n8n keep running
+   as the live v1 until the VPS version is at parity, then DNS for ofl.ink switches over.
+   n8n stays as is (it works) and already lives on the same VPS.
+D2 Database + auth + file storage on the VPS: POCKETBASE (one container: SQLite DB, auth with
+   email verify/reset, file storage, admin UI, REST + realtime). Replaces GitHub-as-DB and
+   secrets.json. Ownership enforced with PocketBase collection rules (user = @request.auth.id).
+   Never hand-roll auth.
+D3 "Site option ability" = ONE per-link (or per-site default) field, not two checkboxes (AGREED):
+     mode: "direct" | "escape_ig" | "deeplink"
+   - direct      plain navigation, no overlay
+   - escape_ig   try to leave the in-app browser, menu instructions as fallback
+   - deeplink    open the destination app via its https app link, web fallback
+   The 18+ gate stays a separate boolean (isAdult), independent of mode.
+   The current always-on Instagram overlay becomes mode-dependent.
+D4 Images -> WEBP: SHARP in the Node app container. Accepts any image (jpg/png/heic/gif/webp),
+   fixes orientation, resizes (avatar 512px, background 1080px), outputs webp q80. Client sends
+   the raw file; no more "upload .webp only" step. ffmpeg only if video is added later.
+D5 Traffic tracking: events collection in PocketBase. /r/:linkId redirect logs user, link,
+   country (from VPS geo-ip or Cloudflare header), in-app-browser type, timestamp. Dashboard =
+   views, clicks, CTR per link per day per country. /c{id} OnlyFans suffix stays (attribution).
+   Replace the global localStorage trackId (contaminates attribution across profiles).
+D6 Custom URLs: Caddy (or Traefik) in the compose stack does automatic TLS for any domain pointed
+   at the VPS. Per-profile custom domain = a DB field + Caddy on-demand TLS. Spare domains to
+   rotate when ofl.ink gets flagged.
+D7 Proxies: BONUS, after everything else. Undefined scope; if it means "rotate domains" that
+   is D6 with no extra code.
+D8 Secret links via JS: keep, as obfuscation. Real win = no real URL in any public file,
+   non-guessable ids (random 10+ chars), rate-limited reveal, CORS locked to own origin.
+D9 Open question (blocks Phase 3 scope): PUBLIC sign-up or PRIVATE tool for creators you manage?
+   Private -> invite-only, no abuse handling. Public -> email verification, content rules,
+   abuse reporting; one spammer can get the shared domain banned.
+
+================================================================
+4. INSTAGRAM ESCAPE — technical notes (2026)
+================================================================
+- Detect: /Instagram|FBAN|FBAV|Threads|musical_ly|Bytedance|TikTok/i (current code only checks Instagram).
+- iOS: KEEP x-safari-https:// as an option (it is what we have). Add instagram://extbrowser/?url=
+  <encoded https url> as a second option, fired from a user TAP (not from an async fetch callback;
+  that loses user activation). Both undocumented; Meta can break either. Always keep the
+  "tap ... -> Open in external browser" instruction + copy-link fallback.
+- Android: intent://host/path#Intent;scheme=https;package=com.android.chrome;
+  S.browser_fallback_url=<encoded https>;end  (fallback missing today; Chrome absent = dead link).
+- Keep trackId in the URL in escape mode so it survives "open in browser" (fresh storage).
+- Real-device test matrix: iOS/Android x Instagram/Facebook/Threads/TikTok/Safari/Chrome, per mode.
+- Riskiest assumption overall: hiding URLs prevents Meta flagging ofl.ink. One shared domain =
+  one ban hits every creator. D6 spare domains is the real mitigation.
+
+================================================================
+5. BUILD ORDER (VPS track)
+================================================================
+Phase 0  Security + data cleanup on the CURRENT Netlify site (section 2).       ~1 day
+         - publish = "public" so secrets.json is no longer served; repo private;
+           purge secrets.json from git history; regenerate link ids.
+         - Fix the 4 corrupted profiles. n8n itself stays untouched except the prefix bug.
+         DONE: ofl.ink/netlify/functions/secrets.json returns 404; all profiles parse.
+
+Phase 1  Site options + escape fix (D3, section 4) in script.js.               ~2-3 days
+         - mode field in profile JSON; n8n form gets a 3-way radio.
+         - overlay only in escape_ig; Android fallback url; broader detection; escape on tap;
+           x-safari kept, extbrowser added; trackId survives escape.
+         DONE: test matrix passes for every mode on real devices. This code is reused on the VPS.
+
+Phase 2  VPS foundation in Docker (D1, D2, D4, D6).                            ~1 week
+         docker-compose.yml on the Hostinger VPS:
+           caddy        reverse proxy, automatic TLS, on-demand TLS for custom domains
+           app          Node (Hono or Express): serves public profile pages, /r/:linkId redirect,
+                        reveal endpoint, sharp image upload endpoint
+           pocketbase   DB + auth + file storage + admin UI
+           n8n          already there; stays
+         - Collections: users, profiles, links (secret url, mode, isAdult, geo, order), events.
+         - Migration script: 27 profile JSONs + secrets.json + images -> PocketBase.
+         - Public page = existing index.html/script.js reading from the app instead of static JSON.
+         DONE: linkme VPS URL serves every existing profile identically to Netlify; an edit in
+               PocketBase admin is live instantly; any image upload comes out as webp.
+
+Phase 3  Login / register / site creation / add links / editor UI (D9 first). ~1-2 weeks
+         - PocketBase auth (email+password, verify, reset) with a custom login/register page.
+         - Onboarding: claim username -> profile -> first link -> publish.
+         - Editor from link.me/profile/edit.html look: add, edit, reorder, delete links,
+           per-link mode + 18+ toggle, geo rules as raw JSON textarea (no UI yet).
+         - Users can only edit their own profile (collection rules).
+         DONE: new user signs up, adds a link with image, page live. n8n becomes admin-only.
+
+Phase 4  Traffic tracking (D5).                                                 ~3-4 days
+         - events written by /r/:linkId and a page-view ping; daily aggregation.
+         - Stats page modelled on link.me/analytics.html.
+         DONE: creator sees clicks per link per day per country.
+
+Phase 5  Cutover + domains.                                                     ~1 day + ongoing
+         - Point ofl.ink DNS at the VPS. Netlify stays as cold backup for a month, then off.
+         - Custom domain per profile via Caddy on-demand TLS; spare domains ready.
+         DONE: ofl.ink served from VPS; a creator's own domain works.
+
+Bonus (after Phase 5): proxies (D7), geo-rules UI, ffmpeg if video, Umami if PocketBase stats
+are not enough.
+
+================================================================
+6. DEFINITIONS OF DONE for the "nice way of ..." items
+================================================================
+nice traffic tracking   = per-link clicks + page views, by day and country, visible in a stats page.
+nice login/register     = PocketBase email+password with verify and reset; username claimed on signup.
+nice way of adding links= one form: title, url, icon, bg image (any format -> webp), 18+, mode; live instantly.
+simplistic layout UI    = mobile-first copy of link.me profile/edit.html, nothing more.
+
+================================================================
+7. LOCAL TEST LOOP — the agent must verify every ticket live through the UI
+================================================================
+Rule: no ticket is Done until the agent has run it locally and seen it work in a real browser.
+Every ticket's Acceptance block ends with `./check.sh` passing, and names the Playwright spec it adds.
+
+Tooling present on this Mac (checked 2026-10-02): Docker 29 (daemon up), Node 23, pnpm, Playwright 1.58
+with Chromium, Claude-in-Chrome MCP for ad-hoc looking.
+
+Setup (lives in repo root, built BEFORE spec-auto runs, reused by every phase):
+  package.json          devDependency @playwright/test only
+  playwright.config.ts  webServer = whatever serves the app locally; baseURL http://localhost:PORT
+  tests/e2e/*.spec.ts   one spec per ticket, named NN-<slug>.spec.ts, tracer-bullet style:
+                        open page -> act like a visitor/creator -> assert what they see
+  check.sh              unit tests (if any) + `npx playwright test`; exit code is the verdict
+  Phase 0-1 (Netlify era): webServer serves linkme_clone3 via `netlify dev` (functions + catch-all).
+  Phase 2+ (VPS era):      webServer = `docker compose up` with a seed script; same specs, same baseURL.
+  Seed data: one fixture profile (juliafilippo_ copy) with one direct, one escape_ig, one adult link,
+             so every mode is testable. In-app-browser cases are tested with a fake User-Agent in
+             Playwright (Instagram, FBAN, TikTok); real-device checks stay a manual item in RUN.md.
+
+How the agent uses it after each implementation part:
+  1. ./check.sh (headless, fast).
+  2. If a ticket touches UI, also open it with Claude-in-Chrome (or `npx playwright test --headed`)
+     and screenshot into .scratch/<effort>/shots/NN-<slug>.png for the human to glance at.
+  3. Failing = ticket stays open; agent fixes or parks with the failing output pasted in the ticket.
