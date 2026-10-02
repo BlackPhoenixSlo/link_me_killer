@@ -1,6 +1,6 @@
 # One three-way Mode per Link, not two checkboxes
 
-The original request was a "deeplink" checkbox, a "move out of IG" checkbox, and "nothing from above". These are three mutually exclusive ways to handle one tap. So each Link stores a single Mode, `direct`, `escape_ig` or `deeplink` (Direct, Escape and Deeplink Mode in CONTEXT.md), and a Profile carries a default Mode. The Escape Overlay, which v1 shows to every Instagram Visitor, becomes Mode-dependent. The Age Gate stays a separate Adult flag and works with any Mode.
+The original request was a "deeplink" checkbox, a "move out of IG" checkbox, and "nothing from above". These are three mutually exclusive ways to handle one tap. So each Link stores a single Mode, `direct`, `escape_ig` or `deeplink` (Direct, Escape and Deeplink Mode in CONTEXT.md), and a Profile carries a default Mode. The Escape Overlay, which v1 shows to every Instagram Visitor, becomes Mode-dependent in v2. v1 keeps showing it to everyone and the n8n Form never gets a Mode (ADR 0005); v1 Profiles enter v2 with Escape Mode as their default. The Age Gate stays a separate Adult flag and works with any Mode.
 
 ## Considered Options
 

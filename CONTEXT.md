@@ -1,6 +1,6 @@
 # ofl.ink
 
-A link-in-bio service for creators who send Instagram and TikTok traffic to OnlyFans. Each Creator gets a public Profile of Links whose Destinations stay out of every public file, and whose taps can be steered out of the social apps' in-app browsers.
+A link-in-bio service for creators who send Instagram and TikTok traffic to OnlyFans. Each Creator gets a public Profile of Links whose Destinations v2 keeps out of every public file, and whose taps can be steered out of the social apps' in-app browsers.
 
 ## People
 
@@ -33,11 +33,11 @@ One tappable card on a Profile that leads to one Destination; it has a title, ic
 _Avoid_: button, card, tile, secret link
 
 **Link Id**:
-The public identifier of a Link, and the only thing about it a public file may carry; random, never derived from the Username.
+The public identifier of a Link, and the only thing about it a public file may carry; random, never derived from the Username. v2 mints a fresh one for every Link, so v1's Username-based ids mean nothing to v2.
 _Avoid_: link key, slug, link number
 
 **Destination**:
-The URL a Link finally leads to; for Adult Links usually the Creator's OnlyFans page. It is held only on the server and handed out one Click at a time.
+The URL a Link finally leads to; for Adult Links usually the Creator's OnlyFans page. In v2 it is held only on the server and handed out one Click at a time.
 _Avoid_: real URL, secret URL, target
 
 **Adult Link**:
@@ -55,7 +55,7 @@ _Avoid_: unlock, decrypt, resolve, "secret links via JS"
 **Link Shortcut**:
 A Profile URL carrying `?link={Link Id}`, which reveals that Link as soon as the page loads.
 _Avoid_: deep link, direct link
-ASSUMPTION: coined name for script.js's `?link=` behaviour, which its comments call "deep link"; renamed so it cannot be confused with Deeplink Mode. Overturned if the Operator already calls these something else.
+ASSUMPTION: coined name for the `?link=` behaviour of v1's script.js, whose comments call it "deep link"; renamed so it cannot be confused with Deeplink Mode. Overturned if the Operator already calls these something else.
 
 ## Escaping in-app browsers
 
@@ -151,21 +151,25 @@ The saved copy of link.me's dashboard in `link.me/`, used only as the look to co
 _Avoid_: mockup, reference app
 
 **n8n Form**:
-The Operator's v1 editing tool: a form whose submissions rewrite Profile files in GitHub and redeploy v1.
+The Operator's v1 editing tool: a form whose submissions rewrite Profile files in GitHub and redeploy v1. It is left exactly as it is, never gains a Mode, and its edits stop reaching ofl.ink at Cutover.
 _Avoid_: workflow, automation, admin panel
 
 ## Generations
 
 **v1**:
-The ofl.ink running today: a static Netlify site whose Profiles are files in GitHub, written by the n8n Form.
+The ofl.ink running today: a static Netlify site whose Profiles are files in GitHub, written by the n8n Form. Nothing in it is ever edited; it serves ofl.ink as it is until Cutover and is switched off afterwards.
 _Avoid_: Netlify site, old site, legacy
 
+**v1 Snapshot**:
+The read-only copy of v1's files in `linkme_clone3/`, kept beside v2's code as the source of the v1 Import and the reference for how v1 looks and behaves; never edited.
+_Avoid_: v1 (for the copy), old repo, clone, legacy code
+
 **v2**:
-The Docker Compose stack on the Operator's Hostinger VPS that replaces v1.
+The Docker Compose stack, built entirely in this repo and run on the Operator's Hostinger VPS, that replaces v1.
 _Avoid_: VPS version, new site
 
 **v1 Import**:
-The re-runnable copy (v1 wins, until Cutover) of v1's Profiles, Destinations and images into v2.
+The re-runnable copy (v1 wins, until Cutover) of the v1 Snapshot's Profiles, Destinations and images into v2, repairing v1's broken data on the way and minting a fresh Link Id for every Link. Imported Profiles take Escape Mode as their default Mode until a Creator changes it in the Editor.
 _Avoid_: migration, sync, port
 ASSUMPTION: renamed from the plan's "migration script" so that "migration" keeps its database-schema meaning; overturned if the plan author prefers the original word.
 

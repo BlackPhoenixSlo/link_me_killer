@@ -219,3 +219,14 @@ How the agent uses it after each implementation part:
 - Accepted consequence: secrets.json and the public git history stay exposed on the OLD side until
   Netlify is switched off after Cutover. v2 regenerates every Link Id, so leaked ids stop revealing
   once ofl.ink points at v2.
+
+================================================================
+9. ANSWERS (user, 2026-10-02)
+================================================================
+D1: v1's non-Adult Links keep their public url; the 6 non-Adult Links carrying an Adult Destination
+    are LEFT AS THEY ARE. (v1 is untouched per section 8. In v2, ADR 0004 still applies: no
+    Destination in any public payload; non-Adult Links go through /r/{id}.)
+D9: PUBLIC sign-up. The Operator will share the link privately with friends, but there is no invite
+    list. Email verification stays; content rules / abuse reporting stay Bonus unless abuse appears.
+Network: the Operator runs the docker pulls and `pnpm --dir app add hono @hono/node-server sharp`
+    themselves when ticket 17 asks (or pre-creates app/ with pnpm init). Not a block for design.
