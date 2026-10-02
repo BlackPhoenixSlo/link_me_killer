@@ -293,7 +293,7 @@ test -s .scratch/goal_ai/shots/01-link-modes-and-escape.png
 - **Phase 0.** It must land first. This Phase assumes only what the plan and the run brief give it:
   - The public page copy in this repo at `app/public/` (`index.html`, `script.js`, `style.css`), taken from the v1 Snapshot, reading the v1 Profile JSON shape at `/{username}[/{code}]`.
   - The dev-server stand-in, retargeted from the v1 Snapshot (today's `tests/dev-server.mjs:10`) to `app/public/` and the test fixtures, that serves the page copy as the Playwright `webServer`, with a Reveal copy that answers by Link Id and appends `/c{code}` as v1's does, reading a test-only secrets file.
-  - The Fixture Profile, a `juliafilippo_` copy, holding a Direct, an Escape, a Deeplink and an Adult Link, with Link Ids per ADR 0004.
+  - The Fixture Profile, Username `fixture` (shaped like `juliafilippo_`, none of its data), holding a Direct, an Escape, a Deeplink and an Adult Link, with Link Ids per ADR 0004.
   - A green smoke spec against the page copy.
 
   ASSUMPTION: Phase 0's Fixture Profile carries `profile.mode` and `links[].mode` in this Phase's Schema (rung 5: one shape for both Phases). Overturned if it ships without them; this Phase then adds those fields to the Fixture Profile and nothing else.
@@ -370,3 +370,12 @@ Blind call (before the spec):
 - **reject** (B21) Falsifier: Meta flags ofl.ink despite hidden Destinations. Codex agrees this should not be a Phase 1 success claim, and it is not one (Out of Scope, last bullet; ADR 0004).
 
 Counts: accept 7, partial 8, reject 15, needs-human 0. No material objection was left unanswered after the draft call.
+
+### Six hats
+
+Six-hats review of specs 00–05 taken as one set (HEAD 16d5a11), reconciled in the plan review, 2026-10-02. Ids: W white, R red, K black, Y yellow, G green, U blue, C the coordinator's points, X found by the reconciler. Bullets about the whole set are reconciled only in `docs/spec/plan-review.md`, Six hats. Cross-spec line citations in the entries above date from their own review and may have drifted; the main text now cites sections.
+
+- C2 **accept**. Depends on called the Fixture Profile "a `juliafilippo_` copy". It now names the Username `fixture`, the name Phase 0 seeds.
+- U1 **accept** (ports 80/443). Phase 1's Done waits for the real-device matrix on Phase 2's first public deploy, and that deploy waits for the Operator's answer on who holds ports 80 and 443 (needs-human, Phase 2 spec, Further Notes). This spec already says so (Depends on); the question is listed in plan-review.md, Needs the human. No change here.
+
+Counts: accept 2, partial 0, reject 0, needs-human 0 (the ports question is Phase 2's).

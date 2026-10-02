@@ -52,7 +52,7 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 **Creator**
 
 14. As a Creator, I want no public response from v2 to contain my Destinations, whether it is Profile JSON, page HTML or PocketBase's API, so that crawling my Profile harvests nothing.
-15. As a Creator, I want my Geo Rules and record internals kept out of the public Profile JSON.
+15. As a Creator, I want my Geo Rules and record internals kept out of the public Profile JSON. The one record internal it carries is the Profile's record id, which Phase 4 adds as its per-Profile Tracking Code key.
 16. As a Creator, I want every Link to have a random Link Id unrelated to my Username, and v1's leaked ids to reveal nothing on v2.
 17. As a Creator, I want to send a photo straight from my phone (JPG, PNG, HEIC, GIF or WebP) and have it stored as WebP, so that I never convert images myself (v1's optimize.py step).
 18. As a Creator, I want an uploaded photo turned upright from its camera orientation and shrunk to 512 px (avatar, icon) or 1080 px (background), so that it displays correctly and loads fast.
@@ -224,9 +224,10 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
   Profile JSON keeps v1's Profile-file shape, minus everything that belongs only on the server:
 
   ```
-  { "profile": { "username", "displayName", "bio", "avatarUrl", "verified", "mode" },
+  { "profile": { "id"?, "username", "displayName", "bio", "avatarUrl", "verified", "mode" },
     "links":   [ { "id", "title", "isAdult", "tracking", "default_tracknumber"?, "mode",
                    "icon", "backgroundImage", "url" } ] }                 // links in `order`
+  profile.id  the Profile's record id; added by Phase 4, not by this Phase, as its per-Profile Tracking Code key (Phase 4 spec, Owns)
   id          the Link Id
   url         "{origin}/r/{id}" for a non-Adult Link in Direct or Escape Mode;
               "" for an Adult Link (Age Gate, then Reveal) and for any Link in Deeplink Mode (Reveal, then Deeplink)
@@ -279,7 +280,7 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 
   ASSUMPTION: Mode travels as `profile.mode` and `links[].mode`, always the effective value, using D3's stored names. Rung 2 for the field and its values (plan Phase 1: "mode field in profile JSON"; D3). Sending effective values rather than raw ones is rung 5, so the page never needs the fallback rule. Overturned by the names Phase 1's page reads.
 
-  ASSUMPTION: Visitor location tries v1's header names first, then Cloudflare's, and falls back to US as v1 does. Rung 3: geo_utils.js:48–49. A Visitor can fake their own country, which changes only the Tracking Code on their own Click. Overturned if that matters before Phase 5, which owns stripping these headers at the edge.
+  ASSUMPTION: Visitor location tries v1's header names first, then Cloudflare's, and falls back to US as v1 does. Rung 3: geo_utils.js:48–49. A Visitor can fake their own country, which changes only the Tracking Code on their own Click. Overturned if that matters before Phase 5, which owns stripping these headers at the edge. On a host where no country header arrives, every Visitor takes this US fallback: today on Phase 2's v2 host, and after Cutover on every DNS-only Custom Domain if the Cloudflare position of the parked country-source question is chosen (Phase 5 spec, DNS records). In all 7 v1 Links that carry a Geo Rule, the US entry's `default` equals the rule's own `default` (observed, plan review), so such a Visitor gets the rule's catch-all code and loses only their own country's or US state's code.
 
   ASSUMPTION: `/r` serves any Link that has a Destination, Adult or not, under the same rate limit as Reveal. Rung 5: the Age Gate is client-side, Reveal already gives out Adult Destinations, and ADR 0004 treats both as obfuscation. Overturned if Adult Destinations may leave only through Reveal.
 
@@ -474,7 +475,7 @@ ASSUMPTION: edits are driven through PocketBase's REST API rather than by clicki
     - `url` is `{baseURL}/r/{id}` for non-Adult Links and empty for Adult Links.
     - Both `mode` fields read `escape_ig`.
   - **`/r`.** For every non-Adult Link, `/r` answers 302 with `Location` equal to that card's v1 url, made root-relative if it was relative.
-  - **Reveal.** For every Adult Link, v2's Reveal gives the same answer as v1's handler for the same card. The cases are: no code, digits, `geo` and junk; for Links with a Geo Rule, several `x-country`/`x-region` pairs; and the Adult Links without a secrets entry, where both answer 404.
+  - **Reveal.** For every Adult Link, v2's Reveal gives the same answer as v1's handler for the same card. The cases are: no code, digits, `geo` and junk; for Links with a Geo Rule, several `x-country`/`x-region` pairs; and the Adult Links without a secrets entry, where both answer 404. Every case that sends a location header has `Geo Rule` in its test title, so that a run against the VPS, where Caddy drops v1's location headers, can leave exactly those cases out with `--grep-invert 'Geo Rule'` (Phase 5 spec, Acceptance, step 6).
   - **Journeys.** The final navigation to a Destination's host is caught with `page.route` and answered locally, never followed.
     - A non-Adult card goes through `/r/{id}` to the v1 url.
     - `/{username}/{digits}`, then the Age Gate, sends Reveal `trackingId={digits}` and lands where v1 sends that code.
@@ -628,8 +629,8 @@ node -e '
 - **ffmpeg, video and animated images.** D4: "ffmpeg only if video is added later".
 - **Proxies (D7), a Geo Rule UI, Umami, content rules and abuse reporting.** Bonus, after Phase 5 (§5, §9 D9).
 - **A response cache or realtime push to open pages.** "Live instantly" means the next load, and reading PocketBase on every request already gives that.
-- **PocketBase backups.** The plan does not ask for them, and while Phase 2 holds only imported data the v1 Import rebuilds it. That stops being true once Phase 3 lets Creators store data v1 never had, so backups belong to the Phase that first stores v2-only data.
-- **A geo-IP database in the app.** Edge headers are enough until Phase 5 picks the production source (Further Notes).
+- **PocketBase backups.** The plan does not ask for them, and while Phase 2 holds only imported data the v1 Import rebuilds it. That stops being true once Phase 3 lets Creators store data v1 never had, so backups start with Phase 3's VPS deploy (Phase 3 spec, Further Notes, Backups).
+- **A geo-IP database in the app.** Edge headers are enough for this Phase. Whether production uses one is the parked country-source question (Further Notes; plan-review.md, Needs the human).
 - **A least-privilege PocketBase account for the app.** The superuser is enough while every rule is closed.
 - **More than one app container, or a shared rate-limit store.** One container serves the stack.
 - **Re-encoding imported WebP images.** They are copied byte for byte so that the pages look identical.
@@ -665,9 +666,9 @@ node -e '
 
   ASSUMPTION: a host name separate from ofl.ink until Cutover, such as a subdomain the Operator controls, so that ofl.ink keeps pointing at v1. Rung 2: D1, "Netlify … keep running … until … parity". Overturned if the Operator tests on the VPS's own host name instead.
 - **Refreshing the v1 Snapshot before a re-run.** The Operator replaces `linkme_clone3/` with a fresh copy of v1, for example `git -C linkme_clone3 pull --ff-only`. That is a network read of the old repo, which writes nothing there. ADR 0002 already flags that replacing the snapshot is not editing it.
-- **Where the Visitor's country comes from before Cutover.** The Visitor location module reads Cloudflare's headers after v1's. v2 sees real countries only once its host is proxied by Cloudflare with visitor-location headers on, and Caddy trusts Cloudflare's ranges so that `X-Forwarded-For` carries the Visitor's IP. That is account and DNS work, so it is manual. Until then every Visitor without the headers counts as US, which is v1's own fallback. Parity is proven here with injected headers. A real country source is a prerequisite of Cutover, not of this Phase.
+- **Where the Visitor's country comes from before Cutover.** The Visitor location module reads Cloudflare's headers after v1's. Under the Cloudflare position of the parked question below, v2 sees real countries only once its host is proxied by Cloudflare with visitor-location headers on, and Caddy trusts Cloudflare's ranges so that `X-Forwarded-For` carries the Visitor's IP. That is account and DNS work, so it is manual. Until then every Visitor without the headers counts as US, which is v1's own fallback. Parity is proven here with injected headers. A real country source is a prerequisite of Cutover, not of this Phase.
 
-  ASSUMPTION: edge headers rather than a geo-IP database. Rung 3: v1 takes location from its edge's headers (geo_utils.js:48–49), and D5 names "VPS geo-ip or Cloudflare header". Overturned if the Operator will not proxy through Cloudflare; a geo-IP lookup then goes behind the same Visitor location function.
+  PARKED, needs-human (plan review): edge headers or a geo-IP database in production. This Phase's Visitor location function serves either answer unchanged: under geo-IP, the lookup goes behind it. Both positions, and the evidence that settles them, are in plan-review.md, Needs the human. This Phase's tickets do not wait for the answer.
 - **Who can upload in Phase 2.** Only a superuser token gets past PocketBase's rules, so the Operator and the tests are the only uploaders until Phase 3 gives Creators a token and owner rules.
 
 ## Review
@@ -708,3 +709,16 @@ Reviewer: **codex** (`codex exec --sandbox read-only`, `model_reasoning_effort="
 - (c) **accept**. (c): the Fixture Profile has four Links, one of them Deeplink. The Fixture site is now described as Phase 0 ships it. A non-Adult Test Secrets value equals its `url`, so the import logs three `dropped:` lines. The seed mounts `app/public/images/` as the site's `images/`, because the fixture's images are the stock icons. The Deeplink Link is driven end to end (D3).
 - (d) **partial**. (d): are the ports and the first build honestly human-only? Yes as written: the ports are NEEDS-HUMAN, and the first four `# manual:` lines are the network steps. One claim is tightened: `./check.sh` rebuilds offline only if PocketBase is fetched in a `RUN` layer. That is now required, with an evidence-blocked ASSUMPTION about BuildKit re-checking an `ADD <url>` source.
 - X1 **accept**. X1: Phase 0 keeps `./check.sh` green on a fresh clone and asks any later Phase that needs the Snapshot in the loop to guard it (Phase 0 spec, stand-in ASSUMPTION). With no `linkme_clone3/`, the seed and the v1 cases now skip with `v1 Snapshot absent`. Acceptance's `test -f` line keeps that skip out of this Phase's verdict.
+
+### Six hats
+
+Six-hats review of specs 00–05 taken as one set (HEAD 16d5a11), reconciled in the plan review, 2026-10-02. Ids: W white, R red, K black, Y yellow, G green, U blue, C the coordinator's points, X found by the reconciler. Bullets about the whole set are reconciled only in `docs/spec/plan-review.md`, Six hats. Cross-spec line citations in the entries above date from their own review and may have drifted; the main text now cites sections.
+
+- C3 **accept**. The Profile JSON contract now lists `profile.id`, marked as added by Phase 4 for its per-Profile Tracking Code key (Phase 4 keeps ownership). Story 15 now names the record id as the one record internal the JSON carries.
+- C5 **accept**. Phase 5's VPS parity run relied on Geo Rule cases being titled so. The parity spec now promises `Geo Rule` in the title of every case that sends a location header (Testing Decisions, `02-profile-parity`, Reveal).
+- K1 **accept**, fix folded into the parked country-source question. The Visitor location ASSUMPTION now states that every Visitor on a host with no country header takes v1's US fallback, which under the Cloudflare position means every DNS-only Custom Domain. Observed for this reconcile (counts only, no Destination read): 7 of v1's 38 Links carry a Geo Rule, and in all 7 the US entry's `default` equals the rule's own `default`, so such a Visitor gets the catch-all code and loses only their own country's or state's code. Only a real country on those hosts fixes it, which is the geo-IP position; this Phase's function serves either answer.
+- K2 **accept**. Out of Scope sent backups to "the Phase that first stores v2-only data" but no Phase took them. It now names Phase 3's VPS deploy (rung 4: a lost sign-up cannot be rebuilt by the v1 Import).
+- G1 **needs-human**. The Further Notes ASSUMPTION "edge headers rather than a geo-IP database" is now PARKED, and the Out of Scope geo-IP line points there. Both positions and the evidence that settles them are in plan-review.md, Needs the human. No Phase 2 ticket waits for the answer.
+- C6 **accept**. Ports 80/443 stay needs-human, unchanged (Further Notes).
+
+Counts: accept 5, partial 0, reject 0, needs-human 1 (the country source, shared with Phases 4 and 5).

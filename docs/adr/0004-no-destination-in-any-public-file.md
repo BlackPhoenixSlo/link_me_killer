@@ -16,7 +16,7 @@ A Destination that has been published cannot be recalled, and fresh Link Ids do 
 ## Consequences
 
 - Fresh v2 Link Ids break every Link Shortcut (`?link=` URL) shared with a v1 id, from Cutover on.
-- The v1 Snapshot (`linkme_clone3/`) holds secrets.json and is untracked but not git-ignored in this repo (`git status --short` lists `?? linkme_clone3/`), so a blanket `git add` would put every v1 Destination into v2's history.
+- The v1 Snapshot (`linkme_clone3/`) holds secrets.json and is git-ignored in this repo (`.gitignore:4`; `git check-ignore -v linkme_clone3/netlify/functions/secrets.json` matches it), so a blanket `git add` leaves it out. Only a forced add (`git add -f`) would put every v1 Destination into v2's history.
 - "Own origin" means whichever host served the Profile: ofl.ink, a Spare Domain or a Custom Domain. Reveal therefore accepts same-origin calls only, rather than an allow-list that names ofl.ink.
   ASSUMPTION: D8's "CORS locked to own origin" is read as same-origin, because a fixed ofl.ink allow-list would break Reveal on Custom Domains and Spare Domains. Overturned if Profiles on other domains must call Reveal on ofl.ink across origins.
 - In v2, a Destination must never be readable through PocketBase's public API (ADR 0002).

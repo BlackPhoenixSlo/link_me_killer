@@ -178,5 +178,5 @@ Pointing ofl.ink's DNS from v1 to v2, done only once v2 shows every v1 Profile i
 _Avoid_: go-live, switchover, launch
 
 **Fixture Profile**:
-The seeded test Profile, a copy of `juliafilippo_`, holding one Direct Mode Link, one Escape Mode Link and one Adult Link so that every behaviour is testable.
+The seeded test Profile, Username `fixture`, shaped like `juliafilippo_` but holding none of its data: one Direct Mode Link, one Escape Mode Link, one Deeplink Mode Link and one Adult Link, so that every Mode and behaviour is testable.
 _Avoid_: seed profile, test profile, demo profile

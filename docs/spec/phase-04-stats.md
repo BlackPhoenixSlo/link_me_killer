@@ -157,11 +157,11 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
     - It never falls back to US: v1's US default (geo_utils.js:48) belongs to Geo Rules only.
     - Local tests inject the header through Playwright's `extraHTTPHeaders`.
 
-    ASSUMPTION: D5's two country sources both need the human, and this Phase chooses the Cloudflare header over VPS geo-IP. Rung 3: v1 also takes the country from its edge's request header (geo_utils.js:48). Rung 5: a header needs no account, licensed download, dependency or lookup code. Overturned if the Operator will not proxy ofl.ink through Cloudflare; MaxMind then becomes a parked follow-up (account, download, new dependency).
+    PARKED, needs-human (plan review): which source feeds the country, Cloudflare's `CF-IPCountry` or a geo-IP lookup on the VPS. D5 names both. This spec is written for the Cloudflare header (rung 3: v1 takes the country from its edge's header, geo_utils.js:48; rung 5: no account, licensed download, dependency or lookup code). Rung 4 points the other way, because the Cloudflare header needs ofl.ink's live nameservers moved (Phase 5 spec, Moving the zone). Under geo-IP the country comes from a lookup of the client address, behind one function, and the two-letter-or-`XX` rule below stays. The Cloudflare-specific text parked with it: this bullet's first line; story 31; the post-switch `ZZ` probe in Acceptance; the Out of Scope line "The app reads `CF-IPCountry` directly"; the two Further Notes ASSUMPTIONs on the `ZZ` probe and on "once ofl.ink is Proxied"; and the local header injection of story 32 and test 4, which under geo-IP needs a test seam in front of the lookup. Both positions and the evidence that settles them are in plan-review.md, Needs the human. Every other ticket of this Phase can be built before the answer.
 
     - The Event Recorder reads the header itself and never calls Phase 2's Visitor location lookup. That lookup prefers `x-country`, then `cf-ipcountry`, then `US` (Phase 2 spec, Contracts), so it would let `x-country` override Cloudflare and would turn every unknown country into US.
 
-    ASSUMPTION: Reveal's Geo Rule keeps Phase 2's lookup, so a request carrying both `x-country` and `CF-IPCountry` can record one country and pick a Geo Rule code for the other. This Phase does not change Reveal's lookup (rung 4: leave the other Phase's code alone). Overturned if Phase 2 or Phase 5 makes `CF-IPCountry` the only country header the app sees; the two then agree.
+    ASSUMPTION: Reveal's Geo Rule keeps Phase 2's lookup. This Phase does not change it (rung 4: leave the other Phase's code alone). On the local stack a request carrying both `x-country` and `CF-IPCountry` can record one country and pick a Geo Rule code for the other. In production the two agree on a known country, because Phase 5's Caddy drops v1's location headers from every request (Phase 5 spec, The Cloudflare lines). They still differ on an unknown one: the Event records `XX`, and the Geo Rule takes v1's US fallback (Phase 2 spec, Visitor location ASSUMPTION). Overturned if the parked country-source question changes Phase 2's lookup.
   - **In-App Browser.** Classified from the request's User-Agent with plan section 4's patterns; the first match wins:
     - `Threads` → threads
     - `Instagram` → instagram
@@ -234,7 +234,7 @@ Under the amendment (plan section 8), v2's public page script has been v2's own 
   ASSUMPTION: the Operator steps reach PocketBase on a loopback port, and the rule checks run against PocketBase itself, because its rules are the security boundary (ADR 0002). Rung 3. Overturned if Phase 2's test stack exposes PocketBase elsewhere; the spec then uses that address.
 
   ASSUMPTION: the test stack's Reveal threshold allows this file's traffic: about 15 pings and 10 Clicks per minute on one Profile from one address (rung 5). Overturned if the threshold is lower; the ping then gets a threshold setting of its own.
-- **Counting by delta.** Outside CI, Playwright reuses an already-running server (playwright.config.ts:13), and the tests in this file share Profiles. So each test reads Stats before and after acting and asserts the difference.
+- **Counting by delta.** The tests in this file share Profiles, so each test reads Stats before and after acting and asserts the difference. (Phase 2 sets `reuseExistingServer: false`, Phase 2 spec, Test loop, so a reused server is no longer a reason.)
   - Between its two reads, a test also makes traffic that its assertion must leave out, so an ignored filter changes the number.
   - A run that straddles 00:00 UTC can fail a daily-row assertion; rerun it.
 - **Destinations are stubbed.** No test leaves the machine, and no browser looks up a `.test` host.
@@ -356,7 +356,7 @@ test -s .scratch/goal_ai/shots/04-stats.png
   - the creator-only area and its navigation, where Stats sits next to the Editor;
   - the allow-listed same-origin PocketBase proxy, to which this Phase adds `dailyStats` (`events` stays off the list);
   - the owner relation on `profiles` that the `dailyStats` rule names.
-- **Phase 5, for production countries only, not for landing.** Its Cutover runbook proxies ofl.ink and every Spare Domain through Cloudflare with IP Geolocation on, drops country headers from peers outside Cloudflare's ranges, and gives the app the Visitor's own address (Phase 5 spec, stories 18 and 19). Until then every production Event records `XX`.
+- **Phase 5, for production countries only, not for landing.** Under the Cloudflare position of the parked country-source question, its Cutover runbook proxies ofl.ink and every Spare Domain through Cloudflare with IP Geolocation on, drops country headers from peers outside Cloudflare's ranges, and gives the app the Visitor's own address (Phase 5 spec, stories 18 and 19). Until then every production Event records `XX`.
 
 ## Out of Scope
 
@@ -376,7 +376,7 @@ test -s .scratch/goal_ai/shots/04-stats.png
 - **Event retention and pruning.** At about 27 Profiles, SQLite holds years of Events. Revisit if disk use grows.
 - **A scheduled rollup job or table.** The `dailyStats` view meets "daily aggregation" (see Schema).
 - **Per-Creator time zones.** Days are UTC (see Schema).
-- **VPS geo-IP (MaxMind).** It needs an account, a licensed download, a new dependency and lookup code. Cloudflare needs none of these (see Visitor country).
+- **VPS geo-IP (MaxMind).** It needs an account, a licensed download, a new dependency and lookup code. Cloudflare needs none of these (see Visitor country). Parked with the country-source question rather than cut: if the Operator picks geo-IP, it comes back into this Phase.
 - **Caddy lines that strip country headers, Cloudflare zone, record and setting changes, and the client address behind Cloudflare.** Phase 5 owns all of them (Phase 5 spec, stories 3, 18 and 19). The app reads `CF-IPCountry` directly.
 - **A Deeplink or Escape Mode counting matrix.** Clicks are counted where `/r` or Reveal hands out the Destination, whatever the Mode, and tests 2, 3 and 11 cover both endpoints, Reveal-on-load included. Phase 1 tests which endpoint each Mode calls.
 - **Umami.** The plan lists it as a Bonus "if PocketBase stats are not enough".
@@ -440,3 +440,14 @@ Blind call (without the spec):
 - **reject** (B20) Falsifiers. Each is a test or a stated choice: one endpoint per Click (Interfaces), a cancelled navigation after a Reveal counts by design (What counts), ownership (test 7), attribution (test 8), country (test 4), and cost (Schema's overturn threshold).
 
 Counts: 14 accept, 7 partial, 16 reject, 0 needs-human.
+
+### Six hats
+
+Six-hats review of specs 00–05 taken as one set (HEAD 16d5a11), reconciled in the plan review, 2026-10-02. Ids: W white, R red, K black, Y yellow, G green, U blue, C the coordinator's points, X found by the reconciler. Bullets about the whole set are reconciled only in `docs/spec/plan-review.md`, Six hats. Cross-spec line citations in the entries above date from their own review and may have drifted; the main text now cites sections.
+
+- G1 **needs-human** (with R2 and U1). The Visitor country ASSUMPTION that chose Cloudflare's header over VPS geo-IP is now PARKED. That choice moves the live domain's nameservers in Phase 5 (rung 4 against it), while geo-IP needs a licensed download by the human (floor 2) and a new dependency (rung 5 against it). Parked with it: the source line of Visitor country, story 31, the post-switch `ZZ` probe, one Out of Scope line, two Further Notes ASSUMPTIONs, and the local header injection (story 32, test 4), all listed in the PARKED block. The `XX` rule, Events, `dailyStats`, the ping and the Stats page are built either way. The Out of Scope geo-IP line is now "parked rather than cut", and Depends on qualifies Phase 5's role.
+- C5 **accept**. The ASSUMPTION on Reveal's Geo Rule and the Event's country cited an overturn condition that Phase 5 now meets: production drops v1's location headers, so the two agree on a known country. It is rewritten to say so, and to keep the one remaining difference: on an unknown country the Event records `XX` and the Geo Rule takes US.
+- U2 **accept** (stale note). Counting by delta cited Playwright reusing a running server, which Phase 2's `reuseExistingServer: false` ends. The reason is now that the tests share Profiles.
+- C3 **accept**, no change here. Phase 4 keeps ownership of `profile.id` (Owns; Contracts, Tracking Code storage). Phase 2's contract now lists the key as added by Phase 4.
+
+Counts: accept 3, partial 0, reject 0, needs-human 1 (the country source, shared with Phases 2 and 5).

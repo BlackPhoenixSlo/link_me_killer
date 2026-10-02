@@ -88,7 +88,7 @@ v1's public page (index, script, style, landing page and the stock Link icons) i
 
     ASSUMPTION: the Fixture Profile's Username is `fixture`, not `juliafilippo_`, so that it cannot collide with the real `juliafilippo_` Profile that Phase 2's v1 Import brings into the same database (rung 4). Overturned if a later Phase needs the fixture at `/juliafilippo_`; then it is a file rename and one constant in the spec.
 
-    ASSUMPTION: the Fixture Profile has four Links, adding a Deeplink Mode Link to the three that plan §7 and CONTEXT.md's "Fixture Profile" entry list, because §7 also says "so every mode is testable" (rung 2 needs it, but the list itself omits it). Overturned if Deeplink Mode is dropped. CONTEXT.md's entry should be widened by whoever owns it.
+    ASSUMPTION: the Fixture Profile has four Links, adding a Deeplink Mode Link to the three that plan §7 lists (as CONTEXT.md's "Fixture Profile" entry did before the plan review), because §7 also says "so every mode is testable" (rung 2 needs it, but the list itself omits it). Overturned if Deeplink Mode is dropped. CONTEXT.md's entry now lists the four Links and the Username `fixture` (plan review).
 
     ASSUMPTION: the Fixture Profile's default Mode is Escape Mode, and so is its Adult Link's. Amendment 8 gives imported v1 Profiles Escape Mode as their default, and `juliafilippo_`'s Adult Link escapes today (rung 3). This also keeps the Instagram overlay test true under the glossary's rule that the default Mode decides the on-load Escape Overlay. Overturned if Phase 1 needs the Adult Link in another Mode; that is one field in the fixture.
 
@@ -240,14 +240,13 @@ Cut (YAGNI or by the plan):
 - **Hardening the Reveal Stand-in** (CORS limited to its own origin, rate limit). The stand-in is test-only and never deployed. ADR 0004's rules govern v2's own Reveal, which Phase 2 builds.
 - **Installing `netlify dev`.** The house stand-in already plays that role, and netlify-cli would be a new dependency fetched over the network.
 - **Docker Compose, the Node app, PocketBase and the seed script.** Phase 2 (plan §5, §7).
-- **Editing CONTEXT.md or the ADRs.** This run writes only this spec. The discrepancies found are recorded under Further Notes.
+- **Editing CONTEXT.md or the ADRs.** Phase 0 edits neither. The plan review fixed the two discrepancies this spec found (CONTEXT.md's Fixture Profile entry, ADR 0004's git-ignore line).
 
 ## Further Notes
 - Rung 2 (plan §8 binds over §7): §7's "Phase 0-1 (Netlify era): webServer serves linkme_clone3" is replaced by serving the Page Copy, because §8 has Phase 1 land in "the NEW repo's copy of the public page".
-- Rung 1 (stale ADR text): ADR 0004's consequence that the v1 Snapshot "is untracked but not git-ignored" is out of date. `.gitignore:4` now lists `linkme_clone3/`, and `git check-ignore -v` confirms it covers the secrets file. Whoever owns the ADRs may want to update that line.
+- Rung 1 (ADR text): `.gitignore:4` lists `linkme_clone3/`, and `git check-ignore -v` confirms it covers the secrets file. ADR 0004's consequence now says the v1 Snapshot is git-ignored (fixed in the plan review).
 - Rung 1 (the icon set): the four stock icons are the only `/images/` files used as Link icons by v1 Profiles (`grep -ho '/images/[A-Za-z0-9_.-]*' linkme_clone3/api/profiles/*.json | sort | uniq -c`). `onlyicon2.webp` is a byte-identical duplicate of `onlyicon.webp` that no Profile references.
 - Rung 1 (today's state): no v1 Destination appears in this repo's git history or in any file git would take. The only v1 data in `tests/` is the smoke spec's v1 Link Ids (the Acceptance leak scan, run before Phase 0, reports only "v1 Link Id in tests/e2e/00-smoke.spec.ts"). Phase 0 removes those.
-- Cross-spec, for whoever owns Phase 2's spec: with the Page Copy at `app/public/`, Phase 2's claim that an `app/` build context keeps the page copy out of the image no longer holds, and its `public/` mount follows this location (its own ASSUMPTION defers to Phase 0). Its planned edit to `00-smoke.spec.ts` is superseded: this Phase removes the v1 id, reads ids from the served Profile and leaves the secrets paths' status unasserted.
 - Every decision below rung 2 is flagged inline, beside the decision it qualifies:
   - Page Copy location: Owns.
   - The stand-in reading nothing from the v1 Snapshot, and the stand-in instead of `netlify dev`: Interfaces.
@@ -289,6 +288,16 @@ codex (`codex exec`, reasoning high, read-only on a docs-and-harness workspace w
 - D5 **partial**. D5: the Adult Link's `tracking` and Geo Rule were never enforced. The fixture check now asserts both. Rejected: new HTTP tests for Tracking Codes. Phase 0 copies v1's Reveal verbatim, Phase 1 owns Tracking Code behaviour, and story 10 promises the fixture makes them testable, not that this Phase tests them.
 - D6a **accept**. D6a: Depends on omitted the Snapshot as an input. That input is now stated, separately from Phase order.
 - D6b **partial**. D6b: the reviewer could not verify the Snapshot observations in Further Notes, because the Snapshot is absent from its workspace by design. They stand as observations made in the repo checkout, and the Acceptance commands re-check each one (`cmp`/`find` for the icons, `git check-ignore`, the leak scan).
-- (a) **accept**. (a): `app/public/` is justified. §9's `pnpm --dir app` puts the app in `app/`, and Phase 2's own ASSUMPTION defers to Phase 0's location. Kept. Phase 2's "build context `app/` excludes the page copy" line no longer holds; this is noted in Further Notes for Phase 2's owner.
+- (a) **accept**. (a): `app/public/` is justified. §9's `pnpm --dir app` puts the app in `app/`, and Phase 2's own ASSUMPTION defers to Phase 0's location. Kept. Phase 2's "build context `app/` excludes the page copy" line no longer holds; this is noted in Further Notes for Phase 2's owner. (That note was removed in the plan review, C1: Phase 2 now serves `app/public/`.)
 - (b) **accept**. (b): four Links are justified. §7's "so every mode is testable" needs a Deeplink Link, and Phase 1's spec requires one. Kept. CONTEXT.md's entry is for its owner to widen.
-- (c) **accept**. (c): rewriting the smoke spec is justified, and Phase 2's conditional edit is superseded. The id and status points are resolved by D1a and D1b, and the cross-spec note is in Further Notes.
+- (c) **accept**. (c): rewriting the smoke spec is justified, and Phase 2's conditional edit is superseded. The id and status points are resolved by D1a and D1b, and the cross-spec note is in Further Notes. (That note was removed in the plan review, C1: Phase 2 now owns no smoke edit.)
+
+### Six hats
+
+Six-hats review of specs 00–05 taken as one set (HEAD 16d5a11), reconciled in the plan review, 2026-10-02. Ids: W white, R red, K black, Y yellow, G green, U blue, C the coordinator's points, X found by the reconciler. Bullets about the whole set are reconciled only in `docs/spec/plan-review.md`, Six hats. Cross-spec line citations in the entries above date from their own review and may have drifted; the main text now cites sections.
+
+- C1 **accept**. `app/public/` holds throughout. The Further Notes line asking Phase 2's owner to follow this location was stale (Phase 2 serves `app/public/` and owns no smoke edit) and is removed. Entries (a) and (c) above, which pointed to it, are marked accordingly. The `public/` under Out of Scope is v1's Netlify folder and stays.
+- C2 **accept**. CONTEXT.md's Fixture Profile listed three Links as "a copy of `juliafilippo_`", the gap behind Phase 3's wrong Username. It now names the Username `fixture` and four Links, and the four-Links ASSUMPTION under Contracts says so.
+- C7 **accept**. ADR 0004's consequence now says the v1 Snapshot is git-ignored (`.gitignore:4`, confirmed by `git check-ignore -v`). Further Notes and the Out of Scope line on CONTEXT.md and the ADRs record that the plan review made both fixes.
+
+Counts: accept 3, partial 0, reject 0, needs-human 0.
