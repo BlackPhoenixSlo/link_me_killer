@@ -200,3 +200,22 @@ How the agent uses it after each implementation part:
   2. If a ticket touches UI, also open it with Claude-in-Chrome (or `npx playwright test --headed`)
      and screenshot into .scratch/<effort>/shots/NN-<slug>.png for the human to glance at.
   3. Failing = ticket stays open; agent fixes or parks with the failing output pasted in the ticket.
+
+================================================================
+8. AMENDMENT (user decision, 2026-10-02, after the first spec-auto design run)
+================================================================
+"we will make a totally new repo; all old stays as is."
+- The old GitHub repo (BlackPhoenixSlo/linkme_clone3), the Netlify site and the live n8n workflow are
+  NOT touched by any Phase. No publish-folder change, no repo-private, no history purge, no n8n edit.
+- Everything new is built in THIS repo (oflinkv2). linkme_clone3/ in this workspace is a read-only
+  snapshot of v1: source of the v1 Import and the visual/behavioural reference, never edited.
+- Phase 0 therefore shrinks to what can be done in the new repo: the v1 data repairs (weiwei, jaka7q,
+  duplicate ids, prefix-repeated ids) happen inside Phase 2's v1 Import, not in the old files.
+- Phase 1's Mode field and escape fix land in the NEW repo's copy of the public page (served by the
+  v2 app from Phase 2), not in linkme_clone3/script.js. The n8n 3-way radio is dropped; v1 Profiles
+  import with the default Mode (escape_ig) until edited in the v2 Editor.
+- D1 (non-Adult urls public in v1 files) is moot: v1 files are untouched; v2 never publishes a
+  Destination (ADR 0004 applies to v2 only).
+- Accepted consequence: secrets.json and the public git history stay exposed on the OLD side until
+  Netlify is switched off after Cutover. v2 regenerates every Link Id, so leaked ids stop revealing
+  once ofl.ink points at v2.
