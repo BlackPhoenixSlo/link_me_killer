@@ -9,4 +9,4 @@ v2 needs four things: a store for Profiles, Links, Destinations and Events; Crea
 ## Consequences
 
 - Collection rules are the security boundary. A public read rule on a record that holds a Destination would publish it through PocketBase's own REST API (see ADR 0004).
-- PocketBase becomes the system of record. The v1 Import reads v1's Profile files and secrets.json once.
+- PocketBase becomes the system of record. The v1 Import reads v1's Profile files and secrets.json, and is re-runnable until Cutover, with v1 winning.

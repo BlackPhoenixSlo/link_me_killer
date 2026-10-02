@@ -165,7 +165,7 @@ The Docker Compose stack on the Operator's Hostinger VPS that replaces v1.
 _Avoid_: VPS version, new site
 
 **v1 Import**:
-The one-time copy of v1's Profiles, Destinations and images into v2.
+The re-runnable copy (v1 wins, until Cutover) of v1's Profiles, Destinations and images into v2.
 _Avoid_: migration, sync, port
 ASSUMPTION: renamed from the plan's "migration script" so that "migration" keeps its database-schema meaning; overturned if the plan author prefers the original word.
 

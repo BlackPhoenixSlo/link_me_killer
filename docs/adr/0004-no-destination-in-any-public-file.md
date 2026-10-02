@@ -16,7 +16,7 @@ Phase 0 applies these rules to v1 before any feature work:
 - purge secrets.json from the git history
 - regenerate every Link Id
 
-A Destination that has been published cannot be recalled. It can only be made useless, which is why the Link Ids are regenerated. Hiding Destinations does not stop ofl.ink from being Flagged; Spare Domains are the protection against that.
+A Destination that has been published cannot be recalled, and regenerating the Link Ids does not make it useless; new ids only stop anyone guessing their way to Destinations through Reveal. Hiding Destinations does not stop ofl.ink from being Flagged; Spare Domains are the protection against that.
 
 ## Consequences
 
