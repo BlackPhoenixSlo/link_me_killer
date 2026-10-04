@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Not Found</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 400px;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        p {
+            margin-bottom: 2rem;
+            color: #aaa;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Profile Not Found</h1>
+        <p>Make your own page.</p>
+        <a href="https://n8n.srv1395798.hstgr.cloud/form/c782d2a0-9090-4ab2-a613-c92fe36a4027" class="link-card"
+            style="display: block; text-decoration: none; color: white;">
+            <div class="link-content">
+                <span class="link-title">Create Your Own Page</span>
+                <span class="link-subtitle">Powered by n8n & Git & Netlify</span>
+            </div>
+
+        </a>
+
+        <a href="https://www.youtube.com/watch?v=_vneaf1ch0I" target="_blank"
+            style="display: block; margin-top: 15px; color: #888; font-size: 0.9rem; text-decoration: none;">
+            Watch Tutorial on YouTube <i class="fas fa-external-link-alt"
+                style="font-size: 0.8em; margin-left: 5px;"></i>
+        </a>
+
+        <div class="video-wrapper" style="margin-top: 2rem; width: 100%;">
+            <video class="lazy-video" width="100%" controls playsinline data-src="example.webm"
+                style="border-radius: 8px; background: #000;">
+                <p>Your browser does not support the video tag.</p>
+            </video>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var lazyVideos = [].slice.call(document.querySelectorAll("video.lazy-video"));
+
+            if ("IntersectionObserver" in window) {
+                var lazyVideoObserver = new IntersectionObserver(function (entries, observer) {
+                    entries.forEach(function (video) {
+                        if (video.isIntersecting) {
+                            if (video.target.dataset.src) {
+                                video.target.src = video.target.dataset.src;
+                            }
+                            video.target.load();
+                            video.target.classList.remove("lazy-video");
+                            lazyVideoObserver.unobserve(video.target);
+                        }
+                    });
+                });
+
+                lazyVideos.forEach(function (lazyVideo) {
+                    lazyVideoObserver.observe(lazyVideo);
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>

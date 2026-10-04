@@ -1,14 +1,17 @@
-// Tiny stand-in for `netlify dev` (see netlify.toml): serves linkme_clone3 statically,
+// Tiny stand-in for `netlify dev`: serves the Page Copy (app/public) statically,
 // rewrites unknown paths to /index.html, and mounts netlify/functions/<name>.js at
 // /.netlify/functions/<name>. Phase 2 replaces this with docker compose.
+// Until tickets 02 and 04, Profiles (/api/profiles/*.json) and functions still come from the v1 Snapshot.
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = fileURLToPath(new URL('../linkme_clone3/', import.meta.url));
-const FUNCTIONS_DIR = join(ROOT, 'netlify', 'functions');
+const ROOT = fileURLToPath(new URL('../app/public/', import.meta.url));
+const SNAPSHOT = fileURLToPath(new URL('../linkme_clone3/', import.meta.url));
+const PROFILES_DIR = fileURLToPath(new URL('../linkme_clone3/api/profiles/', import.meta.url));
+const FUNCTIONS_DIR = join(SNAPSHOT, 'netlify', 'functions');
 const PORT = Number(process.env.PORT) || 4173;
 const require = createRequire(import.meta.url);
 
@@ -49,9 +52,9 @@ async function runFunction(name, url, req, res) {
   res.end(result.body ?? '');
 }
 
-async function serveStatic(pathname, res) {
-  let file = resolve(ROOT, '.' + decodeURIComponent(pathname));
-  const inside = file.startsWith(ROOT) || file + sep === ROOT;
+async function serveStatic(pathname, res, root = ROOT) {
+  let file = resolve(root, '.' + decodeURIComponent(pathname));
+  const inside = file.startsWith(root) || file + sep === root;
   const isFile = inside && (await stat(file).catch(() => null))?.isFile();
   if (!isFile) file = join(ROOT, 'index.html'); // [[redirects]] from = "/*" to = "/index.html" status = 200
 
@@ -63,11 +66,13 @@ createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
     const fn = url.pathname.match(/^\/\.netlify\/functions\/([\w-]+)\/?$/);
+    const profile = url.pathname.match(/^\/api\/profiles\/([\w.-]+\.json)$/);
     if (fn) await runFunction(fn[1], url, req, res);
+    else if (profile) await serveStatic('/' + profile[1], res, PROFILES_DIR);
     else await serveStatic(url.pathname, res);
   } catch (err) {
     console.error(err);
     if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain' });
     res.end('Internal error');
   }
-}).listen(PORT, () => console.log(`linkme_clone3 dev server on http://localhost:${PORT}`));
+}).listen(PORT, () => console.log(`dev server on http://localhost:${PORT}`));

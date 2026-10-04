@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linkme Clone</title>
+    <link rel="stylesheet" href="/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- deeplink  -->
+    <script>
+        (function () {
+            var ua = navigator.userAgent || navigator.vendor || window.opera;
+            var isInstagram = ua.indexOf('Instagram') > -1;
+
+            // Wait for DOM to load so the page is not white
+            document.addEventListener("DOMContentLoaded", function () {
+                if (isInstagram) {
+                    var igOverlay = document.getElementById('igOverlay');
+                    if (igOverlay) {
+                        igOverlay.classList.remove('hidden');
+                        igOverlay.classList.add('active');
+                        // Prevent scrolling
+                        document.body.style.overflow = 'hidden';
+                    }
+                }
+            });
+        })();
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Profile Header -->
+        <header class="profile-header">
+            <div class="avatar-container">
+                <img src="" alt="" id="avatar" class="avatar">
+            </div>
+            <div class="profile-info">
+                <h1 id="displayName">Loading...</h1>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/e/e4/Twitter_Verified_Badge.svg" alt="Verified"
+                    class="verified-badge" id="verifiedBadge" style="display: none;">
+            </div>
+            <p id="bio" class="bio"></p>
+        </header>
+
+        <!-- Links Container -->
+        <main class="links-container" id="linksContainer">
+            <!-- Links will be injected here by JS -->
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Powered by <a href="landing.html">ofl.ink</a></p>
+        </footer>
+    </div>
+
+    <!-- Mature Content Overlay (Hidden by default) -->
+    <div id="overlay" class="overlay hidden">
+        <div class="overlay-content">
+            <div class="lock-icon">
+                <i class="fas fa-lock"></i>
+            </div>
+            <h2>Mature Content Disclaimer</h2>
+            <p>This link may contain graphic or adult content.</p>
+            <button id="continueBtn" class="continue-btn">Continue (18+)</button>
+            <button id="closeOverlayBtn" class="close-btn"><i class="fas fa-times"></i></button>
+        </div>
+    </div>
+    <!-- Instagram Overlay (Hidden by default) -->
+    <div id="igOverlay" class="overlay hidden"
+        style="z-index: 9999; background-color: rgba(0,0,0,0.95); flex-direction: column; justify-content: flex-start; padding-top: 20px;">
+        <div style="text-align: right; width: 100%; padding-right: 25px; box-sizing: border-box;">
+            <i class="fas fa-arrow-up ig-arrow-anim" style="font-size: 2.5rem; color: #fff;"></i>
+        </div>
+        <div class="overlay-content"
+            style="background-color: transparent; border: none; box-shadow: none; color: white; margin-top: 20px;">
+            <i class="fab fa-instagram" style="font-size: 4rem; margin-bottom: 20px; color: #E1306C;"></i>
+            <h2 style="font-size: 1.5rem; margin-bottom: 15px; font-weight: bold;">Open in System Browser</h2>
+            <p style="font-size: 1.1rem; color: #ddd; margin-bottom: 20px; line-height: 1.6;">
+                Instagram restricts some links. Please tap the <strong>&middot;&middot;&middot;</strong> menu in the top
+                right corner and select <strong>"Open in External Browser"</strong> or <strong>"Open in System
+                    Browser"</strong> to view this page.
+            </p>
+        </div>
+    </div>
+
+    <script src="/script.js"></script>
+</body>
+
+</html>
