@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: none directly. It unblocks every story that needs the running stack (spec, Implementation Decisions: Offline build; Further Notes: Network steps for the human)
 Seams: `app/package.json` and its lockfile, `vendor/`, `docker image ls`, the two Dockerfiles, and a built test stack
 Blocked by: 12: The v2 stack is declared and its Compose contract checks pass offline
-Status: claimed 20261004T191309Z 2026-10-04T21:30:11Z
+Status: done
 
 **Done by the Operator 2026-10-04 (plan §11).** The network commands have run:
 - `app/package.json` lists hono 4.13.13, @hono/node-server 2.1.3 and sharp 0.35.5, with its lockfile `app/pnpm-lock.yaml` (commit 2c6b95c, which touched no root manifest or lockfile). pnpm's `supportedArchitectures` in it put sharp's linuxmusl-arm64 and linuxmusl-x64 binaries in `app/node_modules` (observed: `ls app/node_modules/.pnpm | grep sharp-linuxmusl`).
@@ -33,6 +33,8 @@ ASSUMPTION: the heic-convert line is listed here but runs only when 21 shows it 
 - [x] The app has its own package manifest listing hono, @hono/node-server and sharp, and its own lockfile. The repo root's manifest and lockfile are unchanged.
 - [x] `docker images` lists `alpine:3`, `caddy:2-alpine` and `node:22-alpine`.
 - [x] `vendor/` is git-ignored and holds `pocketbase_0.40.4_linux_arm64.zip` and `pocketbase_0.40.4_linux_amd64.zip`.
-- [ ] Neither Dockerfile fetches: `pocketbase/Dockerfile` and `app/Dockerfile` hold no `curl`, `wget`, `ADD <url>`, `apk add`, `pnpm install`, `npm install`, `npm ci` or `# syntax=` line.
-- [ ] The test stack's build exits 0 with no network request, and an immediate second build exits 0 from cache.
+- [x] Neither Dockerfile fetches: `pocketbase/Dockerfile` and `app/Dockerfile` hold no `curl`, `wget`, `ADD <url>`, `apk add`, `pnpm install`, `npm install`, `npm ci` or `# syntax=` line.
+- [x] The test stack's build exits 0 with no network request, and an immediate second build exits 0 from cache.
+
+Observed 2026-10-04 21:31–21:32 UTC on this Mac (Docker 29.4.0, Compose v5.1.1, BuildKit v0.29.0, containerd image store): `docker compose --env-file tests/e2e.env build` exit 0 twice, the second fully CACHED; `load metadata`/`resolve` lines name the local image IDs and Docker Desktop's httpproxy log records no outbound connection from the VM during either build, so the BuildKit ASSUMPTION above is confirmed by observation. Images: oflinkv2-e2e-app (409MB), oflinkv2-e2e-pocketbase (56.3MB); `pocketbase --version` → 0.40.4; hono, @hono/node-server and sharp load inside the app image with `--network none`. Logs: /tmp/spec-auto-goal-ai/build-{1,2}.log. Noted for 15: app/ has no .dockerignore, so `COPY . .` also takes the git-ignored app/test-results; app/server.js does not exist yet.
 - [x] No other package is added. heic-convert waits on 21.
