@@ -227,6 +227,18 @@ h1 {
     cursor: not-allowed;
 }
 
+/* Escape Overlay: its ways out stack as full-width buttons */
+#igOverlay .continue-btn {
+    display: block;
+    box-sizing: border-box;
+    margin-top: 10px;
+    text-decoration: none;
+}
+
+#igOverlay .continue-btn[hidden] {
+    display: none;
+}
+
 .close-btn {
     position: absolute;
     top: 15px;

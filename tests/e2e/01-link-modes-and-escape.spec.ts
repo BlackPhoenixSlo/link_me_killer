@@ -1,4 +1,5 @@
 import { test, expect, devices, type Page, type Response } from '@playwright/test';
+import { join } from 'node:path';
 
 // Phase 1: every Link travels by its own Mode (docs/spec/phase-01-link-modes-and-escape.md, Testing Decisions).
 // Link Ids, Modes and the Username come from the Fixture Profile the stand-in serves, never from a literal.
@@ -13,6 +14,8 @@ const MODES: Mode[] = ['direct', 'escape_ig', 'deeplink'];
 const REVEAL_PATH = '/.netlify/functions/reveal';
 const FENCE_HEADER = 'x-network-fence';
 const TC = '4242'; // a numeric Tracking Code in the path
+// The iOS Instagram Escape Overlay, opened by an Escape Mode tap, left for the human on every run (plan section 7, step 2).
+const SCREENSHOT = join(__dirname, '..', '..', '.scratch', 'goal_ai', 'shots', '01-link-modes-and-escape.png');
 
 // Fixture read: fails fast, naming what is missing, if no Link has one of the three Modes or no Link is Adult.
 let served: ProfileJson;
@@ -92,18 +95,28 @@ async function realUrlOf(reveal: Response): Promise<string> {
 
 // Navigation recorder: the destination of every Navigation API navigate event, x-safari- and other app
 // schemes included. The page stays put on those schemes, so nothing leaves the machine.
+// Same-task mark: a capture-phase click listener sets a flag that a zero-delay timer clears, so a navigation
+// started after any request or other wait following the tap is not marked (story 15).
+type Navigation = { url: string; inTapTask: boolean };
 async function recordNavigations(page: Page) {
-  const destinations: string[] = [];
-  await page.exposeFunction('__recordNavigation', (url: string) => { destinations.push(url); });
+  const destinations: Navigation[] = [];
+  await page.exposeFunction('__recordNavigation', (url: string, inTapTask: boolean) => {
+    destinations.push({ url, inTapTask });
+  });
   await page.addInitScript(() => {
-    const w = window as unknown as { navigation: EventTarget; __recordNavigation: (url: string) => void };
+    const w = window as unknown as { navigation: EventTarget; __recordNavigation: (url: string, inTapTask: boolean) => void };
+    let inTapTask = false;
+    w.addEventListener('click', () => {
+      inTapTask = true;
+      setTimeout(() => { inTapTask = false; }, 0);
+    }, true);
     w.navigation.addEventListener('navigate', (event) => {
-      w.__recordNavigation((event as unknown as { destination: { url: string } }).destination.url);
+      w.__recordNavigation((event as unknown as { destination: { url: string } }).destination.url, inTapTask);
     });
   });
   return destinations;
 }
-const xSafari = (destinations: string[]) => destinations.filter((url) => url.startsWith('x-safari-'));
+const xSafari = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('x-safari-'));
 
 const escapeOverlay = (page: Page) => page.locator('#igOverlay');
 const closeButton = (page: Page) => escapeOverlay(page).getByRole('button', { name: 'Close' });
@@ -316,8 +329,8 @@ for (const [browser, userAgent] of [
       await expect(escapeOverlay(page)).toBeHidden();
       await card(page, link).click();
       await expect(page).toHaveURL(link.url!);
-      expect(navigations.at(-1)).toBe(link.url);
-      expect(navigations.filter((url) => !url.startsWith('http'))).toEqual([]);
+      expect(navigations.at(-1)?.url).toBe(link.url);
+      expect(navigations.map(({ url }) => url).filter((url) => !url.startsWith('http'))).toEqual([]);
     });
   });
 }
@@ -336,7 +349,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
     await card(page, link).click();
     await expect(page).toHaveURL(link.url!);
-    expect(navigations.at(-1)).toBe(link.url);
+    expect(navigations.at(-1)?.url).toBe(link.url);
     expect(xSafari(navigations)).toEqual([]);
   });
 
@@ -352,7 +365,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     const destination = await realUrlOf(await reveal);
     await expect(page).toHaveURL(destination);
     expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
-    expect(navigations.at(-1)).toBe(destination);
+    expect(navigations.at(-1)?.url).toBe(destination);
     expect(xSafari(navigations)).toEqual([]);
   });
 
@@ -371,7 +384,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     const destination = await realUrlOf(await reveal);
     await expect(page).toHaveURL(destination);
     expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([adult.id]);
-    expect(navigations.at(-1)).toBe(destination);
+    expect(navigations.at(-1)?.url).toBe(destination);
     expect(xSafari(navigations)).toEqual([]);
   });
 
@@ -390,7 +403,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
       await card(page, link).click();
       await expect(page).toHaveURL(link.url!);
-      expect(navigations.at(-1)).toBe(link.url);
+      expect(navigations.at(-1)?.url).toBe(link.url);
       expect(xSafari(navigations)).toEqual([]);
     });
   }
@@ -424,10 +437,105 @@ test.describe('In-App Browser (iOS Instagram)', () => {
       await card(page, link).click();
       await expect(page).toHaveURL(link.url!);
       expect(reveals).toHaveLength(0);
-      expect(navigations.at(-1)).toBe(link.url);
+      expect(navigations.at(-1)?.url).toBe(link.url);
       expect(xSafari(navigations)).toEqual([]);
     });
   }
+
+  // From /{username}/{code} with a Direct default, a tap on the Escape Link; the escape target as the spec spells it.
+  async function tapEscapeFromCode(page: Page) {
+    const link = byMode.escape_ig;
+    await serveVariant(page, directDefault);
+    const navigations = await recordNavigations(page);
+    const reveals = watchReveals(page);
+    await openProfile(page, `/${username}/${TC}`);
+    const target = `https://${new URL(page.url()).host}/${username}/${TC}?link=${link.id}`;
+    await card(page, link).click();
+    return { navigations, reveals, target };
+  }
+
+  test('Direct default: from /{username}/{code}, a tap on the Escape Link fires x-safari- to the escape target in the tap\'s own task', async ({ page }) => {
+    const link = byMode.escape_ig;
+    const { navigations, target } = await tapEscapeFromCode(page);
+    const escapeLink = `x-safari-${target}`;
+
+    await expect.poll(() => xSafari(navigations)).toEqual([escapeLink]);
+    expect(navigations).toContainEqual({ url: escapeLink, inTapTask: true });
+    await expect(page).toHaveURL(`/${username}/${TC}?link=${link.id}`);
+  });
+
+  test('after the Escape tap, the Escape Overlay shows every way out aimed at the escape target, and no Reveal is made', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const { reveals, target } = await tapEscapeFromCode(page);
+    await expect(escapeOverlay(page)).toBeVisible();
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', `x-safari-${target}`);
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Try another way' }))
+      .toHaveAttribute('href', `instagram://extbrowser/?url=${encodeURIComponent(target)}`);
+    await expect(escapeOverlay(page).getByText(target, { exact: true })).toBeVisible();
+    await expect(escapeOverlay(page).getByRole('button', { name: 'Copy link' })).toBeVisible();
+    await expect(escapeOverlay(page).getByText('Open in External Browser')).toBeVisible(); // the app-menu instruction
+    await expect(closeButton(page)).toBeVisible();
+    expect(reveals).toHaveLength(0);
+    await page.screenshot({ path: SCREENSHOT, animations: 'disabled' });
+  });
+
+  test('tapping "Open in browser", then "Try another way", records each one\'s href as a navigation', async ({ page }) => {
+    const { navigations, target } = await tapEscapeFromCode(page);
+    const openInBrowser = `x-safari-${target}`;
+    const tryAnotherWay = `instagram://extbrowser/?url=${encodeURIComponent(target)}`;
+    await expect.poll(() => xSafari(navigations)).toEqual([openInBrowser]); // the tap's own Escape
+
+    await escapeOverlay(page).getByRole('link', { name: 'Open in browser' }).click();
+    await expect.poll(() => xSafari(navigations)).toEqual([openInBrowser, openInBrowser]);
+    await escapeOverlay(page).getByRole('link', { name: 'Try another way' }).click();
+    await expect.poll(() => navigations.at(-1)?.url).toBe(tryAnotherWay);
+  });
+
+  test('"Close" hides the Escape Overlay and puts the address back to /{username}/{code}', async ({ page }) => {
+    const link = byMode.escape_ig;
+    await tapEscapeFromCode(page);
+    await expect(page).toHaveURL(`/${username}/${TC}?link=${link.id}`);
+    await closeButton(page).click();
+    await expect(escapeOverlay(page)).toBeHidden();
+    await expect(page).toHaveURL(`/${username}/${TC}`);
+  });
+
+  test('after an earlier visit to /{username}/{code}, a tap on the Escape Link from /{username} carries the code in the target and the address', async ({ page }) => {
+    const link = byMode.escape_ig;
+    await serveVariant(page, directDefault);
+    const navigations = await recordNavigations(page);
+    await openProfile(page, `/${username}/${TC}`);
+    await openProfile(page, `/${username}`);
+    const host = new URL(page.url()).host;
+
+    await card(page, link).click();
+    await expect.poll(() => xSafari(navigations)).toEqual([`x-safari-https://${host}/${username}/${TC}?link=${link.id}`]);
+    await expect(page).toHaveURL(`/${username}/${TC}?link=${link.id}`);
+  });
+
+  test('after an earlier visit to /{username}/{code}, the overlay on open with an escape_ig default points the address and "Open in browser" at the code; Close puts /{username} back', async ({ page }) => {
+    await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+    await openProfile(page, `/${username}/${TC}`);
+    await openProfile(page, `/${username}`);
+    const host = new URL(page.url()).host;
+
+    await expect(escapeOverlay(page)).toBeVisible();
+    await expect(page).toHaveURL(`/${username}/${TC}`);
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' }))
+      .toHaveAttribute('href', `x-safari-https://${host}/${username}/${TC}`);
+    await closeButton(page).click();
+    await expect(page).toHaveURL(`/${username}`);
+  });
+
+  test.describe('with clipboard permission on the localhost origin', () => {
+    test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+    test('"Copy link" puts the https escape target on the clipboard', async ({ page }) => {
+      const { target } = await tapEscapeFromCode(page);
+      await escapeOverlay(page).getByRole('button', { name: 'Copy link' }).click();
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(target);
+    });
+  });
 
   test('Deeplink default: a Link with its mode removed makes a Reveal request', async ({ page }) => {
     const link = byMode.escape_ig;

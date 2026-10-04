@@ -11,6 +11,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const continueBtn = document.getElementById('continueBtn');
     const igOverlay = document.getElementById('igOverlay');
     const igCloseBtn = document.getElementById('igCloseBtn');
+    const igOpenBtn = document.getElementById('igOpenBtn');
+    const igAltBtn = document.getElementById('igAltBtn');
+    const igTarget = document.getElementById('igTarget');
+    const igCopyBtn = document.getElementById('igCopyBtn');
 
     // Store links data to simulate API fetching
     let linksData = [];
@@ -43,9 +47,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return false;
     }
 
-    // In-App Browser: the plan's pattern, verbatim and case-insensitive (performBounce keeps v1's own Instagram check until ticket 07)
+    // In-App Browser: the plan's pattern, verbatim and case-insensitive (performBounce keeps v1's own Instagram check for the Adult Link and the Link Shortcut until tickets 08 and 10)
     const IN_APP_BROWSER = /Instagram|FBAN|FBAV|Threads|musical_ly|Bytedance|TikTok/i;
     const isInAppBrowser = IN_APP_BROWSER.test(navigator.userAgent || '');
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent || '');
+    const isIOSInstagram = isIOS && /Instagram/i.test(navigator.userAgent || '');
 
     // Routing Logic: Get username and optional ID from URL path
     // Format: /username/id or /username
@@ -82,15 +88,18 @@ document.addEventListener('DOMContentLoaded', () => {
             linksData = data.links;
             renderLinks(linksData);
 
-            // Escape Overlay on open: In-App Browser and a Profile default that resolves to Escape Mode
-            if (isInAppBrowser && defaultMode() === 'escape_ig') {
-                openEscapeOverlay();
-            }
-
             // Check for Deep Link Query Param logic (existing)...
             // Example: /?link=1 (where 1 is the link ID)
+            // Read before the Escape Overlay below rewrites the address
             const urlParams = new URLSearchParams(window.location.search);
             const deepLinkParam = urlParams.get('link');
+
+            // Escape Overlay on open: In-App Browser and a Profile default that resolves to Escape Mode
+            if (isInAppBrowser && defaultMode() === 'escape_ig') {
+                const target = escapeTarget(null);
+                pointAddressAt(target);
+                openEscapeOverlay(target, !linksData.every(link => effectiveMode(link) === 'escape_ig'));
+            }
 
             if (deepLinkParam) {
                 console.log('Deep link detected, fetching secure URL...');
@@ -188,6 +197,8 @@ document.addEventListener('DOMContentLoaded', () => {
             card.addEventListener('click', () => {
                 if (link.isAdult) {
                     openOverlay(link.id);
+                } else if (isInAppBrowser && effectiveMode(link) === 'escape_ig') {
+                    escapeOnTap(link);
                 } else if (effectiveMode(link) === 'deeplink' || !link.url) {
                     // Deeplink Mode always, and any Link without a url, gets its Destination from Reveal
                     revealAndGo(link);
@@ -211,13 +222,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return MODES.includes(link.mode) ? link.mode : defaultMode();
     }
 
+    // Stored Tracking Code: the path code the page keeps, read by Reveal and by the escape target
+    function storedTrackingCode() {
+        return localStorage.getItem('linkme_tracking_id');
+    }
+
     // Reveal URL: Link Id, Username, and a Tracking Code when the Link has tracking on
     function revealUrl(linkId) {
         const link = linksData.find(l => l.id === linkId);
         let fetchUrl = `/.netlify/functions/reveal?id=${linkId}&user=${username}`;
 
         if (link && link.tracking) {
-            let trackingIdToUse = localStorage.getItem('linkme_tracking_id');
+            let trackingIdToUse = storedTrackingCode();
 
             if (!trackingIdToUse) {
                 // Priority 2: Modified - Only use Link Default
@@ -247,6 +263,28 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(err => console.error('Error revealing link:', err));
     }
 
+    // Escape target: https on the host that served the page, with the stored Tracking Code
+    function escapeTarget(linkId) {
+        const code = storedTrackingCode();
+        let path = `/${username}` + (code ? `/${code}` : '');
+        if (linkId) path += `?link=${linkId}`;
+        return { path, url: `https://${window.location.host}${path}` };
+    }
+
+    // Escape link, per platform: iOS hands the target to Safari; anything else has none (Android lands in 09)
+    function escapeLink(targetUrl) {
+        return isIOS ? 'x-safari-' + targetUrl : null;
+    }
+
+    // An Escape Mode tap in an In-App Browser: fired from the tap itself, with no request before it
+    function escapeOnTap(link) {
+        const target = escapeTarget(link.id);
+        pointAddressAt(target);
+        const href = escapeLink(target.url);
+        if (href) window.location.href = href;
+        openEscapeOverlay(target, true);
+    }
+
     // Escape Mode keeps Phase 0's bounce until its own Escape lands; Direct and Deeplink navigate plainly
     function travel(link, url) {
         if (effectiveMode(link) === 'escape_ig') {
@@ -256,21 +294,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Escape Overlay: blocks scrolling while it shows. Close is offered only when some Link would not escape.
-    function openEscapeOverlay() {
-        igCloseBtn.hidden = linksData.every(link => effectiveMode(link) === 'escape_ig');
+    // Address bar while an Escape Overlay shows: the target's path and query; Close puts back the one it replaced
+    let addressBeforeOverlay = null;
+    function pointAddressAt(target) {
+        addressBeforeOverlay = window.location.pathname + window.location.search + window.location.hash;
+        window.history.replaceState({}, '', target.path);
+    }
+
+    // Escape Overlay: every way out aimed at the escape target; blocks scrolling while it shows
+    function openEscapeOverlay(target, closeable) {
+        igOpenBtn.href = escapeLink(target.url) || target.url;
+        igAltBtn.hidden = !isIOSInstagram;
+        if (isIOSInstagram) igAltBtn.href = 'instagram://extbrowser/?url=' + encodeURIComponent(target.url);
+        igTarget.textContent = target.url;
+        igCloseBtn.hidden = !closeable;
         igOverlay.classList.remove('hidden');
         igOverlay.classList.add('active');
         document.body.style.overflow = 'hidden';
     }
 
     function closeEscapeOverlay() {
+        window.history.replaceState({}, '', addressBeforeOverlay);
         igOverlay.classList.remove('active');
         igOverlay.classList.add('hidden');
         document.body.style.overflow = '';
     }
 
     igCloseBtn.addEventListener('click', closeEscapeOverlay);
+
+    igCopyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(igTarget.textContent)
+            .catch(err => console.error('Error copying link:', err));
+    });
 
     // Overlay Logic
     function openOverlay(linkId) {

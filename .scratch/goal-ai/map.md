@@ -34,7 +34,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 | 04 | [Age Gate then Reveal on fixture data with no v1 Snapshot in the loop](issues/04-reveal-on-fixture-without-snapshot.md) | phase-00 | 03 | done |
 | 05 | [Each Link travels by its own Mode in a System Browser](issues/05-modes-in-system-browser.md) | phase-01 | 04 | done |
 | 06 | [The Escape Overlay opens with the page only on an Escape-default Profile in every In-App Browser](issues/06-overlay-on-open-by-default-mode.md) | phase-01 | 05 | done |
-| 07 | [An Escape Mode tap in iOS Instagram escapes to Safari from the tap itself](issues/07-ios-escape-on-tap.md) | phase-01 | 06 | claimed 20261004T191309Z |
+| 07 | [An Escape Mode tap in iOS Instagram escapes to Safari from the tap itself](issues/07-ios-escape-on-tap.md) | phase-01 | 06 | done |
 | 08 | [An Adult Escape Mode Link passes the Age Gate then escapes with no Reveal in the app](issues/08-adult-escape-after-age-gate.md) | phase-01 | 07 | ready-for-agent |
 | 09 | [On Android an Escape opens Chrome or its fallback and a Deeplink Link hands off to its app](issues/09-android-escape-and-deeplink.md) | phase-01 | 07 | ready-for-agent |
 | 10 | [The escaped Link opens by itself in the System Browser credited to the same Tracking Code](issues/10-link-shortcut-lands-escape.md) | phase-01 | 08, 09 | ready-for-agent |
