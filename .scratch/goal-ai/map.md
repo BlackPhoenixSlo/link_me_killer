@@ -37,7 +37,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 | 07 | [An Escape Mode tap in iOS Instagram escapes to Safari from the tap itself](issues/07-ios-escape-on-tap.md) | phase-01 | 06 | done |
 | 08 | [An Adult Escape Mode Link passes the Age Gate then escapes with no Reveal in the app](issues/08-adult-escape-after-age-gate.md) | phase-01 | 07 | done |
 | 09 | [On Android an Escape opens Chrome or its fallback and a Deeplink Link hands off to its app](issues/09-android-escape-and-deeplink.md) | phase-01 | 07 | done |
-| 10 | [The escaped Link opens by itself in the System Browser credited to the same Tracking Code](issues/10-link-shortcut-lands-escape.md) | phase-01 | 08, 09 | ready-for-agent |
+| 10 | [The escaped Link opens by itself in the System Browser credited to the same Tracking Code](issues/10-link-shortcut-lands-escape.md) | phase-01 | 08, 09 | claimed 20261004T191309Z |
 | 11 | [The real-device matrix passes for every Mode on v2's first public https deploy](issues/11-real-device-matrix.md) | phase-01 | 10, 23 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 12 | [The v2 stack is declared and its Compose contract checks pass offline](issues/12-stack-declared-offline.md) | phase-02 | 01 | ready-for-agent |
 | 13 | [The Operator's network commands fetch the stack's packages and images](issues/13-network-commands.md) | phase-02 | 12 | ready-for-agent |

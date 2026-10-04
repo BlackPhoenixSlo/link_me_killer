@@ -4,7 +4,7 @@ Spec: docs/spec/phase-01-link-modes-and-escape.md
 Covers: user stories 22, 26, 31, 32, 33, 34, 40, 41, 42, 43, 45
 Seams: the public page in Chromium under Playwright, served by the Dev-Server Stand-in, with the desktop Chrome and iOS Instagram User-Agents. For the hop, a fresh browser context with a desktop User-Agent (fresh storage, as in a System Browser). Observed through the navigation recorder, the network fence's Reveal watch (`waitForResponse`) and Profile variants. Closed by the spec's Acceptance block
 Blocked by: 08: An Adult Escape Mode Link passes the Age Gate then escapes with no Reveal in the app, 09: On Android an Escape opens Chrome or its fallback and a Deeplink Link hands off to its app
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T20:43:42Z
 
 **What to build:** The Link Shortcut is read when the page loads, before the address bar is touched. So `/fixture/{code}?link={Link Id}` keeps both the Tracking Code and the Link Shortcut, and the Link then follows its effective Mode:
 - **In a System Browser,** the Link gets its Destination as a tap would. That means Reveal with that code for an Adult Link, a Link with no url and a Deeplink Link, and the url as given otherwise. It then travels by its Mode, with no Age Gate, since v1's Link Shortcut has none. Escape Mode here is Direct Mode. The address is then cleaned to `/fixture`.
