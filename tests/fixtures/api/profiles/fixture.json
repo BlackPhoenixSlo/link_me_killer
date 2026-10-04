@@ -1,0 +1,60 @@
+{
+  "profile": {
+    "username": "fixture",
+    "displayName": "Fixture Profile",
+    "avatarUrl": "/images/linkicon.webp",
+    "verified": true,
+    "bio": "Fixture Profile for tests",
+    "mode": "escape_ig"
+  },
+  "links": [
+    {
+      "url": "",
+      "id": "uFHckeGfBYDNfpAP",
+      "backgroundImage": "/images/onlyicon.webp",
+      "tracking": true,
+      "title": "Adult Link",
+      "isAdult": true,
+      "mode": "escape_ig",
+      "icon": "/images/onlyicon.webp",
+      "geo": {
+        "default": "10",
+        "US": {
+          "default": "10",
+          "NJ": "15"
+        },
+        "SI": "40"
+      }
+    },
+    {
+      "url": "https://example.com/direct",
+      "id": "iF3AZ1X2Ba6LFAbG",
+      "tracking": false,
+      "title": "Direct Link",
+      "isAdult": false,
+      "mode": "direct",
+      "icon": "/images/linkicon.webp",
+      "geo": null
+    },
+    {
+      "url": "https://example.com/escape",
+      "id": "x1FC7NfyBolRNc5U",
+      "tracking": false,
+      "title": "Escape Link",
+      "isAdult": false,
+      "mode": "escape_ig",
+      "icon": "/images/igicon.webp",
+      "geo": null
+    },
+    {
+      "url": "https://example.com/deeplink",
+      "id": "z5oIyUj3xHaLAqeY",
+      "tracking": false,
+      "title": "Deeplink Link",
+      "isAdult": false,
+      "mode": "deeplink",
+      "icon": "/images/twitchicon.webp",
+      "geo": null
+    }
+  ]
+}
