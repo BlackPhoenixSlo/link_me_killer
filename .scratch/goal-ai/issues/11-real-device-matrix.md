@@ -4,7 +4,7 @@ Spec: docs/spec/phase-01-link-modes-and-escape.md
 Covers: user stories 8, 9, 12, 14, 15, 16, 17, 18, 19, 22, 26, 35, 36, 45
 Seams: real phones on a public https host, outside Playwright: an iPhone and an Android phone × the Instagram, Facebook, Threads and TikTok In-App Browsers, plus Safari (iOS) and Chrome (Android). The throwaway Profile on v2's first public https deploy, with results recorded as RUN.md rows (spec, Acceptance, manual lines)
 Blocked by: 10: The escaped Link opens by itself in the System Browser credited to the same Tracking Code, 23: v2 serves every v1 Profile identically on its public https host on the VPS
-Status: parked — needs-human: who holds ports 80/443 on the VPS
+Status: parked — VPS step: the Operator runs the commands (plan §11; ports answered: Traefik fronts Caddy)
 
 **What to build:** Nothing new in code. This ticket closes Phase 1. The plan's DONE for this Phase is "test matrix passes for every mode on real devices" (plan section 5), so Phase 1 stays open until this ticket passes, even though 05–10 land offline.
 
@@ -21,11 +21,7 @@ When a row fails, this ticket stays open with the observation pasted in (plan se
 - "Try another way" escaping correctly from the other apps: it is offered there too.
 - A Threads detection miss: park it for the Operator with the observed User-Agent. Once the Operator widens the plan's pattern, adding the observed word is this Phase's one-line fix.
 
-**Why parked.** The matrix needs a public https host, since every escape link is https and the stand-in is plain http on localhost. That host is Phase 2's first public deploy. That deploy waits on who holds ports 80 and 443 on the VPS (docs/spec/plan-review.md, Needs the human, item 1). The human settles that with:
-
-```sh
-ssh root@srv1395798.hstgr.cloud 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Ports}}"; ss -ltnp "( sport = :80 or sport = :443 )"'
-```
+**Why parked.** The matrix needs a public https host, since every escape link is https and the stand-in is plain http on localhost. That host is Phase 2's first public deploy, which is 23's VPS step for the Operator. The ports question is answered (plan §11, 2026-10-04; docs/spec/plan-review.md, Needs the human, item 1): Traefik keeps 80 and 443 and fronts v2's Caddy, so nothing here waits on a question.
 
 Real phones, the deploy and the throwaway Profile are the human's too.
 

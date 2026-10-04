@@ -24,7 +24,7 @@ ofl.ink v2: a Docker Compose link-in-bio service (Caddy, Hono on Node, PocketBas
 
 ## Tickets
 
-Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets: 34 ready-for-agent, 2 parked on network commands, 8 parked needs-human.
+Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (2026-10-04) answered ports (Traefik fronts Caddy) and country source (Cloudflare) and closed the network gate: 24 done by the Operator, 13/37/42 ready-for-agent, 11/23/32/38/43 parked only as Operator VPS steps, 44 parked needs-human.
 
 | NN | Ticket | Spec | Blocked by | Status |
 |---|---|---|---|---|
@@ -38,9 +38,9 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets: 34 ready-fo
 | 08 | [An Adult Escape Mode Link passes the Age Gate then escapes with no Reveal in the app](issues/08-adult-escape-after-age-gate.md) | phase-01 | 07 | ready-for-agent |
 | 09 | [On Android an Escape opens Chrome or its fallback and a Deeplink Link hands off to its app](issues/09-android-escape-and-deeplink.md) | phase-01 | 07 | ready-for-agent |
 | 10 | [The escaped Link opens by itself in the System Browser credited to the same Tracking Code](issues/10-link-shortcut-lands-escape.md) | phase-01 | 08, 09 | ready-for-agent |
-| 11 | [The real-device matrix passes for every Mode on v2's first public https deploy](issues/11-real-device-matrix.md) | phase-01 | 10, 23 | parked — needs-human: ports 80/443 |
+| 11 | [The real-device matrix passes for every Mode on v2's first public https deploy](issues/11-real-device-matrix.md) | phase-01 | 10, 23 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 12 | [The v2 stack is declared and its Compose contract checks pass offline](issues/12-stack-declared-offline.md) | phase-02 | 01 | ready-for-agent |
-| 13 | [The Operator's network commands fetch the stack's packages and images](issues/13-network-commands.md) | phase-02 | 12 | parked — network (commands in ticket) |
+| 13 | [The Operator's network commands fetch the stack's packages and images](issues/13-network-commands.md) | phase-02 | 12 | ready-for-agent |
 | 14 | [The v1 Import repairs or refuses every v1 file before it writes anything](issues/14-import-repairs-or-refuses.md) | phase-02 | 03 | ready-for-agent |
 | 15 | [The v1 Import writes the Fixture Profile into PocketBase on a running test stack](issues/15-import-writes-fixture.md) | phase-02 | 13, 14 | ready-for-agent |
 | 16 | [The Fixture Profile is served by v2's stack and every Phase 0 and Phase 1 spec passes on it](issues/16-fixture-served-on-stack.md) | phase-02 | 10, 15 | ready-for-agent |
@@ -50,8 +50,8 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets: 34 ready-fo
 | 20 | [A PocketBase admin edit shows on the next page load while PocketBase's API stays closed](issues/20-live-edit-closed-api.md) | phase-02 | 16 | ready-for-agent |
 | 21 | [A photo uploaded in any D4 format is stored upright and resized as WebP](issues/21-image-upload-webp.md) | phase-02 | 16 | ready-for-agent |
 | 22 | [Reveal and /r answer only v2's own origin within a per-client limit](issues/22-reveal-guard.md) | phase-02 | 18, 19, 20, 21 | ready-for-agent |
-| 23 | [v2 serves every v1 Profile identically on its public https host on the VPS](issues/23-vps-deploy.md) | phase-02 | 22 | parked — needs-human: ports 80/443 |
-| 24 | [The Operator pulls the local mail catcher's image](issues/24-mail-catcher-image.md) | phase-03 | None | parked — network (commands in ticket) |
+| 23 | [v2 serves every v1 Profile identically on its public https host on the VPS](issues/23-vps-deploy.md) | phase-02 | 22 | parked — VPS step: the Operator runs the commands (plan §11) |
+| 24 | [The Operator pulls the local mail catcher's image](issues/24-mail-catcher-image.md) | phase-03 | None | done |
 | 25 | [Anyone with the sign-up link creates an account and claims a Username](issues/25-sign-up-and-claim.md) | phase-03 | 20 | ready-for-agent |
 | 26 | [A verified Creator goes through Onboarding to a live Profile whose Links act like imported ones](issues/26-onboarding-to-live-profile.md) | phase-03 | 25, 18, 21 | ready-for-agent |
 | 27 | [A Creator changes their Profile in the Editor and its default Mode reaches the page](issues/27-editor-profile-and-mode.md) | phase-03 | 26 | ready-for-agent |
@@ -59,18 +59,18 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets: 34 ready-fo
 | 29 | [Log-in lands a Creator where they left off and a handed-over Profile opens in the Editor](issues/29-log-in-lands-where-left.md) | phase-03 | 26 | ready-for-agent |
 | 30 | [Only a Profile's owner and the Operator can read or change it through PocketBase's API](issues/30-owner-rules-over-http.md) | phase-03 | 26 | ready-for-agent |
 | 31 | [Verification and reset emails reach the local mail catcher and their links work](issues/31-mail-links.md) | phase-03 | 24, 22, 27, 28, 29, 30 | ready-for-agent |
-| 32 | [Sign-up runs on the VPS with the Operator's mail and nightly backups](issues/32-vps-sign-up-live.md) | phase-03 | 31, 23 | parked — needs-human: ports 80/443 |
+| 32 | [Sign-up runs on the VPS with the Operator's mail and nightly backups](issues/32-vps-sign-up-live.md) | phase-03 | 31, 23 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 33 | [A Page View and a Click through /r reach the Creator's Stats page](issues/33-page-view-and-click-reach-stats.md) | phase-04 | 01, 10, 18, 20, 27, 29 | ready-for-agent |
 | 34 | [Reveals and Link Shortcuts count as Clicks and Stats read per Link per day per country](issues/34-reveals-and-shortcuts-count.md) | phase-04 | 33, 22 | ready-for-agent |
 | 35 | [A Tracking Code stays with the Profile it arrived on](issues/35-tracking-code-stays-with-profile.md) | phase-04 | 33, 01, 10, 18 | ready-for-agent |
 | 36 | [Only the owner reads a Profile's Stats and recording never blocks a Click or a deletion](issues/36-owner-only-stats-and-safe-recording.md) | phase-04 | 34, 35, 22, 31 | ready-for-agent |
-| 37 | [Events carry each Visitor's real country from the production country source](issues/37-production-country-source.md) | phase-04 | 36, 42 | parked — needs-human: country source |
-| 38 | [A phone inside Instagram is recorded as Instagram on v2's VPS host](issues/38-instagram-recorded-on-vps.md) | phase-04 | 36, 32 | parked — needs-human: ports 80/443 |
+| 37 | [Events carry each Visitor's real country from the production country source](issues/37-production-country-source.md) | phase-04 | 36, 42 | ready-for-agent |
+| 38 | [A phone inside Instagram is recorded as Instagram on v2's VPS host](issues/38-instagram-recorded-on-vps.md) | phase-04 | 36, 32 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 39 | [Custom Domains and Spare Domains listed in PocketBase serve Profiles by host and pass the TLS Ask](issues/39-domains-served-by-host.md) | phase-05 | 22, 30 | ready-for-agent |
 | 40 | [On a Custom Domain or Spare Domain every Mode and Escape and Reveal works and counts as on ofl.ink](issues/40-every-host-behaves-as-ofl-ink.md) | phase-05 | 39, 10, 36 | ready-for-agent |
 | 41 | [Caddy asks the app before every certificate and the Cutover runbook is written](issues/41-caddy-asks-and-runbook-written.md) | phase-05 | 40, 29 | ready-for-agent |
-| 42 | [Visitor location trusts only the production country source and ofl.ink's DNS is ready for a one-record switch](issues/42-country-source-and-dns-ready.md) | phase-05 | 41 | parked — needs-human: country source |
-| 43 | [The Operator switches ofl.ink to v2 by one DNS change while v1 stays live](issues/43-cutover-runbook.md) | phase-05 | 41, 42, 23, 32, 38 | parked — needs-human: ports 80/443; country source |
+| 42 | [Visitor location trusts only the production country source and ofl.ink's DNS is ready for a one-record switch](issues/42-country-source-and-dns-ready.md) | phase-05 | 41 | ready-for-agent |
+| 43 | [The Operator switches ofl.ink to v2 by one DNS change while v1 stays live](issues/43-cutover-runbook.md) | phase-05 | 41, 42, 23, 32, 38 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 44 | [Bio links move to a warmed Spare Domain the day ofl.ink is Flagged](issues/44-spare-domain-rotation.md) | phase-05 | 43 | parked — needs-human: Spare Domain vs Meta Flag |
 
 ## Decisions so far
@@ -105,17 +105,17 @@ See plan-review.md `## Cut (YAGNI)`. Headlines: any edit to v1 (repo, Netlify, n
 
 ## Needs the human
 
-1. **Who holds ports 80/443 on the VPS.** Parks 11, 23, 32, 38, 43. Settled by `ssh root@srv1395798.hstgr.cloud 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Ports}}"; ss -ltnp "( sport = :80 or sport = :443 )"'`.
-2. **Production country source: Cloudflare header or geo-IP on the VPS.** Parks 37, 42, 43. First evidence: `dig +short NS ofl.ink; dig +noall +answer DS ofl.ink`. If the zone is already on Cloudflare, Cloudflare wins; otherwise the Operator weighs the nameserver move (plus DNSSEC off/on) against a geo-IP licence and monthly refresh. Geo Rules on DNS-only Custom Domains fall back to US under Cloudflare.
+1. **Ports 80/443 — RESOLVED by plan §11 (2026-10-04):** Traefik holds them; v2's Caddy runs behind a Traefik TCP router (HostSNI(`*`), TLS passthrough, PROXY protocol) and an HTTP router for non-n8n hosts. Tickets 11, 23, 32, 38, 43 stay parked only for the Operator's VPS commands.
+2. **Country source — RESOLVED by plan §11 (2026-10-04): Cloudflare.** Nameservers move Namecheap → Cloudflare when ticket 42 asks (human step). Geo Rules on DNS-only Custom Domains fall back to US, accepted. 37 and 42 unparked.
 3. **Whether a Spare Domain survives a Meta Flag.** Parks 44. Settled only after the first real Flag.
-4. **Network commands** (floor 2), ticket 13: `mkdir -p app && (cd app && pnpm init)` if app/package.json is absent; `pnpm --dir app add hono @hono/node-server sharp`; `docker pull alpine:3`; `docker compose --env-file tests/e2e.env build`; `pnpm --dir app add heic-convert` only if the HEIC case fails. Ticket 24: `docker pull axllent/mailpit`.
+4. **Network commands — DONE by the Operator 2026-10-04 (plan §11):** app/package.json with hono, @hono/node-server, sharp; alpine:3, axllent/mailpit pulled; PocketBase 0.40.4 zips in vendor/. Builds must be offline; a ticket whose build needs the network parks.
 5. Human-only acts without a question: domains, Cloudflare account, SMTP credential, real phones. Full list in plan-review.md `## Needs the human`.
 
 ## Assumptions to veto
 
 Sharpest first (full list of 199 flags in plan-review.md `## Open questions`):
-1. **Ports 80/443 are free for v2's Caddy.** If wrong: Phase 2's VPS lines, Phase 1 Done and all of Phase 5 stall; forcing them risks live n8n.
-2. **The registrar can delegate and a 300 s TTL bounds the switch and rollback.** If wrong: the live ofl.ink can stop resolving during a zone move, or a rollback outlasts a TTL.
+1. **Traefik can front Caddy by file-editable config with SNI passthrough and PROXY protocol without breaking n8n** (plan §11). If wrong: the VPS deploy (23) and everything after it stall until the Operator chooses again.
+2. **The Namecheap → Cloudflare zone move is safe and a 300 s TTL bounds the switch and rollback** (narrowed by plan §11). If wrong: the live ofl.ink can stop resolving during a zone move, or a rollback outlasts a TTL.
 3. **No v1 Import runs after the switch (a RUN.md rule, not a code guard).** If wrong: one re-run overwrites every Editor edit on imported Profiles; only a backup undoes it.
 4. **PocketBase has usable scheduled backups.** If wrong: v2-only data from Phase 3's deploy on dies with the disk.
 5. **Cloudflare overwrites a forged CF-IPCountry.** If wrong: Stats countries and US-state Geo Rule codes become forgeable. Moot under geo-IP.

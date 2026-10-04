@@ -14,3 +14,8 @@ ASSUMPTION: section 8's rule that the live n8n workflow is "NOT touched by any P
 - Custom Domains and Spare Domains point at this VPS's address, so moving v2 to another host later means every Creator re-points their DNS.
 - v2's public page starts as a copy of v1's, taken from the v1 Snapshot, and then diverges: Mode and the Escape fixes exist only in v2 (ADR 0005).
 - n8n already answers at its own hostname on this VPS, so whatever fronts it may already hold ports 80 and 443, which v2's Caddy also needs. Only a look at the live VPS can settle this; it is left to the Operator.
+
+## Addendum, 2026-10-04 (plan §11)
+
+The Operator's look at the VPS answers the last consequence above: Traefik (container `n8n-traefik-1`) holds ports 80 and 443 and fronts n8n. Plan §11 decides that Traefik keeps them and fronts v2's Caddy. A TCP router with ``HostSNI(`*`)`` passes TLS through to Caddy on 443, below n8n's own HostSNI rule, and an HTTP router on 80 sends every host that is not n8n's to Caddy. Caddy keeps TLS and on-demand certificates, and n8n stays out of v2's Compose file. The Operator adds the routers on the VPS; nothing in this repo holds Traefik's config (Phase 2 spec, Further Notes, Ports 80 and 443).
+ASSUMPTION: flagged; overturned if Traefik's config is not file-editable on the VPS or SNI passthrough breaks n8n.

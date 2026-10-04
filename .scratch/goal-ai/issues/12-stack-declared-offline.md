@@ -14,13 +14,13 @@ Status: ready-for-agent
 
 The environment contract is written down with the spec's defaults: the site address, the HTTP and HTTPS ports, PocketBase's loopback port, the superuser email and password (both required) and the Reveal limit. On the VPS these live in an untracked `.env`, which is now git-ignored. The committed test env holds test-only values: its own Compose project name, the baseURL's port, a PocketBase port that clashes with no other local stack, and the test Reveal limit.
 
-The two images are described here but not built; 13 builds them.
-- **The app image** is on the Node 22 Alpine base that is already local, and carries the Page Copy. It installs packages in a layer keyed only by the app's manifest and lockfile, so a later code change rebuilds with no network. The app's manifest is written here with every field except its dependencies (name, private, module type). 13 then only adds packages, and no later ticket needs to touch the manifest. Touching it would mean another network fetch.
-- **The PocketBase image** is on `alpine:3` and uses a pinned official release, at least 0.23. The release is fetched in a run step keyed by the version, never added from a URL, so a cached build needs no network. It picks the archive for the architecture it is built on, so it builds on this Mac and on the VPS. Migrations are copied in, and the superuser is upserted from the environment on every start.
+The two images are described here but not built; 13 builds them. Plan §11's offline build contract is binding on both Dockerfiles (rung 2, 2026-10-04): `docker compose build` makes no network request, and if it would, the ticket parks rather than fetch.
+- **The app image** is on the Node 22 Alpine base that is already local, and carries the Page Copy. It COPYs `app/`, `node_modules` included, and runs no `pnpm install` (plan §11). The app's manifest and lockfile already exist, written by the Operator's `pnpm --dir app add` on 2026-10-04 (hono 4.13.13, @hono/node-server 2.1.3, sharp 0.35.5), and this ticket does not touch them.
+- **The PocketBase image** is on `alpine:3` and uses the official release pinned at 0.40.4 (plan §11). It COPYs the archive from the git-ignored `vendor/` and never curls or adds a URL: `pocketbase_0.40.4_linux_arm64.zip` on this Mac, `pocketbase_0.40.4_linux_amd64.zip` on the VPS. It picks the archive for the architecture it is built on, so it builds on both. Migrations are copied in, and the superuser is upserted from the environment on every start.
 
-ASSUMPTION: this ticket covers declarations only, one layer. Nothing can run before 13's network commands, and the invocation keeps offline work ready-for-agent (rung 4: nothing here is irreversible). Overturned if the Operator has already run the network commands. This ticket then folds into 15.
+ASSUMPTION: this ticket covers declarations only, one layer. Nothing can run before 13's network commands, and the invocation keeps offline work ready-for-agent (rung 4: nothing here is irreversible). Overturned if the Operator has already run the network commands. This ticket then folds into 15. The Operator ran them on 2026-10-04, but plan §11's build order keeps 12 as its own step before 13 (rung 2), so it does not fold.
 
-ASSUMPTION: the pin is the newest PocketBase release the implementer can name offline, at least 0.23. The human may raise it before 13's build (the spec's evidence-blocked pin). Overturned by the human's pin.
+The PocketBase pin is 0.40.4, set by the Operator (plan §11, 2026-10-04; rung 2). The earlier ASSUMPTION that the implementer picks the newest release it can name offline is overturned by that pin.
 
 - [ ] The spec's Acceptance lines that resolve the Compose file pass offline:
   - the config is valid;
@@ -28,6 +28,6 @@ ASSUMPTION: the pin is the newest PocketBase release the implementer can name of
   - the JSON predicate holds: no app port, the app built from the app directory, no v1 Snapshot mount and only read-only binds on the app, PocketBase on loopback only with its data volume at the checked path, Caddy's data volume, `unless-stopped` on all three, and a PocketBase health check.
 - [ ] `.env` is git-ignored, and no `.env` is created.
 - [ ] The committed test env sets the port 4173, the Reveal limit 600, a PocketBase port and a Compose project name of its own. It holds no real credential.
-- [ ] The app's manifest exists with no dependencies, and no lockfile is written by hand.
+- [ ] The app's manifest exists with no dependencies, and no lockfile is written by hand. Overtaken 2026-10-04 (plan §11): the manifest and lockfile are the Operator's, with their dependencies, and are not edited here.
 - [ ] Nothing here pulls an image, builds or installs a package, and nothing reads the v1 Snapshot.
 - [ ] `./check.sh` still passes on the Dev-Server Stand-in, unchanged.

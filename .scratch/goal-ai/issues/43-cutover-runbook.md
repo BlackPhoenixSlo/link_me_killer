@@ -2,27 +2,23 @@
 
 Spec: docs/spec/phase-05-cutover-and-domains.md
 Covers: user stories 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 30, 35, 36, 38, 39, 42
-Seams: `RUN.md`'s `## Cutover`, run by the Operator from the Mac and the VPS over SSH; PocketBase's admin UI through Phase 2's SSH tunnel; the DNS dashboard 42's answer leaves ofl.ink on; n8n's Executions list; Netlify's Deploys screen, read only; real phones
+Seams: `RUN.md`'s `## Cutover`, run by the Operator from the Mac and the VPS over SSH; PocketBase's admin UI through Phase 2's SSH tunnel; Cloudflare's dashboard, where 42 moves ofl.ink's zone (plan §11); n8n's Executions list; Netlify's Deploys screen, read only; real phones
 Blocked by: 41: Caddy asks the app before every certificate and the Cutover runbook is written, 42: Visitor location trusts only the production country source and ofl.ink's DNS is ready for a one-record switch, 23: v2 serves every v1 Profile identically on its public https host on the VPS, 32: Sign-up runs on the VPS with the Operator's mail and nightly backups, 38: A phone inside Instagram is recorded as Instagram on v2's VPS host
-Status: parked — needs-human: who holds ports 80/443 on the VPS; production country source (Cloudflare header or geo-IP on the VPS)
+Status: parked — VPS step: the Operator runs the commands (plan §11; ports answered: Traefik fronts Caddy)
 
 **What to build:** Nothing new. Visitors who tap any `ofl.ink/{username}` or `ofl.ink/{username}/{code}` link already in a bio reach v2 with their Tracking Code, and v1 stays serving, unedited, on `linkmeclone3.netlify.app` indefinitely as the live fallback. Nothing in Netlify ever changes (plan section 10), so the runbook has no irreversible step. The Operator runs `RUN.md`'s `## Cutover` in order; each criterion below is one of its steps. The switch is one change to ofl.ink's apex record (and `www` if it exists), and the rollback is the same change reversed. Nothing in Caddy or the app changes on the day, the old GitHub repo is only read, and no agent touches the Netlify site, its deploys or the n8n Form. Step 3 (the zone move or TTL change) is ticket 42's; step 15 (rotation after a Flag) is ticket 44's.
 
-**Why parked.** Two answers only the human can give:
-- **Who holds ports 80/443 on the VPS.** On-demand TLS is v2's Caddy's, so TLS on 443 must reach it. If a proxy in front of n8n holds the ports, the Operator chooses again (ADR 0001) and this ticket waits. Settled by:
-
-  ```sh
-  ssh root@srv1395798.hstgr.cloud 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Ports}}"; ss -ltnp "( sport = :80 or sport = :443 )"'
-  ```
-- **The production country source,** answered in ticket 42. Where steps 1, 4, 7, 8, 9 and 13 change records or probe headers, they run as 42 leaves `RUN.md`. The commands below are the Cloudflare answer, as the spec writes them.
+**Why parked.** Every step is the Operator's: the live VPS, DNS, Cloudflare, purchases and real phones (floor 2). The two questions it once waited on are answered (plan §11, 2026-10-04):
+- **Ports 80/443.** Traefik keeps them and fronts v2's Caddy, by a TCP router with ``HostSNI(`*`)`` and TLS passthrough on 443 and an HTTP router on 80, which 23's VPS step adds. TLS on 443 therefore reaches Caddy, whose on-demand TLS this Phase needs. Step 1 records it.
+- **The production country source** is Cloudflare, built in ticket 42. Where steps 1, 4, 7, 8, 9 and 13 change records or probe headers, they run as 42 leaves `RUN.md`. The commands below are the Cloudflare answer, as the spec writes them.
 
 Set once: `USERNAME` (an imported Username), `VPS` (ssh host), `V2_DIR` (v2's directory on the VPS), `V2_HOST` (Phase 2's v2 host), `VPS_IPV4`, `SPARE` (a Spare Domain), `DOMAIN` (a Creator's Custom Domain), `LINK_ID` (a Link Id of `$USERNAME`'s Profile), `LIMIT` (the VPS's Reveal limit per minute).
 
-- [ ] **1. Ports, deploy and the ask.** Record who holds ports 80 and 443 in `RUN.md`; anything but v2's Caddy (or Docker's proxy for it) stops here until the Operator chooses. Then deploy this Phase by Phase 2's procedure with `PRIMARY_HOSTS=ofl.ink,<V2_HOST>` (append `,www.ofl.ink` if step 2 shows it) and, under Cloudflare, `CLOUDFLARE_RANGES` filled by 42's command, in the VPS `.env`, and prove the ask Caddy uses:
+- [ ] **1. Ports, deploy and the ask.** Record who holds ports 80 and 443 in `RUN.md`: Traefik (`n8n-traefik-1`) with 23's two routers to v2's Caddy (plan §11). Anything else stops here until the Operator chooses again. Then deploy this Phase by Phase 2's procedure with `PRIMARY_HOSTS=ofl.ink,<V2_HOST>` (append `,www.ofl.ink` if step 2 shows it) and, under Cloudflare, `CLOUDFLARE_RANGES` filled by 42's command, in the VPS `.env`, and prove the ask Caddy uses:
 
   ```sh
   ssh "$VPS" "sudo ss -ltnp '( sport = :80 or sport = :443 )'"
-  rsync -a --exclude node_modules --exclude .scratch ./ "$VPS:$V2_DIR/" && ssh "$VPS" "cd $V2_DIR && docker compose up -d --build --wait"
+  rsync -a --exclude /node_modules --exclude .scratch ./ "$VPS:$V2_DIR/" && ssh "$VPS" "cd $V2_DIR && docker compose up -d --build --wait"
   test "$(curl -s -o /dev/null -w '%{http_code}' "https://$V2_HOST/$USERNAME")" = 200
   E="$(ssh "$VPS" "cd $V2_DIR && docker compose exec -T caddy caddy adapt --config /etc/caddy/Caddyfile" | grep -o '"endpoint":"[^"]*"' | cut -d'"' -f4)"
   ssh "$VPS" "cd $V2_DIR && docker compose exec -T caddy wget -q -O /dev/null '$E?domain=ofl.ink'"              # says yes

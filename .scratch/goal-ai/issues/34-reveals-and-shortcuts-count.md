@@ -16,7 +16,7 @@ Status: ready-for-agent
 - **Unknown.** `XX` shows as "Unknown" in the Countries table and the Country filter.
 - **Empty range.** A range with no rows reads "No Page Views or Clicks in this range yet."
 
-ASSUMPTION: the spec's test 4 is parked with the country source (37), but its first Visitor, with no country header, lands here. That case reads the same under either answer, since a local client has no country either way, and it is the ready half of story 7 (rung 5). 37 adds test 4's other three Visitors. Overturned if the chosen source gives the test stack's own address a country. The case then moves to 37.
+ASSUMPTION: the spec's test 4 waits on the production country source (37, Cloudflare per plan §11), but its first Visitor, with no country header, lands here. That case reads the same under either answer, since a local client has no country either way, and it is the ready half of story 7 (rung 5). 37 adds test 4's other three Visitors. Overturned if the chosen source gives the test stack's own address a country. The case then moves to 37.
 
 ASSUMPTION (the spec's, evidence blocked): a Creator session issued at real time stays valid in a browser whose clock is one day ahead. Overturned by a shorter token lifetime. The test then signs in again after moving the clock.
 

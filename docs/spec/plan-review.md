@@ -8,7 +8,7 @@ Specs 00–05 (`docs/spec/phase-0*.md`), read at HEAD 16d5a11, with the six-hats
 |---|---|---|---|
 | 1 | 0 — New-repo ground | `phase-00-new-repo-ground.md` | none |
 | 2 | 1 — Link modes and escape | `phase-01-link-modes-and-escape.md` | Phase 0. Done also waits for the real-device matrix on Phase 2's first public deploy. |
-| 3 | 2 — VPS foundation | `phase-02-vps-foundation.md` | Phases 0 and 1. The VPS lines and Done also wait for the ports 80/443 answer. |
+| 3 | 2 — VPS foundation | `phase-02-vps-foundation.md` | Phases 0 and 1. The VPS lines and Done also wait for the ports 80/443 answer (answered 2026-10-04 by plan §11: Traefik fronts Caddy). |
 | 4 | 3 — Auth and editor | `phase-03-auth-and-editor.md` | Phases 1 and 2 (Phase 0 only through Phase 2). |
 | 5 | 4 — Stats | `phase-04-stats.md` | Phases 0, 1, 2 and 3. Production countries also need Phase 5, but landing does not. The country-source line is parked. |
 | 6 | 5 — Cutover and domains | `phase-05-cutover-and-domains.md` | Phases 1, 2, 3 and 4 (Phase 0 only through Phase 2). The Cloudflare parts are parked. |
@@ -64,7 +64,7 @@ Ids follow the report: W white, R red, K black, Y yellow, G green, U blue, C the
 - **Y1 accept.** No change. The three layers that keep Destinations private stay as specified (Phase 2 projection, Phase 3 rules, leak scans).
 - **Y2 accept.** No change. The hermetic loop and v1's own reveal.js as the parity oracle stay.
 - **Y3 partial** (Phase 5). The claim holds for the record switch, the import's warnings and the hand-over. It does not hold for the zone move with DNSSEC, which is slow to undo, or for deleting the Netlify site, which is irreversible and is the Operator's own act (Phase 5, step 16). Plan §10 (2026-10-04) drops the site deletion and step 16, so only the zone move remains.
-- **G1 needs-human** (Phases 2, 4 and 5). Cloudflare or geo-IP on the VPS: see Needs the human, item 2.
+- **G1 needs-human** (Phases 2, 4 and 5). Cloudflare or geo-IP on the VPS: see Needs the human, item 2. Resolved 2026-10-04 by plan §11: Cloudflare.
 - **G2 reject.** The order stays 0→1→2, for reasons the report did not weigh:
   - **Rung 1: Phase 2 depends on Phase 1** (Phase 2 spec, Depends on).
     - Its Profile JSON sends a Deeplink Mode Link with an empty `url`. Only Phase 1's page takes such a Link through Reveal.
@@ -210,10 +210,12 @@ Every `ASSUMPTION:` across the specs, grouped, sharpest first. 199 raw flags at 
    - Assumes: n8n has no proxy of its own on those ports, or its proxy can pass TLS through by SNI.
    - If wrong: Phase 2's VPS lines and Done stall, and so do Phase 1's Done and all of Phase 5. Forcing the ports risks the live n8n.
    - Overturned by: the ssh command under Needs the human. This is needs-human.
+   - Resolved 2026-10-04 by plan §11: Traefik (`n8n-traefik-1`) holds them. It keeps them and fronts v2's Caddy, by a TCP router ``HostSNI(`*`)`` with TLS passthrough on 443 and an HTTP router on 80 for every host that is not n8n's. Plan §11's own flag replaces this one: overturned if Traefik's config is not file-editable on the VPS or SNI passthrough breaks n8n.
 2. **The country source and the zone move** (Phase 4 Contracts, Visitor country; Phase 5 DNS records and Moving the zone; Phase 5 Further Notes: DNS host, registrar, `www`, the 300 s TTL).
    - Assumes: the registrar can delegate, step 2 records every record including DS, and a 300 s TTL bounds the switch and a rollback to about 5 minutes.
    - If wrong: the live ofl.ink can stop resolving during the move, or a rollback outlasts a TTL while every bio link is down.
    - Overturned by: step 2's `dig` and `whois`. Parked needs-human.
+   - Narrowed 2026-10-04 by plan §11: the source is Cloudflare, so the zone moves. The nameservers are Namecheap's (`dns1/dns2.registrar-servers.com`) and there is no DS record, so the move needs no DNSSEC step. Still open, and settled by steps 2 and 3: the registrar's delegation, `www`, and the 300 s TTL.
 3. **ofl.ink's certificate issues through Cloudflare at the switch** (Phase 5 Contracts, ofl.ink's certificate; DNS records, evidence blocked).
    - If wrong: Cloudflare 52x errors right after the switch, until the DNS-only fallback or a rollback.
    - Overturned by: step 9's certificate check. Moot under geo-IP.
@@ -308,6 +310,7 @@ Every `ASSUMPTION:` across the specs, grouped, sharpest first. 199 raw flags at 
 **By spec.**
 
 1. **Ports 80/443 on the VPS** (Phase 2, D4b and Further Notes; Phase 5, step 1; this gates Phase 1's Done too).
+   - **Resolved 2026-10-04 by plan §11.** Traefik (container `n8n-traefik-1`) holds 80/443, fronting n8n on 127.0.0.1:5678. Traefik keeps them, and v2's Caddy runs behind it: a TCP router with ``HostSNI(`*`)`` and TLS passthrough to Caddy on 443 (n8n's own HostSNI rule stays higher priority), plus an HTTP router on 80 for every host that is not n8n's. Caddy keeps TLS and on-demand certificates, and story 24 stays satisfied. The VPS steps stay the Operator's, but no ticket waits on a question. The positions below are kept as the record.
    - Positions:
      - If nothing holds the ports, v2's Caddy takes them and nothing changes.
      - If a proxy in front of n8n holds them, the Operator picks one of two. Either v2's Caddy fronts both, so v2 reaches n8n, against story 24. Or the existing proxy fronts v2, so TLS for v2 and for Custom Domains lives outside this repo.
@@ -318,6 +321,7 @@ Every `ASSUMPTION:` across the specs, grouped, sharpest first. 199 raw flags at 
      ```
 
 2. **Production country source: Cloudflare header or geo-IP on the VPS** (raised by this review; Phase 2, Further Notes; Phase 4, Contracts, Visitor country; Phase 5, DNS records, PARKED).
+   - **Resolved 2026-10-04 by plan §11: Cloudflare.** `dig +short NS ofl.ink` gave Namecheap's `dns1/dns2.registrar-servers.com` and no DS record, so no DNSSEC. The nameservers move from Namecheap to Cloudflare when Phase 5's zone move asks, and the Operator makes that move. Geo Rules on DNS-only Custom Domains fall back to US, which is accepted. Nothing listed under "What it parks" is parked any more, and the geo-IP position is not built. The positions below are kept as the record.
    - **Cloudflare.** ofl.ink and the Spare Domains are Proxied, and the app reads `CF-IPCountry`.
      - For: rung 3, v1 takes the country from its edge's header (`geo_utils.js:48`). Rung 5: nothing to license, download or add to the app. The VPS address stays hidden for ofl.ink and the Spare Domains.
      - Against: rung 4. The live nameservers move at least 48 h ahead, and DNSSEC goes off and on again if a DS record exists. It also adds the Cloudflare lines and `CLOUDFLARE_RANGES`. Geo Rules on DNS-only Custom Domains fall back to US (Six hats, K1).
@@ -342,11 +346,11 @@ Human-only acts that are not open questions are listed in Phase 5's Further Note
 
 **Network commands the human runs** (floor 2). Each is quoted exactly as its spec has it.
 
-The Operator's Mac, once, when the build asks (Phase 2 Acceptance; plan §9):
+The Operator's Mac, once, when the build asks (Phase 2 Acceptance; plan §9). Done 2026-10-04 (plan §11): the `pnpm --dir app add` line and both pulls. The build line no longer downloads anything, because PocketBase is COPYd from `vendor/` and the app from `app/` with its `node_modules` (Phase 2 spec, Offline build). Only `heic-convert` stays conditional.
 ```sh
 pnpm --dir app add hono @hono/node-server sharp
 docker pull alpine:3
-docker compose --env-file tests/e2e.env build        # downloads the pinned PocketBase release and the app's packages
+docker compose --env-file tests/e2e.env build        # offline since 2026-10-04 (plan §11): no network request
 pnpm --dir app add heic-convert                      # only if the HEIC case of 02-image-upload fails with sharp alone
 docker pull axllent/mailpit                           # Phase 3's local mail catcher
 ```
@@ -358,8 +362,8 @@ git -C linkme_clone3 pull --ff-only
 
 The VPS (Phase 2 Acceptance):
 ```sh
-rsync -a --exclude node_modules --exclude .scratch ./ root@srv1395798.hstgr.cloud:/opt/oflinkv2/
-cd /opt/oflinkv2 && docker compose up -d --build --wait                          # on the VPS; the first build fetches images and packages there
+rsync -a --exclude /node_modules --exclude .scratch ./ root@srv1395798.hstgr.cloud:/opt/oflinkv2/       # keeps vendor/ and app/node_modules
+cd /opt/oflinkv2 && docker compose up -d --build --wait                          # on the VPS; the build pulls only absent base images there (plan §11)
 docker compose run --rm -v "$PWD/linkme_clone3:/v1:ro" app import-v1 --site /v1   # on the VPS
 curl -sI http://<v2 host>/ | grep -i '^location: https://'
 PLAYWRIGHT_BASE_URL=https://<v2 host> npx playwright test tests/e2e/02-profile-parity.spec.ts
@@ -369,8 +373,8 @@ ssh -L 8090:127.0.0.1:8090 root@srv1395798.hstgr.cloud
 Cutover (Phase 5 Acceptance; the steps are RUN.md's `## Cutover`):
 ```sh
 ssh "$VPS" "sudo ss -ltnp '( sport = :80 or sport = :443 )'"                                                   # step 1
-{ curl -s https://www.cloudflare.com/ips-v4; echo; curl -s https://www.cloudflare.com/ips-v6; } | xargs        # step 1, CLOUDFLARE_RANGES (Cloudflare position only)
-rsync -a --exclude node_modules --exclude .scratch ./ "$VPS:$V2_DIR/" && ssh "$VPS" "cd $V2_DIR && docker compose up -d --build --wait"   # step 1
+{ curl -s https://www.cloudflare.com/ips-v4; echo; curl -s https://www.cloudflare.com/ips-v6; } | xargs        # step 1, CLOUDFLARE_RANGES (Cloudflare, plan §11)
+rsync -a --exclude /node_modules --exclude .scratch ./ "$VPS:$V2_DIR/" && ssh "$VPS" "cd $V2_DIR && docker compose up -d --build --wait"   # step 1
 dig +short NS ofl.ink; dig +noall +answer ofl.ink A ofl.ink AAAA www.ofl.ink CNAME www.ofl.ink A www.ofl.ink AAAA; dig +noall +answer DS ofl.ink; whois ofl.ink | grep -i registrar   # step 2
 curl -s -D - -o /dev/null "https://ofl.ink/$USERNAME" | grep -qi '^server: netlify'                          # steps 3 and 13: live v1 still answers
 test "$(curl -s -o /dev/null -w '%{http_code}' "https://$SPARE/$USERNAME")" = 200                             # step 4

@@ -352,7 +352,7 @@ Prior art: `tests/e2e/00-smoke.spec.ts`. It tests through a real browser against
 ```sh
 set -e
 cd "$(git rev-parse --show-toplevel)"
-# manual: docker pull axllent/mailpit   (the local mail catcher's image; the human runs image pulls, plan §9)
+# manual: docker pull axllent/mailpit   (done by the Operator 2026-10-04, plan §11; image is local)
 test -f tests/e2e/03-auth-and-editor.spec.ts
 npx playwright test tests/e2e/03-auth-and-editor.spec.ts
 test -s .scratch/goal_ai/shots/03-auth-and-editor.png

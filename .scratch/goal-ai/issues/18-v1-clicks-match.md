@@ -25,7 +25,7 @@ Against a remote host (`PLAYWRIGHT_BASE_URL`), the spec sends its Reveal and `/r
 
 Destinations are compared only as booleans, so a failure names a Username and card position, never a Destination.
 
-ASSUMPTION: nothing here commits to a production country source. Visitor location reads the headers the spec lists, and both positions of the parked question sit behind that one function (plan-review, Needs the human, item 2; the spec says this Phase's tickets do not wait for it). Phase 2's Caddy passes the injected headers through, so the Geo Rule cases also run against the VPS in 23. Overturned if the Operator picks geo-IP before this lands. The lookup then goes behind the same function, and the parity cases need a seam in front of it.
+ASSUMPTION: nothing here commits to a production country source. Visitor location reads the headers the spec lists, and the decided source (Cloudflare, plan §11) sits behind that one function (plan-review, Needs the human, item 2; the spec says this Phase's tickets do not wait for it). Phase 2's Caddy passes the injected headers through, so the Geo Rule cases also run against the VPS in 23. Overturned if the Operator picks geo-IP before this lands. The lookup then goes behind the same function, and the parity cases need a seam in front of it.
 
 - [ ] With the v1 Snapshot present, the parity spec's `/r`, Reveal, old-id and journey cases pass for every v1 Link under `./check.sh`. Without it they skip as `v1 Snapshot absent`.
 - [ ] `--list` with `--grep-invert 'Geo Rule'` leaves out exactly the cases that send a location header.

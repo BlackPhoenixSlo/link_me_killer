@@ -116,7 +116,7 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 
 - **Owns.**
   - **Stack.** The Compose file and the Caddy config at the repo root, the environment contract, and `.env` added to `.gitignore`. The services are `caddy`, `app` and `pocketbase`; n8n is not one of them.
-  - **PocketBase image and schema.** A `pocketbase/` directory holding an image built from a pinned official PocketBase release, plus versioned JS migrations for the collections below.
+  - **PocketBase image and schema.** A `pocketbase/` directory holding an image built from the official PocketBase 0.40.4 release archive, which the build COPYs from the git-ignored `vendor/` (plan §11, 2026-10-04), plus versioned JS migrations for the collections below.
   - **App.** The `app/` directory: a Node service on Hono, with its own package manifest and lockfile. Its modules:
     - **PocketBase gateway**: the app's only door to PocketBase.
     - **Public Profile**: turns records into the Profile JSON.
@@ -280,7 +280,7 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 
   ASSUMPTION: Mode travels as `profile.mode` and `links[].mode`, always the effective value, using D3's stored names. Rung 2 for the field and its values (plan Phase 1: "mode field in profile JSON"; D3). Sending effective values rather than raw ones is rung 5, so the page never needs the fallback rule. Overturned by the names Phase 1's page reads.
 
-  ASSUMPTION: Visitor location tries v1's header names first, then Cloudflare's, and falls back to US as v1 does. Rung 3: geo_utils.js:48–49. A Visitor can fake their own country, which changes only the Tracking Code on their own Click. Overturned if that matters before Phase 5, which owns stripping these headers at the edge. On a host where no country header arrives, every Visitor takes this US fallback: today on Phase 2's v2 host, and after Cutover on every DNS-only Custom Domain if the Cloudflare position of the parked country-source question is chosen (Phase 5 spec, DNS records). In all 7 v1 Links that carry a Geo Rule, the US entry's `default` equals the rule's own `default` (observed, plan review), so such a Visitor gets the rule's catch-all code and loses only their own country's or US state's code.
+  ASSUMPTION: Visitor location tries v1's header names first, then Cloudflare's, and falls back to US as v1 does. Rung 3: geo_utils.js:48–49. A Visitor can fake their own country, which changes only the Tracking Code on their own Click. Overturned if that matters before Phase 5, which owns stripping these headers at the edge. On a host where no country header arrives, every Visitor takes this US fallback: today on Phase 2's v2 host, and after Cutover on every DNS-only Custom Domain, because production takes its country from Cloudflare, which plan §11 chose on 2026-10-04 and whose US fallback there it accepts (Phase 5 spec, DNS records). In all 7 v1 Links that carry a Geo Rule, the US entry's `default` equals the rule's own `default` (observed, plan review), so such a Visitor gets the rule's catch-all code and loses only their own country's or US state's code.
 
   ASSUMPTION: `/r` serves any Link that has a Destination, Adult or not, under the same rate limit as Reveal. Rung 5: the Age Gate is client-side, Reveal already gives out Adult Destinations, and ADR 0004 treats both as obfuscation. Overturned if Adult Destinations may leave only through Reveal.
 
@@ -396,19 +396,26 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
   ASSUMPTION: on-demand TLS for Custom Domains moves to Phase 5. Plan Phase 2 lists it on the caddy line (goal_ai.txt:137). Phase 2's DONE line does not (goal_ai.txt:145–146), and Phase 5 holds the feature it serves ("Custom domain per profile via Caddy on-demand TLS", goal_ai.txt:163). It needs D6's per-Profile domain field and an `ask` check that has no domain list to consult before Phase 5. Without that check it would either issue a certificate for any domain or refuse every one. The plan's own lines split here, so rung 2 does not settle it. Rung 4 does: adding an on-demand block later is additive, while certificates issued for any domain cannot be recalled. The user's standing YAGNI instruction agrees. Overturned if the Operator wants on-demand TLS live before Phase 5.
 
 - **PocketBase.**
-  - Built from the official release archive (PocketBase publishes no official image), at least 0.23, on `alpine:3`. The archive is fetched in a `RUN` step keyed by the pinned version, never with `ADD <url>`, so a cached build needs no network.
+  - Built from the official release archive (PocketBase publishes no official image), pinned at 0.40.4, on `alpine:3`. The archive is COPYd from `vendor/` and never fetched: no `curl` or `wget` in a `RUN` step and no `ADD <url>` (Offline build, below; plan §11, 2026-10-04).
   - The superuser comes from the environment and is upserted on every start.
   - Migrations are copied into the image.
   - Data lives in a named volume mounted at `/pb/pb_data`, the `--dir` the image starts PocketBase with. The Acceptance predicate checks that path.
   - It is published on 127.0.0.1 only, and the admin UI is reached through an SSH tunnel.
 
-  ASSUMPTION (evidence blocked): the version pin is the newest release the human finds, at least 0.23, which brought JS migrations, autodate fields and the superuser command. The newest release cannot be looked up offline. Overturned by the human setting the pin.
-
-  ASSUMPTION (evidence blocked): BuildKit re-checks an `ADD <url>` source on every build, while a `RUN` download layer is reused from cache. This is recalled, not observed, because observing it is a network fetch. Overturned if a cached `./check.sh` run with the network off rebuilds either way.
+  The pin is 0.40.4, set by the Operator (plan §11, 2026-10-04; rung 2). It meets the floor of 0.23, which brought JS migrations, autodate fields and the superuser command. The earlier evidence-blocked ASSUMPTIONs on the pin and on BuildKit re-checking an `ADD <url>` source are dropped as moot: nothing in the build downloads.
 
   ASSUMPTION: the admin UI is reachable only through an SSH tunnel. Rung 4: nothing new goes on the public internet. Overturned if the Operator wants a public admin host, which would be one more Caddy site.
 
   ASSUMPTION: the app reads PocketBase as a superuser. Rung 5: no service account and no extra rules are needed. Overturned if a least-privilege account is wanted before Phase 3 exposes PocketBase.
+
+- **Offline build (plan §11, 2026-10-04; rung 2, binding).**
+  - `docker compose build` makes no network request. If it would, the ticket that hit it parks with the build output and the command, rather than fetch.
+  - The PocketBase Dockerfile COPYs the pinned zip from `vendor/` (git-ignored): `pocketbase_0.40.4_linux_arm64.zip` on this Mac, `pocketbase_0.40.4_linux_amd64.zip` on the VPS. It never curls.
+  - The app Dockerfile COPYs `app/`, `node_modules` included, and runs no `pnpm install`. `app/node_modules` holds sharp's linuxmusl-arm64 and linuxmusl-x64 binaries (pnpm `supportedArchitectures` in `app/package.json`; observed: `ls app/node_modules/.pnpm | grep sharp-linuxmusl`), so one tree serves this Mac and the VPS.
+  - The Operator installed hono 4.13.13, @hono/node-server 2.1.3 and sharp 0.35.5, and pulled `alpine:3`; `caddy:2-alpine` and `node:22-alpine` were already local.
+  - The copy to the VPS carries `vendor/` and `app/node_modules`: its rsync excludes only the root `/node_modules` (observed locally: an anchored `--exclude /node_modules` keeps `app/node_modules` and `vendor/`). On the VPS the build's only network use is pulling those three base images if they are absent there, inside the Operator's `up -d --build` line.
+
+  ASSUMPTION: the PocketBase Dockerfile picks its zip by Docker's `TARGETARCH` (`arm64` here, `amd64` on the VPS), and its build context reaches `vendor/` without being the repo root, so `linkme_clone3/` is never sent to the builder. Rung 5: one Dockerfile for both machines; rung 4: the v1 Snapshot stays out of every build context, as the app's does. Overturned if the VPS builds for another architecture, or if Compose cannot give the PocketBase build `vendor/` without the repo root.
 
 - **n8n.** v2's Compose file does not define, start or reach n8n (ADR 0001). It keeps running as it does today (D1).
 
@@ -545,9 +552,13 @@ ASSUMPTION: edits are driven through PocketBase's REST API rather than by clicki
 
 ```sh
 set -e  # any failing check fails the block; the final ./check.sh cannot mask it (house precedent: Phase 1's Acceptance)
-# manual (once, network; plan §9 — the Operator runs these when asked): pnpm --dir app add hono @hono/node-server sharp
-# manual (once, network): docker pull alpine:3        # caddy:2-alpine and node:22-alpine are already local (docker images, 2026-10-02)
-# manual (once, network): docker compose --env-file tests/e2e.env build        # downloads the pinned PocketBase release and the app's packages
+# done by the Operator 2026-10-04 (plan §11): pnpm --dir app add hono @hono/node-server sharp; docker pull alpine:3   # caddy:2-alpine and node:22-alpine were already local
+git check-ignore -q vendor/                          # the offline build's inputs (plan §11)
+test -f vendor/pocketbase_0.40.4_linux_arm64.zip
+test -f vendor/pocketbase_0.40.4_linux_amd64.zip
+test -e app/node_modules/sharp
+for i in alpine:3 caddy:2-alpine node:22-alpine; do docker image inspect "$i" > /dev/null || exit 1; done   # base images local, so the build pulls nothing
+docker compose --env-file tests/e2e.env build        # no network request (plan §11): COPYs vendor/'s zip and app/ with node_modules; if it would fetch, the ticket parks
 # manual (once, network, only if the HEIC case of 02-image-upload fails with sharp alone): pnpm --dir app add heic-convert
 test -f linkme_clone3/netlify/functions/secrets.json
 git check-ignore -q linkme_clone3/   # one check per line: set -e ignores a failure on the left of &&
@@ -583,10 +594,10 @@ node -e '
   const files = cp.execSync("git ls-files -z --cached --others --exclude-standard").toString().split("\0").filter(Boolean);
   const hits = files.filter(f => { try { const t = fs.readFileSync(f, "utf8"); return needles.some(n => t.includes(n)); } catch { return false; } });
   if (hits.length) { console.error("v1 Destination found in: " + hits.join(" ")); process.exit(1); }'
-# manual: settle the ports 80/443 question in Further Notes first (needs the live VPS).
-# manual: copy this repo and the v1 Snapshot (secrets.json included) to the VPS over SSH, e.g. rsync -a --exclude node_modules --exclude .scratch ./ root@srv1395798.hstgr.cloud:/opt/oflinkv2/
-# manual: on the VPS, write /opt/oflinkv2/.env with SITE_ADDRESS=<v2 host>, PB_SUPERUSER_EMAIL, PB_SUPERUSER_PASSWORD; point <v2 host>'s DNS A record at the VPS.
+# manual: copy this repo and the v1 Snapshot (secrets.json included) to the VPS over SSH, keeping vendor/ and app/node_modules, e.g. rsync -a --exclude /node_modules --exclude .scratch ./ root@srv1395798.hstgr.cloud:/opt/oflinkv2/
+# manual: on the VPS, write /opt/oflinkv2/.env with SITE_ADDRESS=<v2 host>, PB_SUPERUSER_EMAIL, PB_SUPERUSER_PASSWORD, and HTTP_PORT / HTTPS_PORT set to free ports (Traefik keeps 80 and 443, plan §11); point <v2 host>'s DNS A record at the VPS.
 # manual: on the VPS: cd /opt/oflinkv2 && docker compose up -d --build --wait
+# manual: on the VPS, Traefik (n8n-traefik-1) keeps 80/443 (plan §11, 2026-10-04): in its file-editable dynamic config add a TCP router HostSNI(`*`) with TLS passthrough to Caddy's HTTPS port, below n8n's own HostSNI rule and sending the PROXY protocol header, and an HTTP router on 80 for every host that is not n8n's, to Caddy's HTTP port (Further Notes, Ports 80 and 443); then check that n8n still answers at its own host.
 # manual: on the VPS: docker compose run --rm -v "$PWD/linkme_clone3:/v1:ro" app import-v1 --site /v1     # exit 0; a git clone of v1 prints three case-twin lines, an rsync from this Mac none
 # manual: delete through the admin UI every record a `stale in v2:` line names (none on the first run); the parity run below fails while one is served.
 # manual: from the Mac: curl -sI http://<v2 host>/ | grep -i '^location: https://'     # Caddy redirects HTTP to HTTPS
@@ -610,7 +621,7 @@ node -e '
 
   ASSUMPTION: Phase 0's specs read Link Ids from the served Profile, never from the fixture file (Phase 0 spec, Contracts and smoke item 4). ADR 0004 makes every v2 Link Id fresh, so a pinned id cannot pass on v2. Overturned if a Phase 0 spec pins one; that spec then reads the served id.
 
-- **The Operator** settles what holds ports 80 and 443 on the VPS (Further Notes, NEEDS-HUMAN; ADR 0001). The local stack and `./check.sh` do not wait on it. Every `# manual:` VPS line in Acceptance, and so the Phase's DONE gate, does.
+- **The Operator** runs the VPS step. What holds ports 80 and 443 is answered (plan §11, 2026-10-04): Traefik keeps them and fronts v2's Caddy, and the Operator adds Traefik's routers as part of that step (Further Notes, Ports 80 and 443; ADR 0001, addendum). The local stack and `./check.sh` do not wait on it. Every `# manual:` VPS line in Acceptance, and so the Phase's DONE gate, does.
 
 - **Phase 1** provides the Mode field in the page: the page copy acts on `profile.mode` and `links[].mode`, and passes its specs against v2 on the Fixture Profile.
 
@@ -630,7 +641,7 @@ node -e '
 - **Proxies (D7), a Geo Rule UI, Umami, content rules and abuse reporting.** Bonus, after Phase 5 (§5, §9 D9).
 - **A response cache or realtime push to open pages.** "Live instantly" means the next load, and reading PocketBase on every request already gives that.
 - **PocketBase backups.** The plan does not ask for them, and while Phase 2 holds only imported data the v1 Import rebuilds it. That stops being true once Phase 3 lets Creators store data v1 never had, so backups start with Phase 3's VPS deploy (Phase 3 spec, Further Notes, Backups).
-- **A geo-IP database in the app.** Edge headers are enough for this Phase. Whether production uses one is the parked country-source question (Further Notes; plan-review.md, Needs the human).
+- **A geo-IP database in the app.** Edge headers are enough for this Phase, and production takes its country from Cloudflare's (plan §11, 2026-10-04; Further Notes), so none is planned.
 - **A least-privilege PocketBase account for the app.** The superuser is enough while every rule is closed.
 - **More than one app container, or a shared rate-limit store.** One container serves the stack.
 - **Re-encoding imported WebP images.** They are copied byte for byte so that the pages look identical.
@@ -638,44 +649,37 @@ node -e '
 
 ## Further Notes
 
-- **NEEDS-HUMAN (needs the live VPS, floor 2): what holds ports 80 and 443 on the VPS today.** ADR 0001 leaves this to the Operator. The local stack does not depend on it; only the `# manual:` VPS lines in Acceptance wait for it. Check with:
+- **Ports 80 and 443 on the VPS: answered 2026-10-04 (plan §11, rung 2).** The Operator looked: Traefik (container `n8n-traefik-1`) holds 80 and 443 and fronts n8n on 127.0.0.1:5678. The VPS also runs fastt-*, whynot-panel-*, leak*-app on 6767/8081, browserless on 3000 and a cloudflared tunnel.
 
-  ```sh
-  ssh root@srv1395798.hstgr.cloud 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Ports}}"; ss -ltnp "( sport = :80 or sport = :443 )"'
-  ```
+  DECISION: Traefik keeps 80/443, and v2's Caddy runs behind it.
+  - Traefik gets a TCP router with ``HostSNI(`*`)`` and TLS passthrough to Caddy on 443. n8n's own HostSNI rule stays higher priority.
+  - Traefik gets an HTTP router on 80 for every host that is not n8n's, to Caddy.
+  - Caddy keeps TLS, its automatic certificates and Phase 5's on-demand certificates. n8n stays outside v2's Compose file, so story 24 stays satisfied.
+
+  ASSUMPTION: flagged; overturned if Traefik's config is not file-editable on the VPS or SNI passthrough breaks n8n.
+
+  The routers are the Operator's, added in Traefik's dynamic config as part of the VPS step (Acceptance, the Traefik `# manual:` line). Nothing in this repo holds Traefik's config, and the earlier branches (Caddy fronts both; the existing proxy terminates TLS for v2) are dropped.
+
+  ASSUMPTION: Traefik reaches Caddy on host ports that Caddy publishes, with `HTTP_PORT` and `HTTPS_PORT` in the VPS `.env` set to free ports because Traefik holds 80 and 443, not by Caddy joining Traefik's Docker network. Rung 4: v2's Compose file stays apart from n8n's (story 24). Overturned if Traefik's container cannot reach those ports; Caddy then joins Traefik's network through a VPS-only Compose override.
+
+  ASSUMPTION (evidence blocked): TLS passthrough hides the Visitor's address from Caddy, which would see every connection as coming from Traefik. Every Visitor would then share one Reveal limit (Reveal hardening), and after Phase 5 Cloudflare's country headers would be stripped as coming from outside Cloudflare's ranges. So Traefik's TCP service sends the PROXY protocol header, and Caddy's HTTPS listener accepts it from Traefik only, as a VPS deploy setting (the local loop has no Traefik). This is recalled, not observed: the live VPS is out of bounds and the products' documentation is a network read. Overturned if two separate clients reach their own 429s without it, or if Traefik cannot send PROXY protocol; the human then chooses how the client address reaches Caddy.
 
   ASSUMPTION: the VPS takes SSH as `root@srv1395798.hstgr.cloud`, inferred from n8n's host `n8n.srv1395798.hstgr.cloud` (plan §1) and Hostinger's default root login. Overturned by the Operator's actual SSH login.
-
-  ASSUMPTION (evidence blocked): n8n's install on this VPS may run its own proxy (Traefik is common there, and D6 mentions "(or Traefik)"), but nobody has looked. Overturned by the output above.
-
-  The choice depends on that output:
-  - **If nothing holds 80/443,** v2's Caddy takes them and nothing in this spec changes.
-  - **If a proxy in front of n8n holds them,** the Operator picks one of two ways:
-    - **Caddy fronts both.** v2's Caddy takes 80/443 and adds n8n's host as a second site. The old proxy is stopped, not deleted, so starting it again rolls back. This keeps automatic TLS and Phase 5's on-demand TLS, but v2 then reaches n8n, against story 24.
-    - **The existing proxy fronts v2.** v2's Caddy listens on other ports behind that proxy and n8n is untouched. TLS for the v2 host, and later for Custom Domains, then lives in a proxy this repo does not own.
-
-  Until the Operator decides, nothing on the VPS changes.
-- **Network steps for the human (floor 2; plan §9 says the Operator runs them when asked).** These are the first four `# manual:` lines of Acceptance:
-  - the `pnpm --dir app add` line, which writes `app/`'s manifest and lockfile;
-  - the `alpine:3` pull;
-  - the first `docker compose build`, which downloads the pinned PocketBase release and the app's packages;
-  - the conditional `heic-convert` add.
-
-  After them, `./check.sh` rebuilds from cache with no network, provided the Dockerfile fetches PocketBase in a `RUN` layer (PocketBase section). The same first build runs once on the VPS, inside the `up -d --build` line, and needs the network there too.
+- **Network steps for the human: done 2026-10-04 (plan §11).** The Operator ran `pnpm --dir app add hono @hono/node-server sharp` (`app/package.json` lists hono 4.13.13, @hono/node-server 2.1.3 and sharp 0.35.5, with `app/pnpm-lock.yaml`) and pulled `alpine:3` and `axllent/mailpit`; `caddy:2-alpine` and `node:22-alpine` were already local. `vendor/` holds the PocketBase 0.40.4 zips for arm64 and amd64. From here every `docker compose build`, `./check.sh`'s included, makes no network request (Offline build). Only the conditional `pnpm --dir app add heic-convert` is left, parked until the HEIC case of 02-image-upload fails with sharp alone. On the VPS the build pulls only absent base images, inside the Operator's `up -d --build` line.
 - **The v2 host name.** It is the Operator's choice, set as `SITE_ADDRESS` in the VPS `.env`, and its DNS A record is a manual step.
 
   ASSUMPTION: a host name separate from ofl.ink until Cutover, such as a subdomain the Operator controls, so that ofl.ink keeps pointing at v1. Rung 2: D1, "Netlify … keep running … until … parity". Overturned if the Operator tests on the VPS's own host name instead.
 - **Refreshing the v1 Snapshot before a re-run.** The Operator replaces `linkme_clone3/` with a fresh copy of v1, for example `git -C linkme_clone3 pull --ff-only`. That is a network read of the old repo, which writes nothing there. ADR 0002 already flags that replacing the snapshot is not editing it.
-- **Where the Visitor's country comes from before Cutover.** The Visitor location module reads Cloudflare's headers after v1's. Under the Cloudflare position of the parked question below, v2 sees real countries only once its host is proxied by Cloudflare with visitor-location headers on, and Caddy trusts Cloudflare's ranges so that `X-Forwarded-For` carries the Visitor's IP. That is account and DNS work, so it is manual. Until then every Visitor without the headers counts as US, which is v1's own fallback. Parity is proven here with injected headers. A real country source is a prerequisite of Cutover, not of this Phase.
+- **Where the Visitor's country comes from before Cutover.** The Visitor location module reads Cloudflare's headers after v1's. Production takes its country from Cloudflare (decided below), so v2 sees real countries only once its host is proxied by Cloudflare with visitor-location headers on, and Caddy trusts Cloudflare's ranges so that `X-Forwarded-For` carries the Visitor's IP. That is account and DNS work, so it is manual. Until then every Visitor without the headers counts as US, which is v1's own fallback. Parity is proven here with injected headers. A real country source is a prerequisite of Cutover, not of this Phase.
 
-  PARKED, needs-human (plan review): edge headers or a geo-IP database in production. This Phase's Visitor location function serves either answer unchanged: under geo-IP, the lookup goes behind it. Both positions, and the evidence that settles them, are in plan-review.md, Needs the human. This Phase's tickets do not wait for the answer.
+  DECIDED 2026-10-04 (plan §11, rung 2): Cloudflare. `dig +short NS ofl.ink` gave `dns1/dns2.registrar-servers.com` (Namecheap) and no DS record, so no DNSSEC. The nameservers move from Namecheap to Cloudflare when Phase 5's zone move asks, and the Operator makes that move. Geo Rules on DNS-only Custom Domains fall back to US, which plan §11 accepts. This Phase's Visitor location function is unchanged by the answer, and no geo-IP database is built.
 - **Who can upload in Phase 2.** Only a superuser token gets past PocketBase's rules, so the Operator and the tests are the only uploaders until Phase 3 gives Creators a token and owner rules.
 
 ## Review
 
 Reviewer: **codex** (`codex exec --sandbox read-only`, `model_reasoning_effort="high"`), 2026-10-02. B = the blind call (plan, CONTEXT, ADRs and harness only), D = the draft call, (a)–(d) = the coordinator's cross-spec flags, X = this agent's own cross-check against the sibling specs. The review workspace left `linkme_clone3/` out by design.
 
-- B1 **accept**. B1: whether v2 can take ingress beside n8n needs a live inventory of the VPS (ADR 0001). It was already NEEDS-HUMAN in Further Notes, and it is now also a Depends on entry that gates every VPS line (see D4b).
+- B1 **accept**. B1: whether v2 can take ingress beside n8n needs a live inventory of the VPS (ADR 0001). It was already NEEDS-HUMAN in Further Notes, and it is now also a Depends on entry that gates every VPS line (see D4b). Answered 2026-10-04 by plan §11 (see D4b).
 - B2 **reject**. B2 offered a public-safe mirror collection as the alternative to a Node projection. This was already decided: every PocketBase rule is superuser-only and the app projects the Profile JSON (Schema, Contracts). A mirror adds sync work and gains nothing while nothing public reads PocketBase.
 - B3 **partial**. B3: where domain support stops in Phase 2. The deferral stays and its rung is corrected (see D5).
 - B4 **reject**. B4: the absent Snapshot means fidelity cannot be proven. That absence belongs to the review workspace only. The repo holds `linkme_clone3/`, the repairs cite observations of it, and the parity spec reads it at test time.
@@ -699,7 +703,7 @@ Reviewer: **codex** (`codex exec --sandbox read-only`, `model_reasoning_effort="
 - D2 **accept**. D2: kept stale records fail parity and ADR 0002's "v1 winning". Reconciliation is now a required Operator step, with an Acceptance line before the VPS parity run, and the failing parity run is named as the gate. Warn-not-delete stays (rung 4), and a `--prune` flag is named as what would overturn it.
 - D3 **accept**. D3: the `/r` fallback for Deeplink contradicts D3, and no seam test covered it. The fallback is removed. 02-profile-parity gains Fixture Profile journeys: Direct through `/r`, Deeplink through Reveal to its Destination, and a non-Adult Link Shortcut.
 - D4a **accept**. D4a: Acceptance can pass while the VPS is unverified. A DONE gate line now says a green block proves only the local stack. The Phase is done when the Operator's VPS results are recorded with its ticket (goal_ai.txt:145–146).
-- D4b **needs-human**. D4b: neither branch for occupied ports 80/443 satisfies the whole spec. The spec's position: if a proxy in front of n8n holds them, the Operator picks Caddy-fronts-both, which breaks story 24, or the existing proxy fronts v2, which puts TLS outside Caddy. Codex's position: a resolved deployment contract is needed before any VPS step. Evidence that settles it: the output of `ssh root@srv1395798.hstgr.cloud 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Ports}}"; ss -ltnp "( sport = :80 or sport = :443 )"'` (Further Notes). If nothing holds the ports, the question closes with no spec change. The local stack does not wait on it.
+- D4b **resolved by plan §11** (2026-10-04; was needs-human). D4b: neither branch for occupied ports 80/443 satisfied the whole spec, and codex asked for a resolved deployment contract before any VPS step. The Operator's look found Traefik (`n8n-traefik-1`) on 80/443, fronting n8n. Plan §11 decides a third way: Traefik keeps the ports and fronts v2's Caddy, with a TCP router ``HostSNI(`*`)`` and TLS passthrough to Caddy on 443 (n8n's own HostSNI rule stays higher priority) and an HTTP router on 80 for every host that is not n8n's. Caddy keeps TLS and on-demand certificates, and story 24 stays satisfied. Plan §11's ASSUMPTION is carried in Further Notes, Ports 80 and 443: overturned if Traefik's config is not file-editable on the VPS or SNI passthrough breaks n8n. The VPS lines, the routers included, stay `# manual:` for the Operator.
 - D5 **partial**. D5: on-demand TLS was dropped from the plan's Phase 2 caddy line. The deferral is kept, because without a domain list the `ask` check either issues for any domain or refuses every one. The rung was wrong, though. The plan's lines split (goal_ai.txt:137 against :145–146 and :163), so rung 2 does not settle it; it now rests on rung 4 plus YAGNI, flagged and open for the Operator to overturn.
 - D6 **accept**. D6: the persistence check passes an ephemeral database. The PocketBase volume is now pinned to `/pb/pb_data` and the Acceptance predicate checks that path. 02-v1-import recreates `pocketbase` and `app` and checks that records, a Mode and an avatar file survive.
 - D7 **accept**. D7: the Acceptance block does not fail fast. `set -e` is added, following Phase 1's Acceptance. The one `a && b` check is split onto two lines, because `set -e` ignores a failure on the left of `&&`.
@@ -707,7 +711,7 @@ Reviewer: **codex** (`codex exec --sandbox read-only`, `model_reasoning_effort="
 - (a) **accept**. (a): `public/` against Phase 0's `app/public/`. The same fix as D1.
 - (b) **accept**. (b): the smoke spec still pins a v1 id. Phase 0's current spec reads ids from the served `/api/profiles/fixture.json` and leaves the secrets paths' status unasserted (Phase 0 spec, smoke items 4–5). This Phase therefore owns no smoke edit, and the Owns list, story 55 and Testing Decisions are rewritten. The draft call agreed.
 - (c) **accept**. (c): the Fixture Profile has four Links, one of them Deeplink. The Fixture site is now described as Phase 0 ships it. A non-Adult Test Secrets value equals its `url`, so the import logs three `dropped:` lines. The seed mounts `app/public/images/` as the site's `images/`, because the fixture's images are the stock icons. The Deeplink Link is driven end to end (D3).
-- (d) **partial**. (d): are the ports and the first build honestly human-only? Yes as written: the ports are NEEDS-HUMAN, and the first four `# manual:` lines are the network steps. One claim is tightened: `./check.sh` rebuilds offline only if PocketBase is fetched in a `RUN` layer. That is now required, with an evidence-blocked ASSUMPTION about BuildKit re-checking an `ADD <url>` source.
+- (d) **partial**. (d): are the ports and the first build honestly human-only? Yes as written: the ports are NEEDS-HUMAN, and the first four `# manual:` lines are the network steps. One claim is tightened: `./check.sh` rebuilds offline only if PocketBase is fetched in a `RUN` layer. That is now required, with an evidence-blocked ASSUMPTION about BuildKit re-checking an `ADD <url>` source. Superseded 2026-10-04 (plan §11): the ports are answered, the network steps are done, and PocketBase is COPYd from `vendor/`, so no layer fetches (Offline build).
 - X1 **accept**. X1: Phase 0 keeps `./check.sh` green on a fresh clone and asks any later Phase that needs the Snapshot in the loop to guard it (Phase 0 spec, stand-in ASSUMPTION). With no `linkme_clone3/`, the seed and the v1 cases now skip with `v1 Snapshot absent`. Acceptance's `test -f` line keeps that skip out of this Phase's verdict.
 
 ### Six hats
@@ -716,9 +720,13 @@ Six-hats review of specs 00–05 taken as one set (HEAD 16d5a11), reconciled in 
 
 - C3 **accept**. The Profile JSON contract now lists `profile.id`, marked as added by Phase 4 for its per-Profile Tracking Code key (Phase 4 keeps ownership). Story 15 now names the record id as the one record internal the JSON carries.
 - C5 **accept**. Phase 5's VPS parity run relied on Geo Rule cases being titled so. The parity spec now promises `Geo Rule` in the title of every case that sends a location header (Testing Decisions, `02-profile-parity`, Reveal).
-- K1 **accept**, fix folded into the parked country-source question. The Visitor location ASSUMPTION now states that every Visitor on a host with no country header takes v1's US fallback, which under the Cloudflare position means every DNS-only Custom Domain. Observed for this reconcile (counts only, no Destination read): 7 of v1's 38 Links carry a Geo Rule, and in all 7 the US entry's `default` equals the rule's own `default`, so such a Visitor gets the catch-all code and loses only their own country's or state's code. Only a real country on those hosts fixes it, which is the geo-IP position; this Phase's function serves either answer.
+- K1 **accept**, fix folded into the parked country-source question (decided 2026-10-04 by plan §11: Cloudflare, with the US fallback on DNS-only Custom Domains accepted). The Visitor location ASSUMPTION now states that every Visitor on a host with no country header takes v1's US fallback, which under the Cloudflare position means every DNS-only Custom Domain. Observed for this reconcile (counts only, no Destination read): 7 of v1's 38 Links carry a Geo Rule, and in all 7 the US entry's `default` equals the rule's own `default`, so such a Visitor gets the catch-all code and loses only their own country's or state's code. Only a real country on those hosts fixes it, which is the geo-IP position; this Phase's function serves either answer.
 - K2 **accept**. Out of Scope sent backups to "the Phase that first stores v2-only data" but no Phase took them. It now names Phase 3's VPS deploy (rung 4: a lost sign-up cannot be rebuilt by the v1 Import).
-- G1 **needs-human**. The Further Notes ASSUMPTION "edge headers rather than a geo-IP database" is now PARKED, and the Out of Scope geo-IP line points there. Both positions and the evidence that settles them are in plan-review.md, Needs the human. No Phase 2 ticket waits for the answer.
-- C6 **accept**. Ports 80/443 stay needs-human, unchanged (Further Notes).
+- G1 **needs-human, resolved by plan §11** (2026-10-04: Cloudflare; Further Notes, Where the Visitor's country comes from, now reads DECIDED). The Further Notes ASSUMPTION "edge headers rather than a geo-IP database" is now PARKED, and the Out of Scope geo-IP line points there. Both positions and the evidence that settles them are in plan-review.md, Needs the human. No Phase 2 ticket waits for the answer.
+- C6 **accept**. Ports 80/443 stay needs-human, unchanged (Further Notes). Answered 2026-10-04 by plan §11: Traefik fronts Caddy (D4b).
 
-Counts: accept 5, partial 0, reject 0, needs-human 1 (the country source, shared with Phases 4 and 5).
+Counts: accept 5, partial 0, reject 0, needs-human 1, resolved 2026-10-04 by plan §11 (the country source, shared with Phases 4 and 5: Cloudflare). None is open.
+
+### Plan §11
+
+2026-10-04. Plan section 11 (the user's answers, rung 2). Ports: Traefik keeps 80/443 and fronts v2's Caddy by SNI passthrough on 443 and an HTTP router on 80; Caddy keeps TLS. Country source: Cloudflare. Network gate: done, with an offline build from `vendor/` and `app/node_modules`. Propagated here: Owns (the PocketBase image), the Visitor location ASSUMPTION, PocketBase (pinned at 0.40.4, COPYd, the pin and BuildKit ASSUMPTIONs dropped), a new Offline build entry, Acceptance (the network lines marked done, offline checks added, the ports line replaced by the Traefik routers line, the VPS `.env` ports and the rsync anchor), Depends on, Out of Scope (geo-IP), Further Notes (Ports 80 and 443 rewritten as decided, Network steps done, the country source DECIDED), and B1, D4b, (d), K1, G1 and C6 above.
