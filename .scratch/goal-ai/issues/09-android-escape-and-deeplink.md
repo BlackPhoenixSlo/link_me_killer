@@ -4,7 +4,7 @@ Spec: docs/spec/phase-01-link-modes-and-escape.md
 Covers: user stories 18, 21, 35, 37, 38, 40
 Seams: the public page in Chromium under Playwright, served by the Dev-Server Stand-in, with the Android Instagram User-Agent and a desktop User-Agent carrying "Instagram"; observed through the navigation recorder and the overlay links' href (never request events, which drop an intent's fragment), the network fence's Reveal watch and Profile variants
 Blocked by: 07: An Escape Mode tap in iOS Instagram escapes to Safari from the tap itself
-Status: claimed 20261004T191309Z 2026-10-04T20:35:47Z
+Status: done
 
 **What to build:** On an Android phone in an In-App Browser, a tap on an Escape Mode Link fires, from the tap itself:
 

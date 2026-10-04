@@ -117,6 +117,7 @@ async function recordNavigations(page: Page) {
   return destinations;
 }
 const xSafari = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('x-safari-'));
+const intents = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('intent:'));
 
 const escapeOverlay = (page: Page) => page.locator('#igOverlay');
 const closeButton = (page: Page) => escapeOverlay(page).getByRole('button', { name: 'Close' });
@@ -126,6 +127,19 @@ async function openProfile(page: Page, path = `/${username}`) {
   await expect(page.locator('#displayName')).toHaveText(served.profile.displayName);
 }
 const card = (page: Page, link: Link) => page.locator('.link-card', { hasText: link.title });
+
+const directDefault = (json: ProfileJson) => { json.profile.mode = 'direct'; };
+
+// From /{username}/{code} with a Direct default, a tap on the Link (the Escape Link unless given); the escape target as the spec spells it.
+async function tapEscapeFromCode(page: Page, link: Link = byMode.escape_ig, edit: (json: ProfileJson) => void = directDefault) {
+  await serveVariant(page, edit);
+  const navigations = await recordNavigations(page);
+  const reveals = watchReveals(page);
+  await openProfile(page, `/${username}/${TC}`);
+  const target = `https://${new URL(page.url()).host}/${username}/${TC}?link=${link.id}`;
+  await card(page, link).click();
+  return { navigations, reveals, target };
+}
 
 test.describe('System Browser (desktop Chrome)', () => {
   test.use({ userAgent: devices['Desktop Chrome'].userAgent });
@@ -288,6 +302,7 @@ const UA = {
   iosSafari:
     'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
     'Version/17.0 Mobile/15E148 Safari/604.1',
+  desktopInstagram: devices['Desktop Chrome'].userAgent + ' Instagram 300.0.0.0.0',
   androidChrome:
     'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) ' +
     'Chrome/120.0.0.0 Mobile Safari/537.36',
@@ -337,7 +352,6 @@ for (const [browser, userAgent] of [
 
 test.describe('In-App Browser (iOS Instagram)', () => {
   test.use({ userAgent: UA.iosInstagram });
-  const directDefault = (json: ProfileJson) => { json.profile.mode = 'direct'; };
 
   test('Direct default: no Escape Overlay on open, the address keeps its code, and the Direct Link navigates plainly', async ({ page }) => {
     const link = byMode.direct;
@@ -440,17 +454,6 @@ test.describe('In-App Browser (iOS Instagram)', () => {
       expect(navigations.at(-1)?.url).toBe(link.url);
       expect(xSafari(navigations)).toEqual([]);
     });
-  }
-
-  // From /{username}/{code} with a Direct default, a tap on the Link (the Escape Link unless given); the escape target as the spec spells it.
-  async function tapEscapeFromCode(page: Page, link: Link = byMode.escape_ig, edit: (json: ProfileJson) => void = directDefault) {
-    await serveVariant(page, edit);
-    const navigations = await recordNavigations(page);
-    const reveals = watchReveals(page);
-    await openProfile(page, `/${username}/${TC}`);
-    const target = `https://${new URL(page.url()).host}/${username}/${TC}?link=${link.id}`;
-    await card(page, link).click();
-    return { navigations, reveals, target };
   }
 
   test('Direct default: from /{username}/{code}, a tap on the Escape Link fires x-safari- to the escape target in the tap\'s own task', async ({ page }) => {
@@ -576,5 +579,86 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await card(page, link).click();
     await expect(page).toHaveURL(await realUrlOf(await reveal));
     expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
+  });
+});
+
+test.describe('In-App Browser (Android Instagram)', () => {
+  test.use({ userAgent: UA.androidInstagram });
+
+  test('from /{username}/{code}, a tap on the Escape Link fires the Chrome intent with the plain target as fallback, in the tap\'s own task; "Open in browser" carries it; no "Try another way"', async ({ page }) => {
+    const link = byMode.escape_ig;
+    const { navigations } = await tapEscapeFromCode(page);
+    const host = new URL(page.url()).host;
+    // The spec's Android escape link, spelled out: the fallback is the https escape target, percent-encoded.
+    const intent = `intent://${host}/${username}/${TC}?link=${link.id}` +
+      `#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=` +
+      `https%3A%2F%2F${host.replace(':', '%3A')}%2F${username}%2F${TC}%3Flink%3D${link.id};end`;
+
+    await expect.poll(() => intents(navigations)).toEqual([intent]);
+    expect(navigations).toContainEqual({ url: intent, inTapTask: true });
+    await expect(escapeOverlay(page)).toBeVisible();
+    const openInBrowser = escapeOverlay(page).getByRole('link', { name: 'Open in browser' });
+    await expect(openInBrowser).toHaveAttribute('href', intent);
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Try another way' })).toHaveCount(0);
+
+    await openInBrowser.click();
+    await expect.poll(() => intents(navigations)).toEqual([intent, intent]);
+  });
+
+  // The spec's package-less Deeplink intent for a Reveal answer: intent://{Destination host}/{path}, the Destination as fallback.
+  const deeplinkIntent = (destination: string) => {
+    const { host, pathname, search } = new URL(destination);
+    return `intent://${host}${pathname}${search}#Intent;scheme=https;S.browser_fallback_url=${encodeURIComponent(destination)};end`;
+  };
+
+  test('a tap on the Deeplink Link makes a Reveal request, then fires the package-less intent for the answer', async ({ page }) => {
+    const link = byMode.deeplink;
+    await serveVariant(page, directDefault);
+    const navigations = await recordNavigations(page);
+    const reveals = watchReveals(page);
+    await openProfile(page);
+
+    const reveal = nextReveal(page);
+    await card(page, link).click();
+    const destination = await realUrlOf(await reveal);
+    expect(destination.startsWith('https://')).toBe(true);
+    await expect.poll(() => intents(navigations)).toEqual([deeplinkIntent(destination)]);
+    expect(intents(navigations)[0]).not.toContain('package=');
+    expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
+  });
+
+  test('the Adult Link set to Deeplink shows the Age Gate, then Continue (18+) reveals and fires the package-less intent for the answer', async ({ page }) => {
+    await serveVariant(page, (json) => { directDefault(json); linkIn(json, adult.id).mode = 'deeplink'; });
+    const navigations = await recordNavigations(page);
+    const reveals = watchReveals(page);
+    await openProfile(page);
+
+    await card(page, adult).click();
+    await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
+    expect(reveals).toHaveLength(0);
+
+    const reveal = nextReveal(page);
+    await page.getByRole('button', { name: 'Continue (18+)' }).click();
+    const destination = await realUrlOf(await reveal);
+    expect(destination.startsWith('https://')).toBe(true);
+    await expect.poll(() => intents(navigations)).toEqual([deeplinkIntent(destination)]);
+    expect(intents(navigations)[0]).not.toContain('package=');
+    expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([adult.id]);
+  });
+});
+
+test.describe('In-App Browser on neither iOS nor Android (desktop UA carrying "Instagram")', () => {
+  test.use({ userAgent: UA.desktopInstagram });
+
+  test('a tap on the Escape Link records no navigation and shows the Escape Overlay, whose "Open in browser" carries the plain https target; no "Try another way"', async ({ page }) => {
+    const { navigations, target } = await tapEscapeFromCode(page);
+    await expect(escapeOverlay(page)).toBeVisible();
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', target);
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Try another way' })).toHaveCount(0);
+    // The only entry is the address-bar rewrite the spec requires on an Escape Mode tap (a same-document replace);
+    // no navigation leaves the page.
+    const address = `/${username}/${TC}?link=${byMode.escape_ig.id}`;
+    await expect(page).toHaveURL(address);
+    expect(navigations.map(({ url }) => url)).toEqual([new URL(address, page.url()).href]);
   });
 });

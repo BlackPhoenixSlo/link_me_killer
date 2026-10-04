@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isInAppBrowser = IN_APP_BROWSER.test(navigator.userAgent || '');
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent || '');
     const isIOSInstagram = isIOS && /Instagram/i.test(navigator.userAgent || '');
+    const isAndroid = /Android/.test(navigator.userAgent || '');
 
     // Routing Logic: Get username and optional ID from URL path
     // Format: /username/id or /username
@@ -271,9 +272,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return { path, url: `https://${window.location.host}${path}` };
     }
 
-    // Escape link, per platform: iOS hands the target to Safari; anything else has none (Android lands in 09)
+    // Escape link, per platform: iOS hands the target to Safari, Android to Chrome with the target as fallback; anything else has none
     function escapeLink(targetUrl) {
-        return isIOS ? 'x-safari-' + targetUrl : null;
+        if (isIOS) return 'x-safari-' + targetUrl;
+        if (isAndroid) return httpsIntent(targetUrl, 'package=com.android.chrome;');
+        return null;
+    }
+
+    // Android intent for an https address: intent://{host}/{path}[?query], falling back to the address itself
+    function httpsIntent(url, pkg) {
+        return 'intent://' + url.replace(/^https:\/\//i, '') + '#Intent;scheme=https;' + pkg +
+            'S.browser_fallback_url=' + encodeURIComponent(url) + ';end';
     }
 
     // An Escape Mode tap in an In-App Browser: fired from the tap itself, with no request before it
@@ -285,8 +294,13 @@ document.addEventListener('DOMContentLoaded', () => {
         openEscapeOverlay(target, true);
     }
 
-    // After a Reveal, every Link navigates plainly: Escape Mode outside an In-App Browser behaves as Direct Mode
+    // After a Reveal: on Android a Deeplink Mode Link with an absolute https Destination hands off by a package-less intent;
+    // everything else navigates plainly (Escape Mode outside an In-App Browser behaves as Direct Mode)
     function travel(link, url) {
+        if (isAndroid && effectiveMode(link) === 'deeplink' && /^https:\/\//i.test(url)) {
+            window.location.href = httpsIntent(url, '');
+            return;
+        }
         window.location.href = url;
     }
 
