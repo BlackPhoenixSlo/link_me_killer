@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return false;
     }
 
-    // In-App Browser: the plan's pattern, verbatim and case-insensitive (performBounce keeps v1's own Instagram check for the Adult Link and the Link Shortcut until tickets 08 and 10)
+    // In-App Browser: the plan's pattern, verbatim and case-insensitive (performBounce keeps v1's own Instagram check for the Link Shortcut until ticket 10)
     const IN_APP_BROWSER = /Instagram|FBAN|FBAV|Threads|musical_ly|Bytedance|TikTok/i;
     const isInAppBrowser = IN_APP_BROWSER.test(navigator.userAgent || '');
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent || '');
@@ -285,13 +285,9 @@ document.addEventListener('DOMContentLoaded', () => {
         openEscapeOverlay(target, true);
     }
 
-    // Escape Mode keeps Phase 0's bounce until its own Escape lands; Direct and Deeplink navigate plainly
+    // After a Reveal, every Link navigates plainly: Escape Mode outside an In-App Browser behaves as Direct Mode
     function travel(link, url) {
-        if (effectiveMode(link) === 'escape_ig') {
-            performBounce(url);
-        } else {
-            window.location.href = url;
-        }
+        window.location.href = url;
     }
 
     // Address bar while an Escape Overlay shows: the target's path and query; Close puts back the one it replaced
@@ -348,6 +344,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!currentLinkId) return;
         // Found at click time, as v1 did: closing the Age Gate mid-Reveal still travels
         const link = linksData.find(l => l.id === currentLinkId);
+
+        // An Adult Escape Mode Link in an In-App Browser: this tap is the Escape, with no Reveal in the app
+        if (isInAppBrowser && effectiveMode(link) === 'escape_ig') {
+            escapeOnTap(link);
+            closeOverlay();
+            return;
+        }
 
         continueBtn.textContent = 'loading...';
         continueBtn.disabled = true;

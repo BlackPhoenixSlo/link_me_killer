@@ -442,10 +442,9 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     });
   }
 
-  // From /{username}/{code} with a Direct default, a tap on the Escape Link; the escape target as the spec spells it.
-  async function tapEscapeFromCode(page: Page) {
-    const link = byMode.escape_ig;
-    await serveVariant(page, directDefault);
+  // From /{username}/{code} with a Direct default, a tap on the Link (the Escape Link unless given); the escape target as the spec spells it.
+  async function tapEscapeFromCode(page: Page, link: Link = byMode.escape_ig, edit: (json: ProfileJson) => void = directDefault) {
+    await serveVariant(page, edit);
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page, `/${username}/${TC}`);
@@ -535,6 +534,37 @@ test.describe('In-App Browser (iOS Instagram)', () => {
       await escapeOverlay(page).getByRole('button', { name: 'Copy link' }).click();
       await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(target);
     });
+  });
+
+  const adultEscape = (json: ProfileJson) => { directDefault(json); linkIn(json, adult.id).mode = 'escape_ig'; };
+  const ageGate = (page: Page) => page.getByRole('heading', { name: 'Mature Content Disclaimer' });
+
+  test('the Adult Link set to Escape Mode shows the Age Gate, then Continue (18+) fires x-safari- to the escape target in its own task, with no Reveal', async ({ page }) => {
+    const { navigations, reveals, target } = await tapEscapeFromCode(page, adult, adultEscape);
+    await expect(ageGate(page)).toBeVisible();
+    const escapeLink = `x-safari-${target}`;
+    expect(xSafari(navigations)).toEqual([]);
+
+    await page.getByRole('button', { name: 'Continue (18+)' }).click();
+    await expect.poll(() => xSafari(navigations)).toEqual([escapeLink]);
+    expect(navigations).toContainEqual({ url: escapeLink, inTapTask: true });
+    await expect(escapeOverlay(page)).toBeVisible();
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', escapeLink);
+    await expect(page).toHaveURL(`/${username}/${TC}?link=${adult.id}`);
+    expect(reveals).toHaveLength(0);
+  });
+
+  test('the Adult Link set to Escape Mode: closing the Age Gate instead records no navigation and makes no Reveal request', async ({ page }) => {
+    const { navigations, reveals } = await tapEscapeFromCode(page, adult, adultEscape);
+    await expect(ageGate(page)).toBeVisible();
+    const before = navigations.length;
+
+    await page.locator('#closeOverlayBtn').click(); // the Age Gate's close button, an icon with no accessible name
+    await expect(ageGate(page)).toBeHidden();
+    await expect(escapeOverlay(page)).toBeHidden();
+    expect(navigations).toHaveLength(before);
+    expect(reveals).toHaveLength(0);
+    await expect(page).toHaveURL(`/${username}/${TC}`);
   });
 
   test('Deeplink default: a Link with its mode removed makes a Reveal request', async ({ page }) => {
