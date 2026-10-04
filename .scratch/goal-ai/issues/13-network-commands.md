@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: none directly. It unblocks every story that needs the running stack (spec, Implementation Decisions: Offline build; Further Notes: Network steps for the human)
 Seams: `app/package.json` and its lockfile, `vendor/`, `docker image ls`, the two Dockerfiles, and a built test stack
 Blocked by: 12: The v2 stack is declared and its Compose contract checks pass offline
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T21:30:11Z
 
 **Done by the Operator 2026-10-04 (plan §11).** The network commands have run:
 - `app/package.json` lists hono 4.13.13, @hono/node-server 2.1.3 and sharp 0.35.5, with its lockfile `app/pnpm-lock.yaml` (commit 2c6b95c, which touched no root manifest or lockfile). pnpm's `supportedArchitectures` in it put sharp's linuxmusl-arm64 and linuxmusl-x64 binaries in `app/node_modules` (observed: `ls app/node_modules/.pnpm | grep sharp-linuxmusl`).
