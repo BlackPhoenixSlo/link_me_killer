@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 2, 3, 4, 5, 6, 16, 21, 36, 39, 48, 49, 57
 Seams: the running v2 stack's public HTTP surface at baseURL through `./check.sh`: the `request` fixture for Reveal and for `/r` redirects (not followed), and pages for the journeys, with the final navigation to a Destination's host caught by `page.route`. The oracle is v1's own Reveal handler, loaded from the v1 Snapshot in the test process
 Blocked by: 17: Every v1 Profile page on v2 matches the v1 Snapshot card for card
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T23:07:06Z
 
 **What to build:** Reveal gains Geo Rules. With `trackingId=geo`, it picks the Tracking Code from the Link's Geo Rule by the Visitor's country and US state, exactly as v1 does. Visitor location reads them from the request headers: v1's header names first, then Cloudflare's. The country falls back to US.
 
