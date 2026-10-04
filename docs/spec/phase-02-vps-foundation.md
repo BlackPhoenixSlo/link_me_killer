@@ -623,7 +623,7 @@ node -e '
 - **Creator sign-up (public, per §9 D9), login, email verification and reset, Onboarding, the Editor and owner collection rules.** Plan Phase 3.
 - **A public route to PocketBase's API, reserving the Usernames the app's routes use (`api`, `r`, `netlify`, …), and making the n8n Form admin-only.** Plan Phase 3. No v1 Username collides with these routes today (observed: `ls linkme_clone3/api/profiles`).
 - **The per-Profile Custom Domain field, Caddy on-demand TLS with its `ask` check, routing a host to a Profile, and Spare Domains.** Plan Phase 5 and D6, by YAGNI (see the Caddy ASSUMPTION).
-- **Pointing ofl.ink's DNS at the VPS, Netlify as a cold backup, switching v1 off, and freezing n8n Form edits before the final import.** Plan Phase 5 (Cutover).
+- **Pointing ofl.ink's DNS at the VPS, v1 on Netlify as a live fallback, and freezing n8n Form edits before the final import.** Plan Phase 5 (Cutover). v1 is never switched off (plan section 10).
 - **Mode and Escape behaviour inside the page, and the real-device In-App Browser matrix.** Plan Phase 1 and its manual RUN.md item.
 - **Any change to v1:** the old GitHub repo, Netlify, the live n8n workflow, and `linkme_clone3/`. Plan §8.
 - **ffmpeg, video and animated images.** D4: "ffmpeg only if video is added later".

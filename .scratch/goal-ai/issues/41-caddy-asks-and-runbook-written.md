@@ -17,15 +17,15 @@ ASSUMPTION: setting the owner before deleting the bare Profile is refused by Pha
 
 - [ ] Adapting the production configuration with the local Caddy image succeeds and reports an on-demand ask endpoint at the app's TLS Ask. On the running local stack, that endpoint called from inside Caddy's container says yes to `localhost` and no to `unknown.invalid`.
 - [ ] The local loop obtains no certificate and reaches no network. Phase 2's parity spec and Phase 4's Stats spec still inject location headers through the local listener and pass.
-- [ ] `RUN.md`'s `## Cutover` holds steps 1 to 16 in the spec's order with its exact commands, and also says:
+- [ ] `RUN.md`'s `## Cutover` holds steps 1 to 15 in the spec's order with its exact commands, and also says:
   - the v1 Import is never run again after the switch, written above step 6's import command;
   - the three things that break or go stale at the Cutover (story 10);
   - what a rollback restores and when to roll back (story 14);
   - the one A record a Creator creates for a Custom Domain, and that removing one means clearing the field and restarting Caddy;
   - the switch time line of step 8, and that readiness traffic stays in Stats;
   - step 12's hand-over is never done before step 8;
-  - step 16's site deletion is irreversible and the Operator's own act;
-  - which lines rest on the production country source (step 1's ranges line, step 3, the Cloudflare part of step 4, step 7's two header probes, and the record changes in steps 8, 9, 13 and 16), so ticket 42 can rewrite them under the other answer.
+  - no step changes Netlify: v1 stays live on its netlify.app address indefinitely as the rollback target (plan section 10);
+  - which lines rest on the production country source (step 1's ranges line, step 3, the Cloudflare part of step 4, step 7's two header probes, and the record changes in steps 8, 9 and 13), so ticket 42 can rewrite them under the other answer.
 - [ ] `RUN.md` names no Destination.
 - [ ] On the local stack, a Creator who owns a bare Profile is handed an ownerless Profile made the way the v1 Import makes one: setting its owner while the bare Profile exists is refused; after the bare Profile is deleted it succeeds, the Creator's next log-in lands in the Editor on the handed-over Profile with its Links, and they own exactly one Profile.
 - [ ] The spec's local Acceptance block exits 0 under `set -e`: the v1 Snapshot shows no change (the status read and the empty test on two lines), the `05-domains` spec exists, `RUN.md` has `## Cutover`, and `./check.sh` passes.

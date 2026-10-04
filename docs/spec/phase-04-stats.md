@@ -360,7 +360,7 @@ test -s .scratch/goal_ai/shots/04-stats.png
 
 ## Out of Scope
 
-- **The ping or the per-Profile key in v1.** v1 is untouched (plan section 8, ADR 0005). It keeps its global key until Netlify is switched off after Cutover.
+- **The ping or the per-Profile key in v1.** v1 is untouched (plan section 8, ADR 0005). It keeps its global key indefinitely; v1 stays live on its netlify.app address (plan section 10).
 - **A page-script fork or a second copy.** v2's page has been its own copy since Phase 0.
 - **Real-time panel, "Live" badge, 30-second refresh.** The plan asks for numbers by day.
 - **Period comparison, % change, Total Interactions, Engagement Rate, Activity Distribution, hourly pattern, cities, world map.** These are template extras outside "per-link clicks + page views, by day and country" (plan section 6).

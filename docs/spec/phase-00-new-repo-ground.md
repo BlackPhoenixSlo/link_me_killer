@@ -224,7 +224,7 @@ Plan §7 says Phase 2 replaces the stand-in ("same specs, same baseURL").
 Cut (YAGNI or by the plan):
 - **Serving only a `public/` folder on Netlify (`publish = "public"`).** Amendment 8: the Netlify site is not touched.
 - **Making `BlackPhoenixSlo/linkme_clone3` private.** Amendment 8: the old GitHub repo is not touched.
-- **Purging secrets.json from the old repo's git history.** Amendment 8. ADR 0005 accepts that the exposure lasts until Netlify is switched off after Cutover.
+- **Purging secrets.json from the old repo's git history.** Amendment 8. ADR 0005 accepts that the exposure lasts indefinitely; v1 stays live on its netlify.app address (plan section 10).
 - **Regenerating (rotating) v1's Link Ids.** Amendment 8: v1 is untouched. v2 mints a fresh Link Id for every Link in Phase 2's v1 Import.
 - **Fixing the n8n prefix bug.** Amendment 8: the live n8n workflow is not touched.
 - **Repairing weiwei (invalid JSON), jaka7q (literal expression as display name), the duplicate Link Ids and the prefix-repeated ids.** Amendment 8: these repairs happen inside Phase 2's v1 Import, never in v1's files or the v1 Snapshot.

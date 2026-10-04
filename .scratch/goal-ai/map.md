@@ -68,7 +68,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets: 34 ready-fo
 | 40 | [On a Custom Domain or Spare Domain every Mode and Escape and Reveal works and counts as on ofl.ink](issues/40-every-host-behaves-as-ofl-ink.md) | phase-05 | 39, 10, 36 | ready-for-agent |
 | 41 | [Caddy asks the app before every certificate and the Cutover runbook is written](issues/41-caddy-asks-and-runbook-written.md) | phase-05 | 40, 29 | ready-for-agent |
 | 42 | [Visitor location trusts only the production country source and ofl.ink's DNS is ready for a one-record switch](issues/42-country-source-and-dns-ready.md) | phase-05 | 41 | parked — needs-human: country source |
-| 43 | [The Operator switches ofl.ink to v2 by one DNS change and switches v1 off 30 days later](issues/43-cutover-runbook.md) | phase-05 | 41, 42, 23, 32, 38 | parked — needs-human: ports 80/443; country source |
+| 43 | [The Operator switches ofl.ink to v2 by one DNS change while v1 stays live](issues/43-cutover-runbook.md) | phase-05 | 41, 42, 23, 32, 38 | parked — needs-human: ports 80/443; country source |
 | 44 | [Bio links move to a warmed Spare Domain the day ofl.ink is Flagged](issues/44-spare-domain-rotation.md) | phase-05 | 43 | parked — needs-human: Spare Domain vs Meta Flag |
 
 ## Decisions so far
@@ -83,8 +83,9 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets: 34 ready-fo
 - **Phase 02:** One Docker Compose stack in this repo (Caddy, Node app, PocketBase) serves every v1 Profile imported and repaired from the v1 Snapshot with fresh Link Ids, shows admin edits on the next load, stores images as WebP, and gives out a Destination only one Click at a time.
 - **Phase 03:** Anyone holding the sign-up link creates an account, claims a Username, verifies email and builds their Profile and Links in a phone-first Editor styled on the link.me Template; PocketBase rules let only them change it.
 - **Phase 04:** A signed-in Creator's Stats page shows their own Page Views, Clicks and CTR per Link, per UTC day and per country, counted from Profile loads, /r redirects and Reveals; a Tracking Code stays with the Profile it arrived on.
-- **Phase 05:** ofl.ink is served by v2 from the VPS while v1 stays untouched as a cold backup; a Creator's Custom Domain shows their Profile; at least one warmed Spare Domain is ready once ofl.ink is Flagged.
+- **Phase 05:** ofl.ink is served by v2 from the VPS while v1 stays untouched and live on its netlify.app address as the fallback; a Creator's Custom Domain shows their Profile; at least one warmed Spare Domain is ready once ofl.ink is Flagged.
 - **Plan answers (§9):** D1 moot (v1's non-Adult urls stay as they are); D9 public sign-up; the Operator runs network commands when a ticket asks.
+- Plan answer (§10, 2026-10-04): the Netlify site stays on indefinitely; no Netlify change ever; Cutover runbook has no irreversible step.
 
 ## Not yet specified
 
@@ -106,7 +107,7 @@ See plan-review.md `## Cut (YAGNI)`. Headlines: any edit to v1 (repo, Netlify, n
 2. **Production country source: Cloudflare header or geo-IP on the VPS.** Parks 37, 42, 43. First evidence: `dig +short NS ofl.ink; dig +noall +answer DS ofl.ink`. If the zone is already on Cloudflare, Cloudflare wins; otherwise the Operator weighs the nameserver move (plus DNSSEC off/on) against a geo-IP licence and monthly refresh. Geo Rules on DNS-only Custom Domains fall back to US under Cloudflare.
 3. **Whether a Spare Domain survives a Meta Flag.** Parks 44. Settled only after the first real Flag.
 4. **Network commands** (floor 2), ticket 13: `mkdir -p app && (cd app && pnpm init)` if app/package.json is absent; `pnpm --dir app add hono @hono/node-server sharp`; `docker pull alpine:3`; `docker compose --env-file tests/e2e.env build`; `pnpm --dir app add heic-convert` only if the HEIC case fails. Ticket 24: `docker pull axllent/mailpit`.
-5. Human-only acts without a question: domains, Cloudflare account, SMTP credential, real phones, deleting the Netlify site (irreversible, step 16 of ticket 43). Full list in plan-review.md `## Needs the human`.
+5. Human-only acts without a question: domains, Cloudflare account, SMTP credential, real phones. Full list in plan-review.md `## Needs the human`.
 
 ## Assumptions to veto
 

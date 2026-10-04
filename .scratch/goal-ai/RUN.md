@@ -6,6 +6,8 @@
 
 Run 1 (same invocation, Netlify-first reading of the plan, 64 tickets, Status DONE design-only) is **superseded** by plan amendment §8 (v1 is never touched; v2 is built only in this repo). Its artifacts are kept for reference at `docs/spec-superseded-run1/` and `.scratch/goal-ai-superseded-run1/`.
 
+Amended 2026-10-04 by plan §10: the Netlify site stays on indefinitely; propagated to Phase 5 (and Phases 0, 2 and 4), ADRs 0004/0005 (and 0001), CONTEXT.md, plan-review, tickets 43/44 (and 41, 42), map.
+
 ## Ask
 
 Invocation: `/spec-auto goal_ai.txt --tickets 40`
@@ -42,7 +44,7 @@ No ticket was claimed, so no stash. Tickets parked at creation (status in the ti
 - 37 Events carry each Visitor's real country from the production country source — needs-human: country source. Blocks nothing.
 - 38 A phone inside Instagram is recorded as Instagram on v2's VPS host — needs-human: ports. Blocks 43.
 - 42 Visitor location trusts only the production country source and ofl.ink's DNS is ready for a one-record switch — needs-human: country source. Blocks 37, 43.
-- 43 The Operator switches ofl.ink to v2 by one DNS change and switches v1 off 30 days later — needs-human: ports; country source. Blocks 44. Step 16 (delete the Netlify site) is irreversible.
+- 43 The Operator switches ofl.ink to v2 by one DNS change while v1 stays live — needs-human: ports; country source. Blocks 44.
 - 44 Bio links move to a warmed Spare Domain the day ofl.ink is Flagged — needs-human: Spare Domain vs Meta Flag. Blocks nothing.
 
 ## Assumptions to veto
@@ -84,7 +86,7 @@ Sharpest first; each with what falls if it is wrong. Full list (199 flags) in do
    pnpm --dir app add heic-convert                 # only if the HEIC upload case fails with sharp alone
    docker pull axllent/mailpit                     # ticket 24, Phase 3's local mail catcher
    ```
-5. **VPS and Cutover commands** (tickets 23, 32, 38, 42, 43): rsync, `docker compose up -d --build --wait`, the import on the VPS, the live `curl`/`dig`/`whois` checks, the DNS switch, the n8n freeze, and deleting the Netlify site (irreversible). Each is quoted in its ticket and in plan-review.md `## Needs the human`.
+5. **VPS and Cutover commands** (tickets 23, 32, 38, 42, 43): rsync, `docker compose up -d --build --wait`, the import on the VPS, the live `curl`/`dig`/`whois` checks, the DNS switch and the n8n freeze. Each is quoted in its ticket and in plan-review.md `## Needs the human`.
 6. **Human-only acts without a question:** buying Spare Domains, the Cloudflare account (if chosen), the SMTP credential, real phones for the device matrix, `git -C linkme_clone3 pull --ff-only` before the final import.
 
 ## Agents spawned
@@ -103,7 +105,7 @@ Run 1 (superseded): Domain ×1, Spec ×6, Adversary ×6, Six hats ×1, Plan revi
 
 Deduplicated in plan-review.md `## Cut (YAGNI)`. Headlines and why:
 - **Any edit to v1** (old repo, Netlify config, n8n workflow, linkme_clone3/, v1 ping or key): barred by plan §8.
-- **Purging secrets.json from the old history, making the old repo private, `publish = "public"`**: the exposure is accepted until Netlify is switched off (ADR 0005).
+- **Purging secrets.json from the old history, making the old repo private, `publish = "public"`**: the exposure is accepted indefinitely (plan §10, ADR 0005).
 - **Rotating or mapping v1 Link Ids**: v2 mints fresh ids; v1 Shortcuts break by design (ADR 0004).
 - **n8n Mode radio, n8n prefix-bug fix, "n8n becomes admin-only"**: moot; the v2 Editor is the only v2 editing surface.
 - **ffmpeg, video, animated images; HTTP proxies; a Geo Rule UI; Umami; captcha, abuse reporting, content rules; sign-up rate limits; invite list**: plan bonus items or not asked for; D9 is public sign-up.

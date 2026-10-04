@@ -3,10 +3,10 @@
 Spec: docs/spec/phase-05-cutover-and-domains.md
 Covers: user stories 44
 Seams: a phone inside Instagram opening the warmed Spare Domain through a real bio link; `RUN.md`'s `## Cutover`, step 15; PocketBase's admin UI and the Operator's terminal for the next Spare Domain (step 4)
-Blocked by: 43: The Operator switches ofl.ink to v2 by one DNS change and switches v1 off 30 days later
+Blocked by: 43: The Operator switches ofl.ink to v2 by one DNS change while v1 stays live
 Status: parked — needs-human: whether a Spare Domain survives a Meta Flag
 
-**What to build:** Nothing in v2. The day Meta Flags ofl.ink, the Operator and Creators replace "ofl.ink" with a warmed Spare Domain in every bio link, and Visitors reach the same Profiles at the same paths, Tracking Codes and Link Shortcuts included, because every listed Spare Domain is always live (39, 40). The written procedure is step 15 of `RUN.md`'s `## Cutover` (41). This ticket can start once 43's steps 4 and 8 are ticked; it does not wait for 43's step 16.
+**What to build:** Nothing in v2. The day Meta Flags ofl.ink, the Operator and Creators replace "ofl.ink" with a warmed Spare Domain in every bio link, and Visitors reach the same Profiles at the same paths, Tracking Codes and Link Shortcuts included, because every listed Spare Domain is always live (39, 40). The written procedure is step 15 of `RUN.md`'s `## Cutover` (41). This ticket can start once 43's steps 4 and 8 are ticked.
 
 **Why parked.** Nobody knows yet whether rotation recovers traffic (plan-review, Needs the human, item 3; spec, Further Notes and ## Review, B18 and D11).
 - For: a Spare Domain is a different origin, so a Flag on the hostname alone is escaped (D6, plan section 4).

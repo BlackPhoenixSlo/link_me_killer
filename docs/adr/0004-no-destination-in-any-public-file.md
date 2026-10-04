@@ -9,7 +9,7 @@ In v1 the "secret links" hide nothing:
 
 In v2 we keep Reveal by script only as obfuscation against casual crawling and draw the real line elsewhere. No Destination appears in any file v2 publishes or in this repo's git history. Link Ids are random, at least 10 characters, and unrelated to the Username. Reveal is rate-limited and answers only the page's own origin.
 
-These rules govern v2 only. v1 is left as it is (ADR 0005), so its secrets.json and public git history stay exposed at least until Netlify is switched off after Cutover. v2 mints a fresh Link Id for every Link, so leaked v1 ids reveal nothing once ofl.ink points at v2.
+These rules govern v2 only. v1 is left as it is (ADR 0005), so its secrets.json and public git history stay exposed indefinitely; v1 stays live on its netlify.app address (plan section 10). v2 mints a fresh Link Id for every Link, so leaked v1 ids reveal nothing through v2 once ofl.ink points at v2; they reveal only v1 Destinations, through v1's own Reveal function on the netlify.app host.
 
 A Destination that has been published cannot be recalled, and fresh Link Ids do not make it useless; they only stop anyone guessing their way to Destinations through v2's Reveal. Hiding Destinations does not stop ofl.ink from being Flagged; Spare Domains are the protection against that.
 

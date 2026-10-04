@@ -157,7 +157,7 @@ _Avoid_: workflow, automation, admin panel
 ## Generations
 
 **v1**:
-The ofl.ink running today: a static Netlify site whose Profiles are files in GitHub, written by the n8n Form. Nothing in it is ever edited; it serves ofl.ink as it is until Cutover and is switched off afterwards.
+The ofl.ink running today: a static Netlify site whose Profiles are files in GitHub, written by the n8n Form. Nothing in it is ever edited; it serves ofl.ink as it is until Cutover and stays live on its netlify.app address afterwards, indefinitely.
 _Avoid_: Netlify site, old site, legacy
 
 **v1 Snapshot**:

@@ -63,7 +63,7 @@ Ids follow the report: W white, R red, K black, Y yellow, G green, U blue, C the
 - **K3 accept** (Phases 3 and 5). Phase 3's taken-Username test now uses `fixture`, and Phase 5's Acceptance opens with `set -e`. Its Snapshot check is also split into two lines, because `set -e` ignores a failure on the left of `&&`.
 - **Y1 accept.** No change. The three layers that keep Destinations private stay as specified (Phase 2 projection, Phase 3 rules, leak scans).
 - **Y2 accept.** No change. The hermetic loop and v1's own reveal.js as the parity oracle stay.
-- **Y3 partial** (Phase 5). The claim holds for the record switch, the import's warnings and the hand-over. It does not hold for the zone move with DNSSEC, which is slow to undo, or for deleting the Netlify site, which is irreversible and is the Operator's own act (Phase 5, step 16).
+- **Y3 partial** (Phase 5). The claim holds for the record switch, the import's warnings and the hand-over. It does not hold for the zone move with DNSSEC, which is slow to undo, or for deleting the Netlify site, which is irreversible and is the Operator's own act (Phase 5, step 16). Plan §10 (2026-10-04) drops the site deletion and step 16, so only the zone move remains.
 - **G1 needs-human** (Phases 2, 4 and 5). Cloudflare or geo-IP on the VPS: see Needs the human, item 2.
 - **G2 reject.** The order stays 0→1→2, for reasons the report did not weigh:
   - **Rung 1: Phase 2 depends on Phase 1** (Phase 2 spec, Depends on).
@@ -113,7 +113,7 @@ Deduplicated from the six Out of Scope sections.
 
 **Barred by plan section 8 (v1 is never touched):**
 - Any edit to v1: the old repo, Netlify's config or deploys, the live n8n workflow, `linkme_clone3/`, and a v1 ping or key (01–05).
-- `publish = "public"`, making the old repo private, and purging secrets.json from its history. The exposure is accepted until Netlify is switched off (ADR 0005) (00).
+- `publish = "public"`, making the old repo private, and purging secrets.json from its history. The exposure is accepted indefinitely; v1 stays live on its netlify.app address (plan §10, ADR 0005) (00).
 - Rotating v1 Link Ids, and mapping them onto v2's. v2 mints fresh ids, and Creators are told that v1 Shortcuts break (ADR 0004) (00, 05).
 - The n8n prefix-bug fix and the n8n Form's three-way Mode radio (00, 01).
 - Run 1's done-check (`secrets.json` answers 404). v1 keeps serving it, and live reads are out of bounds (00).
@@ -183,7 +183,7 @@ Deduplicated from the six Out of Scope sections.
 - v1 repairs, the stack and Reveal hardening → Phase 2.
 - Sign-up, the Editor, owner rules and reserved Usernames → Phase 3.
 - Events, the ping, `dailyStats` and the per-Profile Tracking Code key → Phase 4.
-- Custom and Spare Domains, the switch, the freeze, Netlify off, and the country-header handling → Phase 5.
+- Custom and Spare Domains, the switch, the freeze and the country-header handling → Phase 5.
 - Backups → Phase 3's deploy (this pass).
 
 ## Not yet specified
@@ -328,17 +328,17 @@ Every `ASSUMPTION:` across the specs, grouped, sharpest first. 199 raw flags at 
    - **Evidence that settles it.** First, `dig +short NS ofl.ink; dig +noall +answer DS ofl.ink`. If the nameservers are already Cloudflare's, the move costs nothing and Cloudflare wins. If not, the Operator weighs the nameserver move (plus any DNSSEC change) against accepting a geo-IP licence and its monthly refresh.
    - **What it parks:**
      - Phase 4: the source line of Contracts, Visitor country; story 31; the post-switch `ZZ` probe in Acceptance; the Out of Scope line "The app reads `CF-IPCountry` directly"; the Further Notes ASSUMPTIONs on the `ZZ` probe and on "once ofl.ink is Proxied"; and the local header injection (story 32, test 4), which under geo-IP needs a test seam in front of the lookup.
-     - Phase 5: stories 3, 18 and 19; The Cloudflare lines; DNS records; Moving the zone. In Acceptance: step 1's `CLOUDFLARE_RANGES` line, step 3, the Cloudflare part of step 4, step 7's two header probes, and where steps 8, 9, 13 and 16 change records.
+     - Phase 5: stories 3, 18 and 19; The Cloudflare lines; DNS records; Moving the zone. In Acceptance: step 1's `CLOUDFLARE_RANGES` line, step 3, the Cloudflare part of step 4, step 7's two header probes, and where steps 8, 9 and 13 change records.
    - **Unaffected:**
      - Phases 0, 1, 2 and 3 in full.
      - Phase 4's Events, ping, `XX` rule, `dailyStats` and Stats page.
-     - Phase 5's Host Resolution, TLS Ask, page bootstrap, Domains schema, Custom and Spare Domain serving, backups check, freeze, final import, hand-over and switching Netlify off.
+     - Phase 5's Host Resolution, TLS Ask, page bootstrap, Domains schema, Custom and Spare Domain serving, backups check, freeze, final import and hand-over.
 3. **Do Spare Domains survive a Meta Flag?** (Phase 5, B18 and D11, Further Notes.)
    - For: a different origin escapes a Flag on the hostname alone (D6, plan §4).
    - Against: the same pages, Destinations and server sit behind it, and DNS-only hosts publish the address.
    - Settled by: after the first real Flag, open the warmed Spare Domain through the real bio link in Instagram and follow a Link onward.
 
-Human-only acts that are not open questions are listed in Phase 5's Further Notes, "Needs the human" (items 1–13; its item 14 is item 2 here). Examples: buying domains, the Cloudflare account, the SMTP credential (Phase 3), real phones, and deleting the Netlify site.
+Human-only acts that are not open questions are listed in Phase 5's Further Notes, "Needs the human" (items 1–12; its item 13 is item 2 here). Examples: buying domains, the Cloudflare account, the SMTP credential (Phase 3) and real phones. Nothing in Netlify is ever changed (plan §10).
 
 **Network commands the human runs** (floor 2). Each is quoted exactly as its spec has it.
 
@@ -381,7 +381,7 @@ ssh "$VPS" "cd $V2_DIR && docker compose run --rm -v \"\$PWD/linkme_clone3:/v1:r
 PLAYWRIGHT_BASE_URL="https://$V2_HOST" npx playwright test tests/e2e/02-profile-parity.spec.ts --grep-invert 'Geo Rule'   # step 6
 nc -zv "$VPS_IPV4" 80 && nc -zv "$VPS_IPV4" 443                                                                # step 7
 ```
-Steps 1, 3, 7, 9, 14 and 16 add further `curl`, `dig` and `ssh` checks against v2's host, ofl.ink, the Spare Domain, a Custom Domain and `linkmeclone3.netlify.app`. Their exact text is in Phase 5's Acceptance. After the switch, Phase 4 adds one probe:
+Steps 1, 3, 7, 9 and 14 add further `curl`, `dig` and `ssh` checks against v2's host, ofl.ink, the Spare Domain and a Custom Domain. Their exact text is in Phase 5's Acceptance. After the switch, Phase 4 adds one probe:
 ```sh
 curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'CF-IPCountry: ZZ' https://ofl.ink/v/<a Username>
 ```

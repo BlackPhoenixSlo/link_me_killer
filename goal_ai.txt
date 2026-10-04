@@ -230,3 +230,19 @@ D9: PUBLIC sign-up. The Operator will share the link privately with friends, but
     list. Email verification stays; content rules / abuse reporting stay Bonus unless abuse appears.
 Network: the Operator runs the docker pulls and `pnpm --dir app add hono @hono/node-server sharp`
     themselves when ticket 17 asks (or pre-creates app/ with pnpm init). Not a block for design.
+
+================================================================
+10. ANSWER (user, 2026-10-04): the Netlify site stays on indefinitely
+================================================================
+The old Netlify site (linkmeclone3.netlify.app) is NEVER switched off, removed or deleted. Nothing in
+Netlify is ever changed. Cutover is still the one DNS change that points ofl.ink at v2; after it, v1
+keeps serving on its netlify.app address indefinitely, as a live fallback rather than a cold backup.
+Consequences:
+- Phase 5's step "switch v1 off 30 days later" (remove domain from Netlify, delete the site) is dropped.
+  There is no irreversible step left in the Cutover runbook.
+- Accepted consequence (replaces the last bullet of section 8): secrets.json and the public git history
+  stay exposed on the OLD side indefinitely. v2 regenerates every Link Id, so leaked v1 ids reveal only
+  v1 Destinations through v1's own reveal function on the netlify.app host.
+- The n8n Form keeps working against the old repo and redeploying the netlify.app site; its edits never
+  reach ofl.ink after Cutover (unchanged).
+- The v1 Import is still never re-run after Cutover (unchanged).
