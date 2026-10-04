@@ -78,6 +78,8 @@ async function serveVariant(page: Page, edit: (json: ProfileJson) => void) {
 }
 
 const linkIn = (json: ProfileJson, id: string) => json.links.find((l) => l.id === id)!;
+// The url v2 serves for a Link that carries no Deeplink mode: its Click route on the host under test.
+const rUrlOf = (link: Link) => `${new URL(test.info().project.use.baseURL!).origin}/r/${link.id}`;
 
 // Reveal watch: every Reveal request the page makes, and the next Reveal answer.
 function watchReveals(page: Page) {
@@ -98,6 +100,8 @@ async function realUrlOf(reveal: Response): Promise<string> {
 
 // Navigation recorder: the destination of every Navigation API navigate event, x-safari- and other app
 // schemes included. The page stays put on those schemes, so nothing leaves the machine.
+// On v2 a Link's url is `/r/{Link Id}`, which redirects to the Destination, so "lands on its url" reads the address the
+// page navigated to from this recorder, not the final address (ticket 16, second ASSUMPTION).
 // Same-task mark: a capture-phase click listener sets a flag that a zero-delay timer clears, so a navigation
 // started after any request or other wait following the tap is not marked (story 15).
 type Navigation = { url: string; inTapTask: boolean };
@@ -166,10 +170,11 @@ test.describe('System Browser (desktop Chrome)', () => {
   for (const mode of ['direct', 'escape_ig'] as const) {
     test(`a tap on the ${mode} Link lands on its url and makes no Reveal request`, async ({ page }) => {
       const link = byMode[mode];
+      const navigations = await recordNavigations(page);
       const reveals = watchReveals(page);
       await openProfile(page);
       await card(page, link).click();
-      await expect(page).toHaveURL(link.url!);
+      await expect.poll(() => navigations.at(-1)?.url).toBe(link.url);
       expect(reveals).toHaveLength(0);
     });
 
@@ -240,14 +245,17 @@ test.describe('System Browser (desktop Chrome)', () => {
 
   test('with every mode stripped, the Deeplink Link falls back to Escape Mode and lands on its url with no Reveal', async ({ page }) => {
     const link = byMode.deeplink;
+    const url = rUrlOf(link); // the url v2 serves for a Link without a Deeplink mode (ticket 16, second ASSUMPTION)
     await serveVariant(page, (json) => {
       delete json.profile.mode;
       json.links.forEach((l) => delete l.mode);
+      linkIn(json, link.id).url = url;
     });
+    const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
     await card(page, link).click();
-    await expect(page).toHaveURL(link.url!);
+    await expect.poll(() => navigations.at(-1)?.url).toBe(url);
     expect(reveals).toHaveLength(0);
   });
 
@@ -293,9 +301,10 @@ test.describe('System Browser (desktop Chrome)', () => {
 
   test('/{username}/{code}?link={Escape Link Id} lands where a tap on that Link would: its url, with no Reveal', async ({ page }) => {
     const link = byMode.escape_ig;
+    const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await page.goto(`/${username}/${TC}?link=${link.id}`);
-    await expect(page).toHaveURL(link.url!);
+    await expect.poll(() => navigations.at(-1)?.url).toBe(link.url);
     expect(reveals).toHaveLength(0);
   });
 
@@ -314,10 +323,13 @@ test.describe('System Browser (desktop Chrome)', () => {
   test('the network fence answers every host other than localhost', async ({ page }) => {
     const offHost: Response[] = [];
     page.on('response', (res) => { if (new URL(res.url()).hostname !== 'localhost') offHost.push(res); });
+    const navigations = await recordNavigations(page);
     await openProfile(page);
     await card(page, byMode.direct).click();
-    await expect(page).toHaveURL(byMode.direct.url!);
-    expect(offHost.length).toBeGreaterThan(1); // the stylesheet CDN, and the Destination itself
+    await expect.poll(() => navigations.at(-1)?.url).toBe(byMode.direct.url);
+    // The stylesheet CDN and the verified badge's image host. On v2 the Destination is the hop after `/r`'s 302, which the
+    // network guard in playwright.config.ts fails before any response, so it is not among these.
+    expect(offHost.length).toBeGreaterThan(1);
     expect(offHost.filter((res) => res.headers()[FENCE_HEADER] !== '1').map((res) => res.url())).toEqual([]);
   });
 });
@@ -380,8 +392,7 @@ for (const [browser, userAgent] of [
       await openProfile(page);
       await expect(escapeOverlay(page)).toBeHidden();
       await card(page, link).click();
-      await expect(page).toHaveURL(link.url!);
-      expect(navigations.at(-1)?.url).toBe(link.url);
+      await expect.poll(() => navigations.at(-1)?.url).toBe(link.url);
       expect(navigations.map(({ url }) => url).filter((url) => !url.startsWith('http'))).toEqual([]);
     });
   });
@@ -399,8 +410,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await expect(page).toHaveURL(`/${username}/${TC}`);
 
     await card(page, link).click();
-    await expect(page).toHaveURL(link.url!);
-    expect(navigations.at(-1)?.url).toBe(link.url);
+    await expect.poll(() => navigations.at(-1)?.url).toBe(link.url);
     expect(xSafari(navigations)).toEqual([]);
   });
 
@@ -453,8 +463,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
       expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe('hidden');
 
       await card(page, link).click();
-      await expect(page).toHaveURL(link.url!);
-      expect(navigations.at(-1)?.url).toBe(link.url);
+      await expect.poll(() => navigations.at(-1)?.url).toBe(link.url);
       expect(xSafari(navigations)).toEqual([]);
     });
   }
@@ -481,14 +490,14 @@ test.describe('In-App Browser (iOS Instagram)', () => {
   ] as const) {
     test(`Direct default: the Deeplink Link with ${variant} navigates plainly to its url, with no Reveal and nothing x-safari- recorded`, async ({ page }) => {
       const link = byMode.deeplink;
-      await serveVariant(page, (json) => { directDefault(json); edit(linkIn(json, link.id)); });
+      const url = rUrlOf(link); // the url v2 serves for a Link without a Deeplink mode (ticket 16, second ASSUMPTION)
+      await serveVariant(page, (json) => { directDefault(json); edit(linkIn(json, link.id)); linkIn(json, link.id).url = url; });
       const navigations = await recordNavigations(page);
       const reveals = watchReveals(page);
       await openProfile(page);
       await card(page, link).click();
-      await expect(page).toHaveURL(link.url!);
+      await expect.poll(() => navigations.at(-1)?.url).toBe(url);
       expect(reveals).toHaveLength(0);
-      expect(navigations.at(-1)?.url).toBe(link.url);
       expect(xSafari(navigations)).toEqual([]);
     });
   }
@@ -648,9 +657,10 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await expect.poll(() => xSafari(navigations)).toHaveLength(1);
 
     const fresh = await hop(browser, page, xSafari(navigations)[0], directDefault);
+    const landed = await recordNavigations(fresh.page);
     const reveals = watchReveals(fresh.page);
     await fresh.page.goto(fresh.path);
-    await expect(fresh.page).toHaveURL(link.url!); // where a desktop tap on the Escape Link lands
+    await expect.poll(() => landed.at(-1)?.url).toBe(link.url); // where a desktop tap on the Escape Link lands
     expect(reveals).toHaveLength(0);
     await fresh.page.context().close();
   });

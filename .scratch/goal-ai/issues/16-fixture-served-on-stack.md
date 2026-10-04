@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 2, 6, 11, 13, 15, 37, 38, 54, 55, 56
 Seams: the running v2 stack's public HTTP surface at baseURL, driven by Playwright through `./check.sh`: pages, plus the `request` fixture for Profile JSON and for redirects (not followed). The parity spec's Fixture Profile journeys, with every Destination host answered by `page.route`
 Blocked by: 10: The escaped Link opens by itself in the System Browser credited to the same Tracking Code, 15: The v1 Import writes the Fixture Profile into PocketBase on a running test stack
-Status: claimed 20261004T191309Z 2026-10-04T21:52:15Z
+Status: done
 
 **What to build:** From this ticket on, `./check.sh` runs every spec against v2:
 - It starts the test stack in its own Compose project and waits until it is healthy.
@@ -31,12 +31,12 @@ The app reads PocketBase as the superuser named in the environment and never log
 
 ASSUMPTION: Geo Rules wait for 18. The Fixture Profile's Adult Link has a Geo Rule but no default Tracking Code (Phase 0 spec, Contracts), and the Phase 1 spec names no `geo` case, so no Phase 0 or Phase 1 spec asks Reveal for one (rung 1, confirmed by the devil's-advocate pass). Overturned if one does. 18's Geo Rule half and Visitor location then move here.
 
-ASSUMPTION: a Phase 1 check that a Direct or Escape Link "lands on its url" still passes on v2. Phase 1 observes this with its navigation recorder, which records the address the page navigated to, `/r/{Link Id}`, and not where the redirect ends (rung 1: Phase 1 spec, the navigation recorder). Overturned if a Phase 1 assertion reads the final address. That assertion then reads the recorder's address instead. It is the one edit this Phase makes to a Phase 1 spec.
+ASSUMPTION: a Phase 1 check that a Direct or Escape Link "lands on its url" still passes on v2. Phase 1 observes this with its navigation recorder, which records the address the page navigated to, `/r/{Link Id}`, and not where the redirect ends (rung 1: Phase 1 spec, the navigation recorder). Overturned if a Phase 1 assertion reads the final address. That assertion then reads the recorder's address instead. This Phase makes two kinds of edit to a Phase 1 spec: those final-address reads become recorder reads, and the three Deeplink Link variants that strip, remove or garble the mode and expect plain navigation also set the Link's `url` to `{origin}/r/{Link Id}` (rung 1: v2 serves `url: ""` for a stored Deeplink Link, app/src/public-profile.js:30, so a variant that only strips the mode is JSON v2 never serves; a Link without a Deeplink mode carries its `/r` url).
 
 ASSUMPTION: the seed holds only the Fixture site here. That is the fresh-clone path, which the spec requires anyway; the v1 Snapshot joins in 17 (rung 5). Overturned if 17 folds into this ticket.
 
 - [ ] `./check.sh` starts the test stack, seeds it, runs every spec, and leaves no container or volume of the test project behind. It never reuses a running server, and a set `PLAYWRIGHT_BASE_URL` skips the stack.
-- [ ] The Dev-Server Stand-in is gone, and the Phase 0 and Phase 1 specs pass on v2 unchanged.
+- [ ] The Dev-Server Stand-in is gone, and the Phase 0 and Phase 1 specs pass on v2 with the two edits recorded above.
 - [ ] The parity spec's Fixture Profile journeys pass on `/fixture` with a desktop User-Agent. Every id is read from the served Profile JSON:
   - the Direct Link's Click goes through `/r/{Link Id}` and ends at its Test Secrets Destination;
   - the Deeplink Link's Click sends Reveal with its id and never requests `/r`, and the page then requests its Test Secrets Destination;

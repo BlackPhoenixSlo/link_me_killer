@@ -6,7 +6,7 @@
 
 ### Throwaway Profile recipe
 
-The matrix needs a public https host, because every escape link is https and the dev-server stand-in is plain http on localhost. Run it on v2's first public https deploy (Phase 2's first deploy to the VPS):
+The matrix needs a public https host, because every escape link is https and the suite now runs on the test stack via `tests/stack.sh`, which is plain http on localhost. Never run `./check.sh` while another Playwright run or the test stack is up: `reuseExistingServer` is false, so it fails fast on the busy port rather than flaking. `./check.sh tests/e2e/02-v1-import.spec.ts` first runs the whole chromium project (it is the last project); add `--no-deps` to skip that in the dev loop. Run it on v2's first public https deploy (Phase 2's first deploy to the VPS):
 
 1. Create a throwaway Profile there. Do not use a Creator's Profile.
 2. Give it Escape Mode (`escape_ig`) as its default Mode.

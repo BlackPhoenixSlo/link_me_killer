@@ -453,23 +453,26 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 
 - Pages show what a Visitor sees.
 - Playwright's `request` fixture covers Profile JSON, redirects (not followed), Reveal and multipart uploads.
-- Specs also use the two Operator doors the stack already has, because a browser cannot reach them:
+- Specs also use three Operator doors the stack already has, because a browser cannot reach them:
   - PocketBase's REST API on its loopback port, to arrange and inspect state, as the admin UI does;
-  - the v1 Import CLI, through `docker compose run`, as the Operator runs it.
+  - the v1 Import CLI, through `docker compose run`, as the Operator runs it;
+  - Compose's own status, inspect and log output (`docker compose ps`, `docker inspect`, `docker compose logs`), read only, on the local test stack only.
 - No test imports an app module.
+
+ASSUMPTION: Compose's own status, inspect and log output is a third Operator door, read only and only on the local test stack: containers running and healthy, the app mounting no site, no one-off import container left behind, and no Test Secrets value in the containers' logs are facts no HTTP answer carries (rung 5: the Operator reads them the same way, and no new surface is added). Overturned if a spec needs it against the VPS; that check then skips there, or moves behind an HTTP answer.
 
 ASSUMPTION: edits are driven through PocketBase's REST API rather than by clicking through its admin UI. Rung 5: the admin UI is a third-party screen calling that same API, and scripting it would test PocketBase, not v2. Overturned if an admin-UI-only behaviour must be proven.
 
 **Rules every spec follows:**
 
-- **The oracle for "identical" is the v1 Snapshot itself.** Tests read its Profile files and load v1's own reveal.js handler in the test process, the way tests/dev-server.mjs does today (tests/dev-server.mjs:29–37). No test re-implements Tracking Codes or Geo Rules.
+- **The oracle for "identical" is the v1 Snapshot itself.** Tests read its Profile files and load v1's own reveal.js handler in the test process, the way `02-profile-parity`'s `v1Reveal` does (tests/e2e/02-profile-parity.spec.ts, `v1Reveal`). No test re-implements Tracking Codes or Geo Rules.
 - **Destinations stay out of failures.** Assertions compare Destinations as booleans, and failure messages name a Username and card position, never a Destination.
-- **Phase 0 and Phase 1 specs run against v2 unchanged.**
+- **Phase 0 and Phase 1 specs run against v2, with the two edits recorded below.**
   - Phase 0 rewrites `tests/e2e/00-smoke.spec.ts` onto the Fixture Profile. It finds the Adult Link by title, reads its id from the served `/api/profiles/fixture.json`, and leaves the status of the secrets paths unasserted, so v2's 404 with landing.html passes it (Phase 0 spec, Testing Decisions, smoke items 4 and 5). The v1 id that today's file pins (00-smoke.spec.ts:5, :48) is gone before this Phase lands.
   - Its other assertions hold on v2. The Fixture Profile imports with its own `mode` values and Escape Mode as its default, so the Instagram overlay still shows. Its Adult Link has a Test Secrets entry, so Reveal answers 200.
   - Phase 1's spec reads Link Ids, Modes and the Username from the served Fixture Profile (Phase 1 spec, Testing Decisions).
 
-  ASSUMPTION: this Phase edits no Phase 0 or Phase 1 spec. Rung 1: Phase 0's smoke reads served ids and leaves the secrets status open. Overturned if a Phase 0 or Phase 1 spec reads an id from the fixture file; that spec then reads it from the served Profile.
+  ASSUMPTION: this Phase edits no Phase 0 or Phase 1 spec. Rung 1: Phase 0's smoke reads served ids and leaves the secrets status open. Overturned if a Phase 0 or Phase 1 spec reads an id from the fixture file; that spec then reads it from the served Profile. Fired in ticket 16, in two edits (rung 1): Phase 0's smoke keys the Test Secrets by a served id, which is fresh on v2, so it finds the Adult Link's Test Secret through the fixture file's card of the same title and still sends Reveal the served id; and Phase 1's final-address reads become recorder reads, with its three mode-stripped Deeplink Link variants also given the `/r/{Link Id}` url v2 serves for a Link without a Deeplink mode.
 
 **Specs this Phase adds:**
 

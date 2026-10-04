@@ -11,6 +11,10 @@ const SCREENSHOT = join(__dirname, '..', '..', '.scratch', 'goal_ai', 'shots', '
 const TEST_SECRETS: Record<string, string> = JSON.parse(
   readFileSync(join(__dirname, '..', 'fixtures', 'netlify', 'functions', 'secrets.json'), 'utf8'),
 );
+// The Fixture Profile file, read only to key the Test Secrets by its v1 ids.
+const FIXTURE: { links: { id: string; title: string }[] } = JSON.parse(
+  readFileSync(join(__dirname, '..', 'fixtures', 'api', 'profiles', 'fixture.json'), 'utf8'),
+);
 const SECRETS_PATHS = ['/netlify/functions/secrets.json', '/tests/fixtures/netlify/functions/secrets.json'];
 const INSTAGRAM_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
@@ -47,13 +51,15 @@ test('a normal browser does not see the Instagram overlay', async ({ page }) => 
 });
 
 // The Reveal id comes from the page's own served Profile JSON, never the fixture file or a literal.
+// Phase 2 (ticket 16): served ids are fresh on v2, so the Test Secret is found through the fixture file's card of the same title.
 // Destinations are compared as booleans so a failure never prints one.
 test('tapping the adult link shows the age gate, then continue reveals and follows the destination', async ({ page }) => {
   const profileResponse = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/profiles/fixture.json');
   await page.goto(PROFILE);
   const served: { links: { id: string; title: string }[] } = await (await profileResponse).json();
   const adultId = served.links.find((link) => link.title === 'Adult Link')!.id;
-  const destination = TEST_SECRETS[adultId];
+  const fileAdultId = FIXTURE.links.find((link) => link.title === 'Adult Link')!.id;
+  const destination = TEST_SECRETS[fileAdultId];
   expect(typeof destination).toBe('string');
 
   await page.locator('.link-card', { hasText: 'Adult Link' }).click();
