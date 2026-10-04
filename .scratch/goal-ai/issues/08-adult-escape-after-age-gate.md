@@ -4,7 +4,7 @@ Spec: docs/spec/phase-01-link-modes-and-escape.md
 Covers: user stories 7, 15, 23, 24
 Seams: the public page in Chromium under Playwright, served by the Dev-Server Stand-in, with the iOS Instagram User-Agent; observed through the navigation recorder and its same-task mark, the network fence's Reveal watch and Profile variants
 Blocked by: 07: An Escape Mode tap in iOS Instagram escapes to Safari from the tap itself
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T20:26:25Z
 
 **What to build:** A Visitor in an In-App Browser taps an Adult Link in Escape Mode. The Age Gate shows first. "Continue (18+)" is then the tap that fires the Escape: the same escape link and escape target as 07, `?link=` included, fired with no request before it. The Escape Overlay follows, as after any Escape Mode tap. The Destination is never revealed inside the In-App Browser: the System Browser reveals it once the Escape lands (10). If the Visitor closes the Age Gate instead, nothing is fired and nothing is revealed.
 
