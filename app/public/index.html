@@ -7,27 +7,6 @@
     <title>Linkme Clone</title>
     <link rel="stylesheet" href="/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-
-    <!-- deeplink  -->
-    <script>
-        (function () {
-            var ua = navigator.userAgent || navigator.vendor || window.opera;
-            var isInstagram = ua.indexOf('Instagram') > -1;
-
-            // Wait for DOM to load so the page is not white
-            document.addEventListener("DOMContentLoaded", function () {
-                if (isInstagram) {
-                    var igOverlay = document.getElementById('igOverlay');
-                    if (igOverlay) {
-                        igOverlay.classList.remove('hidden');
-                        igOverlay.classList.add('active');
-                        // Prevent scrolling
-                        document.body.style.overflow = 'hidden';
-                    }
-                }
-            });
-        })();
-    </script>
 </head>
 
 <body>
@@ -68,7 +47,7 @@
             <button id="closeOverlayBtn" class="close-btn"><i class="fas fa-times"></i></button>
         </div>
     </div>
-    <!-- Instagram Overlay (Hidden by default) -->
+    <!-- Escape Overlay (Hidden by default) -->
     <div id="igOverlay" class="overlay hidden"
         style="z-index: 9999; background-color: rgba(0,0,0,0.95); flex-direction: column; justify-content: flex-start; padding-top: 20px;">
         <div style="text-align: right; width: 100%; padding-right: 25px; box-sizing: border-box;">
@@ -76,13 +55,13 @@
         </div>
         <div class="overlay-content"
             style="background-color: transparent; border: none; box-shadow: none; color: white; margin-top: 20px;">
-            <i class="fab fa-instagram" style="font-size: 4rem; margin-bottom: 20px; color: #E1306C;"></i>
             <h2 style="font-size: 1.5rem; margin-bottom: 15px; font-weight: bold;">Open in System Browser</h2>
             <p style="font-size: 1.1rem; color: #ddd; margin-bottom: 20px; line-height: 1.6;">
-                Instagram restricts some links. Please tap the <strong>&middot;&middot;&middot;</strong> menu in the top
+                This app restricts some links. Please tap the <strong>&middot;&middot;&middot;</strong> menu in the top
                 right corner and select <strong>"Open in External Browser"</strong> or <strong>"Open in System
                     Browser"</strong> to view this page.
             </p>
+            <button id="igCloseBtn" class="continue-btn" hidden>Close</button>
         </div>
     </div>
 

@@ -4,7 +4,7 @@ Spec: docs/spec/phase-01-link-modes-and-escape.md
 Covers: user stories 2, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 25, 27, 30, 36, 43
 Seams: the public page in Chromium under Playwright, served by the Dev-Server Stand-in, with fake User-Agents per `test.describe`: iOS Instagram; Instagram, FBAN and TikTok (parametrised); iOS Safari; Android Chrome. Observed through the navigation recorder (the destination of every navigation), the network fence's Reveal watch and Profile variants
 Blocked by: 05: Each Link travels by its own Mode in a System Browser
-Status: claimed 20261004T191309Z 2026-10-04T19:58:33Z
+Status: done
 
 **What to build:** The page recognises an In-App Browser by the plan's pattern, used verbatim and case-insensitive: `Instagram|FBAN|FBAV|Threads|musical_ly|Bytedance|TikTok`. It tells iOS from Android as v1 does. Detection lives in the script alone, so the Instagram-only check in the page head goes.
 

@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const overlay = document.getElementById('overlay');
     const closeOverlayBtn = document.getElementById('closeOverlayBtn');
     const continueBtn = document.getElementById('continueBtn');
+    const igOverlay = document.getElementById('igOverlay');
+    const igCloseBtn = document.getElementById('igCloseBtn');
 
     // Store links data to simulate API fetching
     let linksData = [];
@@ -41,6 +43,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return false;
     }
 
+    // In-App Browser: the plan's pattern, verbatim and case-insensitive (performBounce keeps v1's own Instagram check until ticket 07)
+    const IN_APP_BROWSER = /Instagram|FBAN|FBAV|Threads|musical_ly|Bytedance|TikTok/i;
+    const isInAppBrowser = IN_APP_BROWSER.test(navigator.userAgent || '');
+
     // Routing Logic: Get username and optional ID from URL path
     // Format: /username/id or /username
     const pathSegments = window.location.pathname.replace(/^\/|\/$/g, '').split('/');
@@ -54,12 +60,13 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Captured tracking ID: ${trackingId}`);
         localStorage.setItem('linkme_tracking_id', trackingId);
 
-        // Clean URL: Remove the tracking ID from the address bar
+        // Clean URL: Remove the tracking ID from the address bar, outside In-App Browsers only,
+        // so the app's own "Open in browser" menu item carries the Tracking Code
         // Changes /username/123 -> /username
-        // Clean URL: Remove the tracking ID from the address bar
-        // Changes /username/123 -> /username
-        const cleanUrl = `/${username}`;
-        window.history.replaceState({}, '', cleanUrl);
+        if (!isInAppBrowser) {
+            const cleanUrl = `/${username}`;
+            window.history.replaceState({}, '', cleanUrl);
+        }
     }
 
     console.log(`Loading profile: ${username}`);
@@ -74,6 +81,11 @@ document.addEventListener('DOMContentLoaded', () => {
             currentProfile = data.profile;
             linksData = data.links;
             renderLinks(linksData);
+
+            // Escape Overlay on open: In-App Browser and a Profile default that resolves to Escape Mode
+            if (isInAppBrowser && defaultMode() === 'escape_ig') {
+                openEscapeOverlay();
+            }
 
             // Check for Deep Link Query Param logic (existing)...
             // Example: /?link=1 (where 1 is the link ID)
@@ -190,10 +202,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Mode: the Link's own if recognised, else the Profile's default if recognised, else Escape Mode
     const MODES = ['direct', 'escape_ig', 'deeplink'];
-    function effectiveMode(link) {
-        if (MODES.includes(link.mode)) return link.mode;
+    function defaultMode() {
         if (currentProfile && MODES.includes(currentProfile.mode)) return currentProfile.mode;
         return 'escape_ig';
+    }
+
+    function effectiveMode(link) {
+        return MODES.includes(link.mode) ? link.mode : defaultMode();
     }
 
     // Reveal URL: Link Id, Username, and a Tracking Code when the Link has tracking on
@@ -226,11 +241,36 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then(data => {
                 if (data.realUrl) {
-                    performBounce(data.realUrl);
+                    travel(link, data.realUrl);
                 }
             })
             .catch(err => console.error('Error revealing link:', err));
     }
+
+    // Escape Mode keeps Phase 0's bounce until its own Escape lands; Direct and Deeplink navigate plainly
+    function travel(link, url) {
+        if (effectiveMode(link) === 'escape_ig') {
+            performBounce(url);
+        } else {
+            window.location.href = url;
+        }
+    }
+
+    // Escape Overlay: blocks scrolling while it shows. Close is offered only when some Link would not escape.
+    function openEscapeOverlay() {
+        igCloseBtn.hidden = linksData.every(link => effectiveMode(link) === 'escape_ig');
+        igOverlay.classList.remove('hidden');
+        igOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeEscapeOverlay() {
+        igOverlay.classList.remove('active');
+        igOverlay.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    igCloseBtn.addEventListener('click', closeEscapeOverlay);
 
     // Overlay Logic
     function openOverlay(linkId) {
@@ -251,6 +291,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Deep Linking / Bounce Logic
     continueBtn.addEventListener('click', () => {
         if (!currentLinkId) return;
+        // Found at click time, as v1 did: closing the Age Gate mid-Reveal still travels
+        const link = linksData.find(l => l.id === currentLinkId);
 
         continueBtn.textContent = 'loading...';
         continueBtn.disabled = true;
@@ -262,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then(data => {
                 if (data.realUrl) {
-                    performBounce(data.realUrl);
+                    travel(link, data.realUrl);
                 }
                 // Reset UI
                 continueBtn.textContent = 'Continue (18+)';

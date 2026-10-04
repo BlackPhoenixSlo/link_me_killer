@@ -90,6 +90,24 @@ async function realUrlOf(reveal: Response): Promise<string> {
   return realUrl;
 }
 
+// Navigation recorder: the destination of every Navigation API navigate event, x-safari- and other app
+// schemes included. The page stays put on those schemes, so nothing leaves the machine.
+async function recordNavigations(page: Page) {
+  const destinations: string[] = [];
+  await page.exposeFunction('__recordNavigation', (url: string) => { destinations.push(url); });
+  await page.addInitScript(() => {
+    const w = window as unknown as { navigation: EventTarget; __recordNavigation: (url: string) => void };
+    w.navigation.addEventListener('navigate', (event) => {
+      w.__recordNavigation((event as unknown as { destination: { url: string } }).destination.url);
+    });
+  });
+  return destinations;
+}
+const xSafari = (destinations: string[]) => destinations.filter((url) => url.startsWith('x-safari-'));
+
+const escapeOverlay = (page: Page) => page.locator('#igOverlay');
+const closeButton = (page: Page) => escapeOverlay(page).getByRole('button', { name: 'Close' });
+
 async function openProfile(page: Page, path = `/${username}`) {
   await page.goto(path);
   await expect(page.locator('#displayName')).toHaveText(served.profile.displayName);
@@ -237,5 +255,188 @@ test.describe('System Browser (desktop Chrome)', () => {
     await expect(page).toHaveURL(byMode.direct.url!);
     expect(offHost.length).toBeGreaterThan(1); // the stylesheet CDN, and the Destination itself
     expect(offHost.filter((res) => res.headers()[FENCE_HEADER] !== '1').map((res) => res.url())).toEqual([]);
+  });
+});
+
+// In-App Browsers (plan section 7): User-Agents per describe.
+const UA = {
+  iosInstagram:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+    'Mobile/15E148 Instagram 300.0.0.0.0 (iPhone14,2; iOS 17_0; en_US; en-US; scale=3.00; 1170x2532; 0)',
+  androidInstagram:
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 ' +
+    'Chrome/120.0.0.0 Mobile Safari/537.36 Instagram 300.0.0.0.0 Android (34/14; 420dpi; 1080x2400; Google; Pixel 8)',
+  fban:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+    'Mobile/15E148 [FBAN/FBIOS;FBAV/440.0.0.0;FBBV/1;FBDV/iPhone14,2;FBMD/iPhone;FBSN/iOS;FBSV/17.0;FBSS/3;FBCR/;FBID/phone;FBLC/en_US;FBOP/5]',
+  tiktok:
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 ' +
+    'Chrome/120.0.0.0 Mobile Safari/537.36 TikTok 33.0.0 BytedanceWebview/d8a21c6',
+  iosSafari:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+    'Version/17.0 Mobile/15E148 Safari/604.1',
+  androidChrome:
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+    'Chrome/120.0.0.0 Mobile Safari/537.36',
+};
+
+for (const [app, userAgent] of [
+  ['Instagram', UA.androidInstagram],
+  ['FBAN', UA.fban],
+  ['TikTok', UA.tiktok],
+] as const) {
+  test.describe(`In-App Browser (${app})`, () => {
+    test.use({ userAgent });
+
+    test('with every mode stripped, the Escape Overlay shows on open at /{username}/{code}, with no Close', async ({ page }) => {
+      await serveVariant(page, (json) => {
+        delete json.profile.mode;
+        json.links.forEach((l) => delete l.mode);
+      });
+      await openProfile(page, `/${username}/${TC}`);
+      await expect(escapeOverlay(page)).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Open in System Browser' })).toBeVisible();
+      await expect(page).toHaveURL(`/${username}/${TC}`);
+      await expect(closeButton(page)).toHaveCount(0);
+    });
+  });
+}
+
+for (const [browser, userAgent] of [
+  ['iOS Safari', UA.iosSafari],
+  ['Android Chrome', UA.androidChrome],
+] as const) {
+  test.describe(`System Browser (${browser})`, () => {
+    test.use({ userAgent });
+
+    test('no Escape Overlay shows, and a tap on the Escape Link navigates plainly', async ({ page }) => {
+      const link = byMode.escape_ig;
+      const navigations = await recordNavigations(page);
+      await openProfile(page);
+      await expect(escapeOverlay(page)).toBeHidden();
+      await card(page, link).click();
+      await expect(page).toHaveURL(link.url!);
+      expect(navigations.at(-1)).toBe(link.url);
+      expect(navigations.filter((url) => !url.startsWith('http'))).toEqual([]);
+    });
+  });
+}
+
+test.describe('In-App Browser (iOS Instagram)', () => {
+  test.use({ userAgent: UA.iosInstagram });
+  const directDefault = (json: ProfileJson) => { json.profile.mode = 'direct'; };
+
+  test('Direct default: no Escape Overlay on open, the address keeps its code, and the Direct Link navigates plainly', async ({ page }) => {
+    const link = byMode.direct;
+    await serveVariant(page, directDefault);
+    const navigations = await recordNavigations(page);
+    await openProfile(page, `/${username}/${TC}`);
+    await expect(escapeOverlay(page)).toBeHidden();
+    await expect(page).toHaveURL(`/${username}/${TC}`);
+
+    await card(page, link).click();
+    await expect(page).toHaveURL(link.url!);
+    expect(navigations.at(-1)).toBe(link.url);
+    expect(xSafari(navigations)).toEqual([]);
+  });
+
+  test('a tap on the Deeplink Link makes a Reveal request, then navigates plainly to the answer', async ({ page }) => {
+    const link = byMode.deeplink;
+    await serveVariant(page, directDefault);
+    const navigations = await recordNavigations(page);
+    const reveals = watchReveals(page);
+    await openProfile(page);
+
+    const reveal = nextReveal(page);
+    await card(page, link).click();
+    const destination = await realUrlOf(await reveal);
+    await expect(page).toHaveURL(destination);
+    expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
+    expect(navigations.at(-1)).toBe(destination);
+    expect(xSafari(navigations)).toEqual([]);
+  });
+
+  test('the Adult Link set to Direct shows the Age Gate, then Continue (18+) reveals and navigates plainly', async ({ page }) => {
+    await serveVariant(page, (json) => { directDefault(json); linkIn(json, adult.id).mode = 'direct'; });
+    const navigations = await recordNavigations(page);
+    const reveals = watchReveals(page);
+    await openProfile(page);
+
+    await card(page, adult).click();
+    await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
+    expect(reveals).toHaveLength(0);
+
+    const reveal = nextReveal(page);
+    await page.getByRole('button', { name: 'Continue (18+)' }).click();
+    const destination = await realUrlOf(await reveal);
+    await expect(page).toHaveURL(destination);
+    expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([adult.id]);
+    expect(navigations.at(-1)).toBe(destination);
+    expect(xSafari(navigations)).toEqual([]);
+  });
+
+  for (const profileMode of ['escape_ig', 'sideways']) {
+    test(`a default of ${profileMode} on a Profile that holds the Direct and Deeplink Links shows the Escape Overlay on open, with Close`, async ({ page }) => {
+      const link = byMode.direct;
+      await serveVariant(page, (json) => { json.profile.mode = profileMode; });
+      const navigations = await recordNavigations(page);
+      await openProfile(page);
+      await expect(escapeOverlay(page)).toBeVisible();
+      expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden'); // blocks scrolling
+
+      await closeButton(page).click();
+      await expect(escapeOverlay(page)).toBeHidden();
+      expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe('hidden');
+
+      await card(page, link).click();
+      await expect(page).toHaveURL(link.url!);
+      expect(navigations.at(-1)).toBe(link.url);
+      expect(xSafari(navigations)).toEqual([]);
+    });
+  }
+
+  test('every Link set to Escape Mode with an escape_ig default shows the Escape Overlay on open, with no Close', async ({ page }) => {
+    await serveVariant(page, (json) => {
+      json.profile.mode = 'escape_ig';
+      json.links.forEach((l) => { l.mode = 'escape_ig'; });
+    });
+    await openProfile(page);
+    await expect(escapeOverlay(page)).toBeVisible();
+    await expect(closeButton(page)).toHaveCount(0);
+  });
+
+  test('a default of deeplink shows no Escape Overlay on open', async ({ page }) => {
+    await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; });
+    await openProfile(page);
+    await expect(escapeOverlay(page)).toBeHidden();
+  });
+
+  for (const [variant, edit] of [
+    ['an unrecognised mode', (l: Link) => { l.mode = 'sideways'; }],
+    ['its mode removed', (l: Link) => { delete l.mode; }],
+  ] as const) {
+    test(`Direct default: the Deeplink Link with ${variant} navigates plainly to its url, with no Reveal and nothing x-safari- recorded`, async ({ page }) => {
+      const link = byMode.deeplink;
+      await serveVariant(page, (json) => { directDefault(json); edit(linkIn(json, link.id)); });
+      const navigations = await recordNavigations(page);
+      const reveals = watchReveals(page);
+      await openProfile(page);
+      await card(page, link).click();
+      await expect(page).toHaveURL(link.url!);
+      expect(reveals).toHaveLength(0);
+      expect(navigations.at(-1)).toBe(link.url);
+      expect(xSafari(navigations)).toEqual([]);
+    });
+  }
+
+  test('Deeplink default: a Link with its mode removed makes a Reveal request', async ({ page }) => {
+    const link = byMode.escape_ig;
+    await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; delete linkIn(json, link.id).mode; });
+    const reveals = watchReveals(page);
+    await openProfile(page);
+    const reveal = nextReveal(page);
+    await card(page, link).click();
+    await expect(page).toHaveURL(await realUrlOf(await reveal));
+    expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
   });
 });
