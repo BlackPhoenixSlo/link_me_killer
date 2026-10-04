@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 1, 7, 8, 9, 10, 12, 14, 15, 16, 38, 40, 41, 42, 43, 44, 47, 48, 50, 54, 57
 Seams: the running v2 stack's public HTTP surface at baseURL through `./check.sh`: pages for what a Visitor sees, and the `request` fixture for Profile JSON. The v1 Snapshot's Profile files, read at test time, are the oracle
 Blocked by: 16: The Fixture Profile is served by v2's stack and every Phase 0 and Phase 1 spec passes on it
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T22:34:04Z
 
 **What to build:** `./check.sh` now seeds the test stack with the whole v1 Snapshot first and the Fixture site last, so every v1 Profile is served by v2 in the loop. On a fresh clone with no v1 Snapshot, the seed takes the Fixture site alone and every v1 case skips with the reason `v1 Snapshot absent`.
 
