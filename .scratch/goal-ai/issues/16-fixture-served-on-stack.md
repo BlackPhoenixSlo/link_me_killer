@@ -55,3 +55,4 @@ ASSUMPTION: the seed holds only the Fixture site here. That is the fresh-clone p
 - [ ] After a code change in the app, the rebuild fetches nothing from the network. A needed change to the app's manifest or lockfile parks this ticket on 13's install and build lines.
 - [ ] The spec's Acceptance checks for the stand-in being gone and for `reuseExistingServer: false` pass, and 12's Compose checks still pass.
 - [ ] `tests/e2e/01-page-copy-only.spec.ts` (ticket 01, stand-in only: it asserts 200 plus the index body for a secrets path, where the v2 app answers 404) is deleted or folded into the smoke spec now that the stack replaces the Dev-Server Stand-in.
+- [ ] tests/stack-import-check.mjs's checks are folded into a Playwright spec that runs against the stack, and the script is deleted.

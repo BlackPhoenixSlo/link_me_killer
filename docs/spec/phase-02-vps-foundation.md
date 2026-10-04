@@ -176,7 +176,7 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
             order                number
             isAdult              bool
             mode                 select direct | escape_ig | deeplink, optional    (empty = the Profile's default Mode)
-            destination          text, optional, pattern ^(https?://|/[^/])       (absolute http(s) URL or root-relative path)
+            destination          text, optional, pattern ^(https?://[^\s\\/]|/[^\s\\/])[^\s\\]*$   (absolute http(s) URL or root-relative path)
             tracking             bool
             defaultTrackingCode  text, optional                                    (v1 default_tracknumber, verbatim)
             geo                  json, optional                                    (Geo Rule, v1 shape)
@@ -203,7 +203,7 @@ v1 keeps serving ofl.ink, untouched, until Cutover (Phase 5). The existing Playw
 
   ASSUMPTION: file fields accept only image/webp, so the admin UI refuses a dropped-in JPG instead of converting it. Rung 4: this keeps "every stored image is WebP" true without a second converter inside PocketBase. The 5 MB cap clears the largest v1 image, about 2.8 MB (`ls -lS linkme_clone3/images`). Overturned if the Operator must upload raw photos through the admin UI before the Editor exists (Phase 3).
 
-  ASSUMPTION: `links.destination` enforces `^(https?://|/[^/])` in the schema, not only in the import. Reveal hands that value to the page, which navigates to it, so a `javascript:` or `//host` value typed into the admin UI (or, from Phase 3, the Editor) would run on, or leave from, v2's own origin. Rung 4: a rule is cheaper to relax than an injected script is to recall. Overturned if a Destination must use another scheme; D3's Deeplink hands over an https link, so none does yet.
+  ASSUMPTION: `links.destination` enforces `^(https?://[^\s\\/]|/[^\s\\/])[^\s\\]*$` in the schema, not only in the import. Reveal hands that value to the page, which navigates to it, so a `javascript:`, `//host`, `/\host` or `/<TAB>/host` value typed into the admin UI (or, from Phase 3, the Editor) would run on, or leave from, v2's own origin: browsers read `\` as `/` and drop tab and newline, so the pattern refuses a backslash or whitespace anywhere and needs a host or path character right after `http(s)://` or the leading `/`. PocketBase patterns are Go RE2, so there is no lookahead. Rung 4: a rule is cheaper to relax than an injected script is to recall. Overturned if a Destination must use another scheme, or a literal space or backslash; D3's Deeplink hands over an https link, so none does yet.
 
 - **Contracts.**
 

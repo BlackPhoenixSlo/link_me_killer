@@ -29,3 +29,4 @@ Trees A and B are committed beside 14's broken tree. Every url in them is on exa
 
 - [ ] The import spec's case-twin, refusal, re-run, no-Destination and recreation cases pass under `./check.sh`, after every other spec. Without the v1 Snapshot, its v1 cases skip as `v1 Snapshot absent`.
 - [ ] Nothing is written into the v1 Snapshot: the archive is read from git and unpacked only inside the container. The v1 Snapshot's git status is clean.
+- [ ] A v1 url that begins with two backslashes (a browser sends it off-site) is refused with `invalid v1 file:`, not rewritten into a root-relative path (review note from ticket 15).

@@ -122,6 +122,20 @@ test('a relative url the URL parser rejects is refused by its fixed reason and n
   expect(holdsDestination(lines, [site])).toBe(false);
 });
 
+test('a root-relative url whose backslash a browser reads as a second slash is refused and never printed', () => {
+  // `/\host.example` would leave v2's origin in a browser, which reads `\` as `/`.
+  const site = throwawaySite('v1-backslash-', {
+    'backslash.json': [{ id: 'backslash_1', title: 'Plain', isAdult: false, url: '/\\host.example', tracking: false }],
+  });
+  const { status, lines } = runImport([site]);
+  expect(status).toBe(1);
+  const invalid = startsWith(lines, 'invalid v1 file: ');
+  expect(invalid.length).toBe(lines.length);
+  expect(invalid.length).toBe(1);
+  expect(invalid[0].includes('backslash.json: card 1')).toBe(true);
+  expect(holdsDestination(lines, [site])).toBe(false);
+});
+
 test('a .json entry or an image path that is a directory is refused as unreadable, not a crash', () => {
   const site = throwawaySite('v1-dirs-', {});
   mkdirSync(join(site, 'api', 'profiles', 'dirprofile.json'));

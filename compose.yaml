@@ -18,6 +18,13 @@ services:
 
   app:
     # Build context is app/ alone, so the v1 Snapshot can never be baked in. No ports: only Caddy reaches it.
+    # The v1 Import runs in this image as a one-off container, with its site mounted read-only for that run only:
+    #   VPS:  docker compose run --rm -v "$PWD/linkme_clone3:/v1:ro" app import-v1 --site /v1
+    #   Fixture site (test stack; tests/fixtures/ with the Page Copy's stock icons as its images/, mounted as three
+    #   read-only pieces so that no mountpoint is ever created inside tests/fixtures/):
+    #     docker compose --env-file tests/e2e.env run --rm \
+    #       -v "$PWD/tests/fixtures/api:/site/api:ro" -v "$PWD/tests/fixtures/netlify:/site/netlify:ro" \
+    #       -v "$PWD/app/public/images:/site/images:ro" app import-v1 --site /site
     build:
       context: ./app
     restart: unless-stopped
@@ -27,6 +34,7 @@ services:
     environment:
       PB_SUPERUSER_EMAIL: ${PB_SUPERUSER_EMAIL:?set PB_SUPERUSER_EMAIL (see .env.example)}
       PB_SUPERUSER_PASSWORD: ${PB_SUPERUSER_PASSWORD:?set PB_SUPERUSER_PASSWORD (see .env.example)}
+      PB_URL: http://pocketbase:8090
       REVEAL_LIMIT_PER_MINUTE: ${REVEAL_LIMIT_PER_MINUTE:-60}
 
   pocketbase:

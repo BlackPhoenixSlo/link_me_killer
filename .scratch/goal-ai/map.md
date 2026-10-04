@@ -42,7 +42,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 | 12 | [The v2 stack is declared and its Compose contract checks pass offline](issues/12-stack-declared-offline.md) | phase-02 | 01 | done |
 | 13 | [The Operator's network commands fetch the stack's packages and images](issues/13-network-commands.md) | phase-02 | 12 | done |
 | 14 | [The v1 Import repairs or refuses every v1 file before it writes anything](issues/14-import-repairs-or-refuses.md) | phase-02 | 03 | done |
-| 15 | [The v1 Import writes the Fixture Profile into PocketBase on a running test stack](issues/15-import-writes-fixture.md) | phase-02 | 13, 14 | claimed 20261004T191309Z |
+| 15 | [The v1 Import writes the Fixture Profile into PocketBase on a running test stack](issues/15-import-writes-fixture.md) | phase-02 | 13, 14 | done |
 | 16 | [The Fixture Profile is served by v2's stack and every Phase 0 and Phase 1 spec passes on it](issues/16-fixture-served-on-stack.md) | phase-02 | 10, 15 | ready-for-agent |
 | 17 | [Every v1 Profile page on v2 matches the v1 Snapshot card for card](issues/17-v1-pages-match.md) | phase-02 | 16 | ready-for-agent |
 | 18 | [Every Click on a v1 Link ends at v1's Destination for the same Tracking Code and Visitor location](issues/18-v1-clicks-match.md) | phase-02 | 17 | ready-for-agent |
