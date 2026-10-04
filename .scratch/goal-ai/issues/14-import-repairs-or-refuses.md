@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 25, 37, 41, 42, 43, 46, 47, 48, 49, 50, 52
 Seams: the v1 Import CLI run with this Mac's Node against v1-shaped trees, with no PocketBase reachable (the app image that will carry it is not built until 13). Observed through its printed lines and exit code
 Blocked by: 03: Test Secrets sit beside the Fixture Profile and are never served
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T21:08:55Z
 
 **What to build:** The Operator's one import command, up to the point where it would first contact PocketBase. It takes one or more v1-shaped site directories, such as the v1 Snapshot and the Fixture site. It reads and validates every Profile file, secrets file and image path before anything is written, and plans the Profiles and Links it will write:
 - **Usernames.** The Username is the file's name, lower-cased.
