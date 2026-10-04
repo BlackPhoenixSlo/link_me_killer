@@ -4,7 +4,7 @@ Spec: docs/spec/phase-00-new-repo-ground.md
 Covers: user stories 3, 12, 13, 15, 17
 Seams: the Dev-Server Stand-in's HTTP surface at baseURL, driven by Playwright's `request` client (smoke test 5); the Test Secrets' contents through the spec's Acceptance fixture check
 Blocked by: 02: A Visitor sees the Fixture Profile at /fixture in a hermetic loop
-Status: claimed 20261004T191309Z 2026-10-04T19:34:47Z
+Status: done
 
 **What to build:** Every fixture Link's Destination lives in a test-only secrets file beside the fixtures. It uses v1's secrets format, one flat object from Link Id to Destination, and v1's directory layout.
 - Its keys are exactly the fixture's Link Ids.

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Proves the local loop end to end against the Fixture Profile (tests/fixtures/api/profiles/fixture.json).
@@ -6,6 +7,11 @@ import { join } from 'node:path';
 const PROFILE = '/fixture';
 const LINK_TITLES = ['Adult Link', 'Direct Link', 'Escape Link', 'Deeplink Link'];
 const SCREENSHOT = join(__dirname, '..', '..', '.scratch', 'goal_ai', 'shots', '00-smoke.png');
+// Test Secrets: { linkId: Destination }, every Destination on example.com.
+const TEST_SECRETS: Record<string, string> = JSON.parse(
+  readFileSync(join(__dirname, '..', 'fixtures', 'netlify', 'functions', 'secrets.json'), 'utf8'),
+);
+const SECRETS_PATHS = ['/netlify/functions/secrets.json', '/tests/fixtures/netlify/functions/secrets.json'];
 const INSTAGRAM_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
   'Mobile/15E148 Instagram 300.0.0.0.0 (iPhone14,2; iOS 17_0; en_US; en-US; scale=3.00; 1170x2532; 0)';
@@ -47,3 +53,13 @@ test('tapping the adult link shows the age gate', async ({ page }) => {
   await expect(page.locator('#overlay')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
 });
+
+// The status is not asserted: the stand-in answers its 200 catch-all, Phase 2's app a 404 with the landing page.
+// Bodies are checked as booleans so a failure never prints a Destination.
+for (const path of SECRETS_PATHS) {
+  test(`${path} does not hand out the Test Secrets`, async ({ request }) => {
+    const body = await (await request.get(path)).text();
+    expect(body.includes('<html')).toBe(true);
+    expect(Object.values(TEST_SECRETS).some((destination) => body.includes(destination))).toBe(false);
+  });
+}
