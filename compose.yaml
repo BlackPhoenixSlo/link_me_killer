@@ -1,0 +1,55 @@
+# v2 stack: Caddy, the app and PocketBase (docs/spec/phase-02-vps-foundation.md). n8n is not part of it.
+# Environment contract: .env.example (on the VPS: an untracked .env; in tests: tests/e2e.env).
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS (see .env.example)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  app:
+    # Build context is app/ alone, so the v1 Snapshot can never be baked in. No ports: only Caddy reaches it.
+    build:
+      context: ./app
+    restart: unless-stopped
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    environment:
+      PB_SUPERUSER_EMAIL: ${PB_SUPERUSER_EMAIL:?set PB_SUPERUSER_EMAIL (see .env.example)}
+      PB_SUPERUSER_PASSWORD: ${PB_SUPERUSER_PASSWORD:?set PB_SUPERUSER_PASSWORD (see .env.example)}
+      REVEAL_LIMIT_PER_MINUTE: ${REVEAL_LIMIT_PER_MINUTE:-60}
+
+  pocketbase:
+    # Context is pocketbase/; vendor/ is a named extra context, so the repo root (and linkme_clone3/) is never sent.
+    build:
+      context: ./pocketbase
+      additional_contexts:
+        vendor: ./vendor
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PB_PORT:-8090}:8090"   # loopback only; admin UI through an SSH tunnel
+    environment:
+      PB_SUPERUSER_EMAIL: ${PB_SUPERUSER_EMAIL:?set PB_SUPERUSER_EMAIL (see .env.example)}
+      PB_SUPERUSER_PASSWORD: ${PB_SUPERUSER_PASSWORD:?set PB_SUPERUSER_PASSWORD (see .env.example)}
+    volumes:
+      - pb_data:/pb/pb_data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/api/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pb_data:

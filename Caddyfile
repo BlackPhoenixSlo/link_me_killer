@@ -1,0 +1,4 @@
+# One site, SITE_ADDRESS, proxied to the app. PocketBase is not routed through Caddy.
+{$SITE_ADDRESS} {
+	reverse_proxy app:3000
+}
