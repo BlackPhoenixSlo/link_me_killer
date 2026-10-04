@@ -30,7 +30,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 |---|---|---|---|---|
 | 01 | [The test loop serves the Page Copy](issues/01-page-copy-served.md) | phase-00 | None | done |
 | 02 | [A Visitor sees the Fixture Profile at /fixture in a hermetic loop](issues/02-fixture-profile-visible.md) | phase-00 | 01 | done |
-| 03 | [Test Secrets sit beside the Fixture Profile and are never served](issues/03-test-secrets-never-served.md) | phase-00 | 02 | ready-for-agent |
+| 03 | [Test Secrets sit beside the Fixture Profile and are never served](issues/03-test-secrets-never-served.md) | phase-00 | 02 | claimed 20261004T191309Z |
 | 04 | [Age Gate then Reveal on fixture data with no v1 Snapshot in the loop](issues/04-reveal-on-fixture-without-snapshot.md) | phase-00 | 03 | ready-for-agent |
 | 05 | [Each Link travels by its own Mode in a System Browser](issues/05-modes-in-system-browser.md) | phase-01 | 04 | ready-for-agent |
 | 06 | [The Escape Overlay opens with the page only on an Escape-default Profile in every In-App Browser](issues/06-overlay-on-open-by-default-mode.md) | phase-01 | 05 | ready-for-agent |
