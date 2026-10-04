@@ -1,4 +1,4 @@
-import { test, expect, devices, type Page, type Response } from '@playwright/test';
+import { test, expect, devices, type Browser, type Page, type Response } from '@playwright/test';
 import { join } from 'node:path';
 
 // Phase 1: every Link travels by its own Mode (docs/spec/phase-01-link-modes-and-escape.md, Testing Decisions).
@@ -49,8 +49,7 @@ test.beforeAll(async ({ playwright }) => {
 // where toHaveURL can assert them and nothing leaves the machine.
 // Reveal answers pass through unchanged; each body is kept here because the onward navigation discards it.
 const revealAnswers = new Map<string, string>();
-test.beforeEach(async ({ page }) => {
-  revealAnswers.clear();
+async function fenceNetwork(page: Page) {
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     if (url.hostname !== 'localhost') {
@@ -62,6 +61,10 @@ test.beforeEach(async ({ page }) => {
     revealAnswers.set(url.href, body);
     await route.fulfill({ response, body });
   });
+}
+test.beforeEach(async ({ page }) => {
+  revealAnswers.clear();
+  await fenceNetwork(page);
 });
 
 // Profile variants: the served Profile JSON, changed in flight.
@@ -272,6 +275,40 @@ test.describe('System Browser (desktop Chrome)', () => {
   test('/{username}/{code} is cleaned to /{username}', async ({ page }) => {
     await openProfile(page, `/${username}/${TC}`);
     await expect(page).toHaveURL(`/${username}`);
+  });
+
+  test('/{username}/{code}?link={Adult Link Id}, with tracking on, reveals with that id and the code, with no Age Gate, and lands on the answer', async ({ page }) => {
+    await serveVariant(page, (json) => { linkIn(json, adult.id).tracking = true; });
+    const reveals = watchReveals(page);
+    const reveal = nextReveal(page);
+    await page.goto(`/${username}/${TC}?link=${adult.id}`);
+    const destination = await realUrlOf(await reveal);
+    await expect(page).toHaveURL(destination);
+    expect(reveals).toHaveLength(1);
+    expect(reveals[0].searchParams.get('id')).toBe(adult.id);
+    expect(reveals[0].searchParams.get('user')).toBe(username);
+    expect(reveals[0].searchParams.get('trackingId')).toBe(TC);
+    expect(destination.endsWith(`/c${TC}`)).toBe(true); // Reveal appends /c{code}
+  });
+
+  test('/{username}/{code}?link={Escape Link Id} lands where a tap on that Link would: its url, with no Reveal', async ({ page }) => {
+    const link = byMode.escape_ig;
+    const reveals = watchReveals(page);
+    await page.goto(`/${username}/${TC}?link=${link.id}`);
+    await expect(page).toHaveURL(link.url!);
+    expect(reveals).toHaveLength(0);
+  });
+
+  test('/{username}?link={an id not on the Profile} loads the Profile, with no Reveal request and no navigation', async ({ page }) => {
+    const notOnProfile = 'notOnThisProfile0';
+    expect(served.links.map((l) => l.id)).not.toContain(notOnProfile);
+    const navigations = await recordNavigations(page);
+    const reveals = watchReveals(page);
+    await openProfile(page, `/${username}?link=${notOnProfile}`);
+    await page.waitForLoadState('networkidle');
+    expect(reveals).toHaveLength(0);
+    expect(navigations).toEqual([]);
+    await expect(page).toHaveURL(`/${username}?link=${notOnProfile}`);
   });
 
   test('the network fence answers every host other than localhost', async ({ page }) => {
@@ -502,6 +539,25 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await expect(page).toHaveURL(`/${username}/${TC}`);
   });
 
+  test('/{username}/{code}?link={Escape Link Id} shows the Escape Overlay aimed at that address, with Close, no Reveal and nothing x-safari- recorded', async ({ page }) => {
+    const link = byMode.escape_ig;
+    await serveVariant(page, directDefault);
+    const navigations = await recordNavigations(page);
+    const reveals = watchReveals(page);
+    const address = `/${username}/${TC}?link=${link.id}`;
+    await openProfile(page, address);
+    const target = `https://${new URL(page.url()).host}${address}`;
+
+    await expect(escapeOverlay(page)).toBeVisible();
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', `x-safari-${target}`);
+    await expect(escapeOverlay(page).getByText(target, { exact: true })).toBeVisible();
+    await expect(closeButton(page)).toBeVisible();
+    await expect(page).toHaveURL(address);
+    await page.waitForLoadState('networkidle');
+    expect(reveals).toHaveLength(0);
+    expect(xSafari(navigations)).toEqual([]);
+  });
+
   test('after an earlier visit to /{username}/{code}, a tap on the Escape Link from /{username} carries the code in the target and the address', async ({ page }) => {
     const link = byMode.escape_ig;
     await serveVariant(page, directDefault);
@@ -568,6 +624,56 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     expect(navigations).toHaveLength(before);
     expect(reveals).toHaveLength(0);
     await expect(page).toHaveURL(`/${username}/${TC}`);
+  });
+
+  // The hop: the recorded target, x-safari- stripped, opened in a fresh browser context with a desktop User-Agent
+  // (fresh storage, as in a System Browser). The stand-in is plain http, so the target's https path and query are
+  // opened on the stand-in, once the target is checked to be https on the host that served the page.
+  // The fresh context serves the same Profile edit as the In-App page, so both browsers see one Profile.
+  async function hop(browser: Browser, inApp: Page, recorded: string, edit: (json: ProfileJson) => void) {
+    expect(recorded.startsWith('x-safari-')).toBe(true);
+    const target = new URL(recorded.slice('x-safari-'.length));
+    expect(target.protocol).toBe('https:');
+    expect(target.host).toBe(new URL(inApp.url()).host);
+    const context = await browser.newContext({ userAgent: devices['Desktop Chrome'].userAgent, baseURL: test.info().project.use.baseURL });
+    const page = await context.newPage();
+    await fenceNetwork(page);
+    await serveVariant(page, edit);
+    return { page, path: target.pathname + target.search };
+  }
+
+  test('the hop: the target recorded from an Escape Link tap opens in a fresh desktop browser context and lands where a tap on that Link would', async ({ page, browser }) => {
+    const link = byMode.escape_ig;
+    const { navigations } = await tapEscapeFromCode(page, link, directDefault);
+    await expect.poll(() => xSafari(navigations)).toHaveLength(1);
+
+    const fresh = await hop(browser, page, xSafari(navigations)[0], directDefault);
+    const reveals = watchReveals(fresh.page);
+    await fresh.page.goto(fresh.path);
+    await expect(fresh.page).toHaveURL(link.url!); // where a desktop tap on the Escape Link lands
+    expect(reveals).toHaveLength(0);
+    await fresh.page.context().close();
+  });
+
+  test('the hop: for the Adult Link set to Escape Mode with tracking on, the fresh desktop browser context reveals with the code and lands on the answer', async ({ page, browser }) => {
+    const edit = (json: ProfileJson) => {
+      adultEscape(json);
+      linkIn(json, adult.id).tracking = true;
+    };
+    const { navigations } = await tapEscapeFromCode(page, adult, edit);
+    await page.getByRole('button', { name: 'Continue (18+)' }).click();
+    await expect.poll(() => xSafari(navigations)).toHaveLength(1);
+
+    const fresh = await hop(browser, page, xSafari(navigations)[0], edit);
+    const reveals = watchReveals(fresh.page);
+    const reveal = nextReveal(fresh.page);
+    await fresh.page.goto(fresh.path);
+    const destination = await realUrlOf(await reveal);
+    await expect(fresh.page).toHaveURL(destination);
+    expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([adult.id]);
+    expect(reveals[0].searchParams.get('trackingId')).toBe(TC);
+    expect(destination.endsWith(`/c${TC}`)).toBe(true); // Reveal appends /c{code}
+    await fresh.page.context().close();
   });
 
   test('Deeplink default: a Link with its mode removed makes a Reveal request', async ({ page }) => {

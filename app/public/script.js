@@ -21,33 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentProfile = null;
     let currentLinkId = null;
 
-    // Helper: Perform Bounce
-    function performBounce(targetUrl) {
-        const ua = navigator.userAgent || navigator.vendor || window.opera;
-        const isInstagram = ua.indexOf('Instagram') > -1;
-        const isIOS = /iPhone|iPad|iPod/.test(ua);
-        const isAndroid = /Android/.test(ua);
-
-        console.log(`Attempting bounce to: ${targetUrl}`);
-
-        if (isInstagram) {
-            if (isIOS) {
-                const bounceUrl = "x-safari-https://" + targetUrl.replace(/^https?:\/\//, "");
-                window.location.href = bounceUrl;
-                return true;
-            } else if (isAndroid) {
-                const intentUrl = "intent://" + targetUrl.replace(/^https?:\/\//, "") + "#Intent;scheme=https;package=com.android.chrome;end";
-                window.location.href = intentUrl;
-                return true;
-            }
-        }
-
-        // Fallback / Standard Redirect
-        window.location.href = targetUrl;
-        return false;
-    }
-
-    // In-App Browser: the plan's pattern, verbatim and case-insensitive (performBounce keeps v1's own Instagram check for the Link Shortcut until ticket 10)
+    // In-App Browser: the plan's pattern, verbatim and case-insensitive
     const IN_APP_BROWSER = /Instagram|FBAN|FBAV|Threads|musical_ly|Bytedance|TikTok/i;
     const isInAppBrowser = IN_APP_BROWSER.test(navigator.userAgent || '');
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent || '');
@@ -59,6 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const pathSegments = window.location.pathname.replace(/^\/|\/$/g, '').split('/');
     let username = pathSegments[0];
     const trackingId = pathSegments[1]; // The number after the username
+    // Link Shortcut: read on page load, before the address bar is touched, so ?link= survives beside the code
+    const linkShortcut = new URLSearchParams(window.location.search).get('link');
 
     if (!username || username === 'index.html') username = 'juliafilippo_'; // Default
 
@@ -89,11 +65,17 @@ document.addEventListener('DOMContentLoaded', () => {
             linksData = data.links;
             renderLinks(linksData);
 
-            // Check for Deep Link Query Param logic (existing)...
-            // Example: /?link=1 (where 1 is the link ID)
-            // Read before the Escape Overlay below rewrites the address
-            const urlParams = new URLSearchParams(window.location.search);
-            const deepLinkParam = urlParams.get('link');
+            // A Link Shortcut whose Link Id is not on this Profile is ignored: the page loads as a plain visit
+            const shortcutLink = linkShortcut ? linksData.find(link => link.id === linkShortcut) : null;
+
+            if (isInAppBrowser && shortcutLink && effectiveMode(shortcutLink) === 'escape_ig') {
+                // In an In-App Browser an Escape Mode Link Shortcut shows the Escape Overlay aimed at that Link's escape target,
+                // with Close; nothing is revealed and no Escape fires until the Visitor taps
+                const target = escapeTarget(shortcutLink.id);
+                pointAddressAt(target);
+                openEscapeOverlay(target, true);
+                return;
+            }
 
             // Escape Overlay on open: In-App Browser and a Profile default that resolves to Escape Mode
             if (isInAppBrowser && defaultMode() === 'escape_ig') {
@@ -102,17 +84,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 openEscapeOverlay(target, !linksData.every(link => effectiveMode(link) === 'escape_ig'));
             }
 
-            if (deepLinkParam) {
-                console.log('Deep link detected, fetching secure URL...');
-                fetch(revealUrl(deepLinkParam))
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.realUrl) {
-                            performBounce(data.realUrl);
-                        }
-                    })
-                    .catch(err => console.error('Deep link fetch error:', err));
-            }
+            // Link Shortcut: the Destination as a tap gets it, then travel by Mode, with no Age Gate (v1's Link Shortcut has none)
+            if (shortcutLink) goToDestination(shortcutLink);
         })
         .catch(error => {
             console.error('Error fetching profile:', error);
@@ -200,11 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     openOverlay(link.id);
                 } else if (isInAppBrowser && effectiveMode(link) === 'escape_ig') {
                     escapeOnTap(link);
-                } else if (effectiveMode(link) === 'deeplink' || !link.url) {
-                    // Deeplink Mode always, and any Link without a url, gets its Destination from Reveal
-                    revealAndGo(link);
                 } else {
-                    window.location.href = link.url;
+                    goToDestination(link);
                 }
             });
 
@@ -248,6 +218,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         return fetchUrl;
+    }
+
+    // Destination: an Adult Link, Deeplink Mode always, and any Link without a url get it from Reveal; otherwise the url
+    function goToDestination(link) {
+        if (link.isAdult || effectiveMode(link) === 'deeplink' || !link.url) {
+            revealAndGo(link);
+        } else {
+            window.location.href = link.url;
+        }
     }
 
     function revealAndGo(link) {
