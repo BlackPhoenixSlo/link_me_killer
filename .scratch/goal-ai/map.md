@@ -39,7 +39,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 | 09 | [On Android an Escape opens Chrome or its fallback and a Deeplink Link hands off to its app](issues/09-android-escape-and-deeplink.md) | phase-01 | 07 | done |
 | 10 | [The escaped Link opens by itself in the System Browser credited to the same Tracking Code](issues/10-link-shortcut-lands-escape.md) | phase-01 | 08, 09 | done |
 | 11 | [The real-device matrix passes for every Mode on v2's first public https deploy](issues/11-real-device-matrix.md) | phase-01 | 10, 23 | parked — VPS step: the Operator runs the commands (plan §11) |
-| 12 | [The v2 stack is declared and its Compose contract checks pass offline](issues/12-stack-declared-offline.md) | phase-02 | 01 | ready-for-agent |
+| 12 | [The v2 stack is declared and its Compose contract checks pass offline](issues/12-stack-declared-offline.md) | phase-02 | 01 | claimed 20261004T191309Z |
 | 13 | [The Operator's network commands fetch the stack's packages and images](issues/13-network-commands.md) | phase-02 | 12 | ready-for-agent |
 | 14 | [The v1 Import repairs or refuses every v1 file before it writes anything](issues/14-import-repairs-or-refuses.md) | phase-02 | 03 | ready-for-agent |
 | 15 | [The v1 Import writes the Fixture Profile into PocketBase on a running test stack](issues/15-import-writes-fixture.md) | phase-02 | 13, 14 | ready-for-agent |

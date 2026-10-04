@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 22, 24, 26, 27, 28, 53, 56
 Seams: the spec's Acceptance commands that resolve the Compose file with the committed test env (nothing is built or pulled); `git check-ignore`
 Blocked by: 01: The test loop serves the Page Copy
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T21:02:20Z
 
 **What to build:** Before anything is downloaded, the repo declares the whole shape of v2. Resolving the Compose file with the committed test env shows three services, Caddy, the app and PocketBase, and nothing else. n8n is not one of them. It also shows:
 - **The app** publishes no port. It is built from the app directory alone, so the v1 Snapshot can never be baked into it, and it mounts nothing from the v1 Snapshot.
