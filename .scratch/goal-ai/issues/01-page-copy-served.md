@@ -4,7 +4,7 @@ Spec: docs/spec/phase-00-new-repo-ground.md
 Covers: user stories 1, 2, 4, 5, 6, 7, 26
 Seams: the Dev-Server Stand-in's HTTP surface at baseURL, driven by Playwright through the existing smoke spec (unchanged); byte-identity and v1 Snapshot facts through the spec's Acceptance commands
 Blocked by: None (can start immediately)
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T19:13:09Z
 
 **What to build:** v2 gets its own public page. v1's index, script, style and landing page, plus exactly the four stock Link icons that v1 Profiles reference (the spec lists them), are copied byte-for-byte into the Page Copy, where the v2 app will live. The Page Copy is a copy, not a link: it neither imports nor references the v1 Snapshot, so later edits can never reach v1. The Dev-Server Stand-in now serves pages and static files from the Page Copy instead of the v1 Snapshot. Every other path, a Profile path included, still falls back to the Page Copy's index page with status 200, as v1 does.
 

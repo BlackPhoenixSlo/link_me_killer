@@ -28,7 +28,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets: 34 ready-fo
 
 | NN | Ticket | Spec | Blocked by | Status |
 |---|---|---|---|---|
-| 01 | [The test loop serves the Page Copy](issues/01-page-copy-served.md) | phase-00 | None | ready-for-agent |
+| 01 | [The test loop serves the Page Copy](issues/01-page-copy-served.md) | phase-00 | None | claimed 20261004T191309Z |
 | 02 | [A Visitor sees the Fixture Profile at /fixture in a hermetic loop](issues/02-fixture-profile-visible.md) | phase-00 | 01 | ready-for-agent |
 | 03 | [Test Secrets sit beside the Fixture Profile and are never served](issues/03-test-secrets-never-served.md) | phase-00 | 02 | ready-for-agent |
 | 04 | [Age Gate then Reveal on fixture data with no v1 Snapshot in the loop](issues/04-reveal-on-fixture-without-snapshot.md) | phase-00 | 03 | ready-for-agent |
