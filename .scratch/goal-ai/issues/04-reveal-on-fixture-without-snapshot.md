@@ -4,7 +4,7 @@ Spec: docs/spec/phase-00-new-repo-ground.md
 Covers: user stories 1, 2, 3, 10, 14, 15, 16, 21, 22, 23, 24, 26
 Seams: the Dev-Server Stand-in's HTTP surface at baseURL, driven by Playwright's `page` (smoke test 4, with the Reveal and the onward navigation observed from outgoing requests); the fresh-copy run, the leak scan and the v1 Snapshot facts through the spec's Acceptance commands
 Blocked by: 03: Test Secrets sit beside the Fixture Profile and are never served
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T19:38:16Z
 
 **What to build:** On `/fixture`, a Visitor taps the Adult Link and sees the Age Gate. They press "Continue (18+)" and are sent to the Adult Link's test Destination.
 
