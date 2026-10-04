@@ -246,3 +246,38 @@ Consequences:
 - The n8n Form keeps working against the old repo and redeploying the netlify.app site; its edits never
   reach ofl.ink after Cutover (unchanged).
 - The v1 Import is still never re-run after Cutover (unchanged).
+
+================================================================
+11. ANSWERS (user, 2026-10-04): ports, country source, network gate
+================================================================
+Network gate (tickets 13, 24): DONE by the Operator on 2026-10-04. app/package.json exists with hono
+4.13.13, @hono/node-server 2.1.3, sharp 0.35.5; alpine:3 and axllent/mailpit are pulled; caddy:2-alpine
+and node:22-alpine were already local.
+
+Offline build: vendor/ (git-ignored) holds pocketbase_0.40.4_linux_arm64.zip for local and
+pocketbase_0.40.4_linux_amd64.zip for the VPS; the PocketBase Dockerfile COPYs from vendor/ and never
+curls. app/node_modules already contains the linuxmusl-arm64 sharp binaries (pnpm supportedArchitectures
+in app/package.json); the app Dockerfile COPYs app/ including node_modules and runs no pnpm install.
+docker compose build must make no network request; if it would, park the ticket rather than fetch.
+
+1. Ports 80/443 on the VPS: held by Traefik (container n8n-traefik-1), fronting n8n on 127.0.0.1:5678.
+   Other containers: fastt-*, whynot-panel-*, leak*-app on 6767/8081, browserless on 3000, a cloudflared
+   tunnel.
+   DECISION: Traefik keeps 80/443. v2's Caddy runs behind it; Traefik gets a TCP router with HostSNI(`*`)
+   and TLS passthrough to Caddy on 443 (n8n's own HostSNI rule stays higher priority), plus an HTTP router
+   on 80 for every host that is not n8n's. Caddy keeps TLS and on-demand certificates. Story 24 stays
+   satisfied. ASSUMPTION: flagged; overturned if Traefik's config is not file-editable on the VPS or SNI
+   passthrough breaks n8n. Update Phase 2 D4b, Phase 5 step 1 and tickets 11, 23, 32, 38, 43; they stay
+   parked for the VPS step but are no longer blocked on a question.
+
+2. Country source: `dig +short NS ofl.ink` -> dns1/dns2.registrar-servers.com (Namecheap). No DS record,
+   so no DNSSEC.
+   DECISION: Cloudflare. Nameservers move from Namecheap to Cloudflare when ticket 42 asks; the Operator
+   does that step. Geo Rules on DNS-only Custom Domains fall back to US; accepted. Unpark the design work
+   in tickets 37 and 42; the zone move itself stays a human step.
+
+3. Spare Domain vs Meta Flag: unanswered; ticket 44 stays parked.
+
+Build order for the --execute run: tickets 01-10 (Phases 0, 1), then 12, 14, then unpark 13 and continue
+through Phase 2 and Phase 3 locally. No deploy to the VPS in this session; tickets 23, 32, 38, 43 stay
+parked until the Operator runs their commands.
