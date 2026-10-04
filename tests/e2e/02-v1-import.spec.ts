@@ -2,13 +2,25 @@ import { test, expect } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 // Ticket 14: the v1 Import CLI, run as a process with this machine's Node and no PocketBase reachable.
 // Observed only through its printed lines and exit code. Destinations are compared as booleans and never printed.
 const ROOT = join(__dirname, '..', '..');
 const CLI = join(ROOT, 'app', 'bin', 'import-v1');
-const SNAPSHOT = join(ROOT, 'linkme_clone3');
+// The v1 Snapshot: V1_SNAPSHOT names it (default linkme_clone3/); set empty, or naming no directory, it is absent, as on a fresh
+// clone, and its cases skip. The same variable as 02-profile-parity and tests/stack.sh.
+const V1_SNAPSHOT = process.env.V1_SNAPSHOT ?? 'linkme_clone3';
+const SNAPSHOT = V1_SNAPSHOT ? resolve(ROOT, V1_SNAPSHOT) : '';
+// A directory, as tests/stack.sh's `[ -d ]` asks; the same guard in 02-profile-parity.
+const isDirectory = (path: string) => {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+};
+const SNAPSHOT_PRESENT = SNAPSHOT !== '' && isDirectory(SNAPSHOT);
 // The broken tree sits at tests/v1-broken/, not under tests/fixtures/, whose exact file list Phase 0 pins (phase-00-new-repo-ground.md:149; rung 1, recorded in the Phase 2 spec's Refusal case).
 const BROKEN = join(ROOT, 'tests', 'v1-broken');
 
@@ -200,7 +212,7 @@ test('the Fixture site alone plans three dropped entries and stops at its first 
 });
 
 test('the v1 Snapshot then the Fixture site: every file repaired or kept, then the first write', () => {
-  test.skip(!existsSync(SNAPSHOT), 'v1 Snapshot absent');
+  test.skip(!SNAPSHOT_PRESENT, 'v1 Snapshot absent');
   const fixture = fixtureSite();
   const { status, lines } = runImport([SNAPSHOT, fixture]);
 
@@ -230,6 +242,108 @@ test('the v1 Snapshot then the Fixture site: every file repaired or kept, then t
   const snapshotStatus = spawnSync('git', ['-C', SNAPSHOT, 'status', '--porcelain'], { encoding: 'utf8' });
   expect(snapshotStatus.status).toBe(0);
   expect(snapshotStatus.stdout).toBe('');
+});
+
+// Ticket 17: the import's repairs, seen over HTTP on the stack that tests/stack.sh seeded with the v1 Snapshot first and the
+// Fixture site last (spec, Testing Decisions, 02-v1-import, Repairs). The Snapshot's files are the oracle, read here with the
+// import's own parse (as they are, else with the trailing commas removed). Destinations are compared as booleans; failure
+// messages name a Username and card position.
+test.describe('repairs, seen over HTTP on the seeded stack', () => {
+  test.skip(!SNAPSHOT_PRESENT, 'v1 Snapshot absent');
+
+  type V1Link = { id: string; title: string; url?: string; isAdult?: boolean };
+  type V1File = { profile: { displayName?: string; avatarUrl?: string | null }; links: V1Link[] };
+  type ServedLink = { id: string; title: string; isAdult: boolean };
+  const PROFILES = join(SNAPSHOT, 'api', 'profiles');
+  const v1File = (username: string): V1File => {
+    const text = readFileSync(join(PROFILES, `${username}.json`), 'utf8');
+    try {
+      return JSON.parse(text);
+    } catch {
+      return JSON.parse(text.replace(/,(\s*[}\]])/g, '$1'));
+    }
+  };
+  // Lower-case Profile files only: a capitalised one is a case twin the import skips.
+  const usernames = () => readdirSync(PROFILES)
+    .filter((n) => n.endsWith('.json') && n === n.toLowerCase())
+    .map((n) => n.slice(0, -'.json'.length));
+  const served = async (request: import('@playwright/test').APIRequestContext, username: string) => {
+    const res = await request.get(`/api/profiles/${username}.json`);
+    expect(res.status(), username).toBe(200);
+    return (await res.json()) as { profile: { displayName: string; avatarUrl: string }; links: ServedLink[] };
+  };
+  // A relative url is stored root-relative, as v1's page at /{username} resolved it (the import's rule).
+  const rootRelative = (url: string) => {
+    if (url.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(url)) return url;
+    const u = new URL(url, 'http://v1.invalid/');
+    return u.pathname + u.search + u.hash;
+  };
+  const showsCards = async (page: import('@playwright/test').Page, file: V1File) => {
+    const cards = page.locator('.link-card');
+    await expect(cards).toHaveCount(file.links.length);
+    for (const [i, link] of file.links.entries()) {
+      expect(await cards.nth(i).locator('.link-title').textContent(), `card ${i + 1} title`).toBe(link.title);
+      await expect(cards.nth(i).locator('.lock-icon-small'), `card ${i + 1} lock icon`).toHaveCount(link.isAdult ? 1 : 0);
+    }
+  };
+
+  for (const path of ['/weiwei', '/weiWEi']) {
+    test(`${path} shows the repaired file's display name and cards`, async ({ page }) => {
+      const file = v1File('weiwei');
+      await page.goto(path);
+      await expect.poll(() => page.locator('#displayName').textContent()).toBe(file.profile.displayName);
+      await showsCards(page, file);
+    });
+  }
+
+  test('jaka7q\'s display name is jaka7q', async ({ page, request }) => {
+    expect((await served(request, 'jaka7q')).profile.displayName).toBe('jaka7q');
+    await page.goto('/jaka7q');
+    await expect.poll(() => page.locator('#displayName').textContent()).toBe('jaka7q');
+    expect(await page.title()).toBe('jaka7q');
+  });
+
+  for (const username of ['juliafilippo_', 'jaka6q', 'jaka7q']) {
+    test(`${username} shows every card, each with a distinct Link Id`, async ({ page, request }) => {
+      const file = v1File(username);
+      expect(new Set(file.links.map((l) => l.id)).size < file.links.length, 'the file repeats a v1 Link Id').toBe(true);
+      const json = await served(request, username);
+      expect(json.links.map((l) => l.title)).toEqual(file.links.map((l) => l.title));
+      expect(new Set(json.links.map((l) => l.id)).size).toBe(file.links.length);
+      await page.goto(`/${username}`);
+      await showsCards(page, file);
+    });
+  }
+
+  test('the six Profiles whose avatar file is missing serve an empty avatar', async ({ page, request }) => {
+    const missing = usernames().filter((u) => {
+      const avatar = v1File(u).profile.avatarUrl;
+      return typeof avatar === 'string' && avatar !== '' && !existsSync(join(SNAPSHOT, avatar));
+    });
+    expect(missing.sort()).toEqual(['bnjmklk', 'ja123', 'jaka', 'jaka5', 'jaka6q', 'jaka7q']);
+    for (const username of missing) {
+      expect((await served(request, username)).profile.avatarUrl, username).toBe('');
+      await page.goto(`/${username}`);
+      await expect(page.locator('.link-card')).toHaveCount(v1File(username).links.length);
+      expect(await page.locator('#avatar').getAttribute('src'), username).toBe('');
+    }
+  });
+
+  test('the four non-Adult Links that had a secrets entry reach their file\'s url through /r', async ({ request }) => {
+    const secrets: Record<string, string> = JSON.parse(readFileSync(join(SNAPSHOT, 'netlify', 'functions', 'secrets.json'), 'utf8'));
+    const cards = usernames().flatMap((username) =>
+      v1File(username).links.flatMap((l, i) => (l.isAdult !== true && Object.hasOwn(secrets, l.id) ? [{ username, i, url: l.url ?? '' }] : [])),
+    );
+    expect(cards.length).toBe(4);
+    expect(cards.some((c) => c.username === 'weiwei')).toBe(true);
+    for (const { username, i, url } of cards) {
+      const at = `${username} card ${i + 1}`;
+      const link = (await served(request, username)).links[i];
+      const res = await request.get(`/r/${link.id}`, { maxRedirects: 0 });
+      expect(res.status(), at).toBe(302);
+      expect(res.headers()['location'] === rootRelative(url), `${at} Location is its file's url`).toBe(true);
+    }
+  });
 });
 
 // Ticket 16 (folded from ticket 15's tests/stack-import-check.mjs): the test stack, its schema and the v1 Import's write half,

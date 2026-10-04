@@ -1,10 +1,10 @@
-import { test, expect, devices, type Page, type Request } from '@playwright/test';
+import { test, expect, devices, type APIRequestContext, type Page, type Request } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
-// Phase 2 parity, Fixture Profile half (docs/spec/phase-02-vps-foundation.md, Testing Decisions, 02-profile-parity).
-// The v1 Snapshot cases join in tickets 17 and 18. Every id is read from the served Profile JSON. A Link's Test Secrets
+// Phase 2 parity (docs/spec/phase-02-vps-foundation.md, Testing Decisions, 02-profile-parity): the Fixture Profile half, and
+// the v1 Snapshot half below (ticket 17: pages, Profile JSON, paths, leaks; ticket 18 adds /r and Reveal). Every id is read from the served Profile JSON. A Link's Test Secrets
 // Destination is found through the Fixture Profile file's card of the same title. Destinations are compared as booleans
 // and never printed. The Tracking Code oracle is v1's own Reveal handler (the Fixture site's verbatim copy), run in this
 // process with the Fixture's own v1 ids.
@@ -269,6 +269,11 @@ test.describe('Other paths', () => {
     '/README.md',
     '/images/face.webp', // a Creator photo: v1 Snapshot only
   ];
+  test('an unknown Username lands on the landing page', async ({ page }) => {
+    await page.goto('/nosuchcreator404');
+    await expect(page).toHaveURL(`${origin}/landing.html`);
+  });
+
   for (const path of ['/no/such/path', '/secrets.json', '/fixture', ...NOT_SERVED]) {
     test(`${path} gives the index page with 200`, async ({ request }) => {
       const res = await request.get(path);
@@ -283,6 +288,217 @@ test('no Test Secrets value is in any Profile JSON, page or secrets path', async
     [PROFILE_JSON, '/fixture', '/netlify/functions/secrets.json', '/secrets.json'].map(async (p) => (await request.get(p)).text()),
   );
   expect(bodies.map((b) => Object.values(TEST_SECRETS).some((d) => b.includes(d)))).toEqual([false, false, false, false]);
+});
+
+// ---- The v1 Snapshot half ----
+// The oracle is the v1 Snapshot itself, read here at test time. V1_SNAPSHOT names it (default linkme_clone3/, beside this
+// repo's root); set empty, or naming no directory, the Snapshot is absent and every v1 case skips. tests/stack.sh reads the
+// same variable, so `V1_SNAPSHOT= ./check.sh` runs the fresh-clone path without moving linkme_clone3/.
+// Destinations (secrets values and absolute file urls) are only ever compared as booleans; failure messages name a Username
+// and card position. Nothing here prints a file url, a secrets value or a v1 Link Id.
+const V1_SNAPSHOT = process.env.V1_SNAPSHOT ?? 'linkme_clone3';
+const SNAPSHOT = V1_SNAPSHOT ? resolve(ROOT, V1_SNAPSHOT) : '';
+// A directory, as tests/stack.sh's `[ -d ]` asks; the same guard in 02-v1-import.
+const isDirectory = (path: string) => {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+};
+const SNAPSHOT_PRESENT = SNAPSHOT !== '' && isDirectory(SNAPSHOT);
+const SCREENSHOT = join(ROOT, '.scratch', 'goal_ai', 'shots', '02-vps-foundation.png');
+
+type V1Link = {
+  id: string; title: string; url?: string; isAdult?: boolean; tracking?: boolean;
+  icon?: string | null; backgroundImage?: string | null; default_tracknumber?: string | null;
+};
+type V1File = { username: string; profile: { displayName?: string; bio?: string; avatarUrl?: string | null; verified?: boolean }; links: V1Link[] };
+
+// Every lower-case Profile file (a capitalised one is a case twin, covered by the Paths cases), split into the files that
+// parse as they are and the ones that need the import's trailing-comma repair (weiwei, left to 02-v1-import).
+function readSnapshot() {
+  const asIs: V1File[] = [];
+  const repaired: V1File[] = [];
+  if (!SNAPSHOT_PRESENT) return { asIs, repaired, secrets: {} as Record<string, string> };
+  const dir = join(SNAPSHOT, 'api', 'profiles');
+  const names = readdirSync(dir).filter((n) => n.endsWith('.json'));
+  for (const name of names.sort()) {
+    const username = name.slice(0, -'.json'.length).toLowerCase();
+    if (name !== name.toLowerCase() && names.includes(name.toLowerCase())) continue;
+    const text = readFileSync(join(dir, name), 'utf8');
+    try {
+      asIs.push({ ...JSON.parse(text), username }); // the file's name, never its `username` key
+    } catch {
+      repaired.push({ ...JSON.parse(text.replace(/,(\s*[}\]])/g, '$1')), username });
+    }
+  }
+  const secrets: Record<string, string> = JSON.parse(readFileSync(join(SNAPSHOT, 'netlify', 'functions', 'secrets.json'), 'utf8'));
+  return { asIs, repaired, secrets };
+}
+const v1 = readSnapshot();
+const V1_FILES = [...v1.asIs, ...v1.repaired];
+// Every absolute Destination the Snapshot holds: secrets values and file urls (the Acceptance scan's needles).
+const V1_DESTINATIONS = [...new Set([...Object.values(v1.secrets), ...V1_FILES.flatMap((f) => f.links.map((l) => l.url))])]
+  .filter((u): u is string => typeof u === 'string' && /^https?:\/\/\S/.test(u));
+const holdsV1Destination = (text: string) => V1_DESTINATIONS.some((d) => text.includes(d));
+// Every v1 Link Id and secrets key: none may come back as a v2 Link Id.
+const V1_IDS = new Set([...V1_FILES.flatMap((f) => f.links.map((l) => l.id)), ...Object.keys(v1.secrets)]);
+const v1Image = (path: string | null | undefined) => (typeof path === 'string' && path !== '' ? join(SNAPSHOT, path) : '');
+const v1ImageExists = (path: string | null | undefined) => v1Image(path) !== '' && existsSync(v1Image(path));
+// The display name a Visitor sees: the file's, except the import's n8n-expression repair (jaka7q), which shows the Username.
+const shownName = (f: V1File) => {
+  const name = typeof f.profile.displayName === 'string' ? f.profile.displayName : '';
+  return /\$\(|\{\{/.test(name) ? f.username : name;
+};
+// document.title strips and collapses ASCII whitespace, in v1 as in v2.
+const asTitle = (s: string) => s.replace(/[\t\n\f\r ]+/g, ' ').trim();
+
+async function sameBytes(request: APIRequestContext, url: string | null, v1Path: string | null | undefined) {
+  if (!url || !url.startsWith('/api/files/')) return false;
+  const res = await request.get(url);
+  return res.status() === 200 && (await res.body()).equals(readFileSync(v1Image(v1Path)));
+}
+// An image shows only where v1's file exists, with its bytes; otherwise it is empty, or has no element (null).
+async function expectImage(request: APIRequestContext, servedUrl: string | null, v1Path: string | null | undefined, label: string) {
+  if (v1ImageExists(v1Path)) expect(await sameBytes(request, servedUrl, v1Path), `${label} bytes`).toBe(true);
+  else expect(servedUrl ?? '', label).toBe('');
+}
+
+test.describe('v1 Snapshot', () => {
+  test.skip(!SNAPSHOT_PRESENT, 'v1 Snapshot absent');
+
+  for (const file of v1.asIs) {
+    const { username } = file;
+
+    test.describe(`/${username}`, () => {
+      test('the page shows the file\'s title, display name, bio, verified badge, avatar and cards', async ({ page, request }) => {
+        await page.goto(`/${username}`);
+        const cards = page.locator('.link-card');
+        // Rendered, then checked for a Destination before any assertion that could print page text.
+        await expect.poll(async () => (await page.locator('#displayName').textContent()) === shownName(file), 'display name').toBe(true);
+        await expect(cards).toHaveCount(file.links.length);
+        expect(holdsV1Destination(await page.content()), 'a Destination in the page HTML').toBe(false);
+        expect(await page.title()).toBe(asTitle(shownName(file)));
+        expect(await page.locator('#bio').textContent()).toBe(typeof file.profile.bio === 'string' ? file.profile.bio : '');
+        const badgeShown = await page.locator('#verifiedBadge').evaluate((el) => getComputedStyle(el).display !== 'none');
+        expect(badgeShown, 'verified badge').toBe(file.profile.verified === true);
+
+        // The avatar shows only where v1's image file exists, with its bytes.
+        await expectImage(request, await page.locator('#avatar').getAttribute('src'), file.profile.avatarUrl, 'avatar');
+
+        for (const [i, link] of file.links.entries()) {
+          const card = cards.nth(i);
+          const at = `card ${i + 1}`;
+          expect(await card.locator('.link-title').textContent(), `${at} title`).toBe(link.title);
+          await expect(card.locator('.lock-icon-small'), `${at} lock icon`).toHaveCount(link.isAdult ? 1 : 0);
+          const background = await card.evaluate((el) => (el as HTMLElement).style.backgroundImage.match(/^url\("?(.*?)"?\)$/)?.[1] ?? '');
+          await expectImage(request, background, link.backgroundImage, `${at} background`);
+          // v1 shows an icon only on a card with a background image (script.js renderLinks).
+          const icon = card.locator('.link-icon');
+          const backgroundShown = v1ImageExists(link.backgroundImage);
+          await expect(icon, `${at} icon`).toHaveCount(backgroundShown && v1ImageExists(link.icon) ? 1 : 0);
+          if (backgroundShown) await expectImage(request, (await icon.count()) ? await icon.getAttribute('src') : null, link.icon, `${at} icon`);
+        }
+      });
+
+      test('the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private', async ({ request }) => {
+        const res = await request.get(`/api/profiles/${username}.json`);
+        expect(res.status()).toBe(200);
+        const text = await res.text();
+        expect(holdsV1Destination(text), 'a Destination in the Profile JSON').toBe(false);
+        const keys: string[] = [];
+        const json: Served = JSON.parse(text, (key, value) => { keys.push(key); return value; });
+        for (const key of ['destination', 'geo', 'owner', 'v1Key']) expect(keys.includes(key), key).toBe(false);
+        expect(json.profile.username).toBe(username);
+        expect(json.profile.mode).toBe('escape_ig');
+        expect(json.links.length).toBe(file.links.length);
+        for (const [i, link] of json.links.entries()) {
+          const v1Link = file.links[i];
+          const at = `card ${i + 1}`;
+          expect(link.title, `${at} title`).toBe(v1Link.title);
+          expect(link.isAdult, `${at} Adult`).toBe(v1Link.isAdult === true);
+          expect(/^[a-z0-9]{12}$/.test(link.id), `${at} Link Id shape`).toBe(true);
+          expect(V1_IDS.has(link.id), `${at} Link Id is a v1 id or secrets key`).toBe(false);
+          expect(link.id.includes(username), `${at} Link Id holds the Username`).toBe(false);
+          expect(link.url === (link.isAdult ? '' : `${origin}/r/${link.id}`), `${at} url`).toBe(true);
+          expect(link.mode, `${at} mode`).toBe('escape_ig');
+          const code = typeof v1Link.default_tracknumber === 'string' && v1Link.default_tracknumber !== '' ? v1Link.default_tracknumber : undefined;
+          expect(link.default_tracknumber, `${at} default Tracking Code`).toBe(code);
+          expect('default_tracknumber' in link, `${at} default Tracking Code present`).toBe(code !== undefined);
+        }
+      });
+
+      // The page uses a card's default Tracking Code when the address carries none (script.js revealUrl): the Age Gate's
+      // Reveal asks for it. v2's own Reveal answers; the navigation to the Destination after it is failed locally by the
+      // network guard (playwright.config.ts). Each card gets its own page, closed before the next, so no navigation is left
+      // in flight.
+      const withCode = file.links.flatMap((l, i) => (l.isAdult && l.tracking && typeof l.default_tracknumber === 'string' && l.default_tracknumber ? [i] : []));
+      if (withCode.length) {
+        test('with no Tracking Code in the address, the Age Gate\'s Reveal carries the card\'s default Tracking Code', async ({ context, request }) => {
+          const json: Served = await (await request.get(`/api/profiles/${username}.json`)).json();
+          for (const i of withCode) {
+            const at = `card ${i + 1}`;
+            const page = await context.newPage();
+            await page.goto(`/${username}`);
+            await expect(page.locator('.link-card')).toHaveCount(file.links.length);
+            const reveal = page.waitForRequest((req) => new URL(req.url()).pathname === REVEAL_PATH);
+            await page.locator('.link-card').nth(i).click();
+            await page.locator('#continueBtn').click();
+            const params = new URL((await reveal).url()).searchParams;
+            expect(params.get('id') === json.links[i].id, `${at} Reveal carries its Link Id`).toBe(true);
+            expect(params.get('trackingId'), `${at} Reveal's Tracking Code`).toBe(file.links[i].default_tracknumber);
+            await page.close();
+          }
+        });
+      }
+    });
+  }
+
+  test.describe('Paths', () => {
+    for (const [twin, lower] of [['Jaka', 'jaka'], ['JakaJaka', 'jakajaka'], ['weiWEi', 'weiwei']]) {
+      test(`/${twin} serves the same Profile JSON as /${lower}`, async ({ request }) => {
+        const [a, b] = await Promise.all([twin, lower].map((u) => request.get(`/api/profiles/${u}.json`)));
+        expect([a.status(), b.status()]).toEqual([200, 200]);
+        expect((await a.text()) === (await b.text())).toBe(true);
+      });
+    }
+  });
+
+  test('no Destination is in any Profile JSON, the twins\' pages, /netlify/functions/secrets.json (404) or /secrets.json', async ({ page, request }) => {
+    const usernames = [...V1_FILES.map((f) => f.username), 'Jaka', 'JakaJaka', 'weiWEi', 'fixture'];
+    const leaking: string[] = [];
+    for (const u of usernames) {
+      const res = await request.get(`/api/profiles/${u}.json`);
+      expect(res.status(), u).toBe(200);
+      if (holdsV1Destination(await res.text())) leaking.push(`${u} Profile JSON`);
+    }
+    // Every as-is Profile's page is checked in its own case above; here, the repaired one and the case twins.
+    for (const path of ['/weiwei', '/weiWEi', '/Jaka', '/JakaJaka']) {
+      await page.goto(path);
+      await expect(page.locator('.link-card').first()).toBeVisible();
+      if (holdsV1Destination(await page.content())) leaking.push(`${path} page`);
+    }
+    const secrets = await request.get('/netlify/functions/secrets.json');
+    expect(secrets.status()).toBe(404);
+    if (holdsV1Destination(await secrets.text())) leaking.push('/netlify/functions/secrets.json');
+    if (holdsV1Destination(await (await request.get('/secrets.json')).text())) leaking.push('/secrets.json');
+    expect(leaking).toEqual([]);
+  });
+
+  // Ticket 18: `/r` (302 to each non-Adult card's v1 url), Reveal against v1's own handler (Geo Rule cases included), the
+  // journeys and the old ids join this group, reading V1_FILES and v1.secrets above.
+});
+
+// Every run leaves a phone-sized shot of a v1 Profile page served by v2 for the human (ticket 17 ASSUMPTION): juliafilippo_,
+// or the Fixture Profile when the v1 Snapshot is absent. Playwright empties its output folder first, so it is written anew.
+test('a phone-sized screenshot of a Profile page served by v2 is saved', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(SNAPSHOT_PRESENT ? '/juliafilippo_' : '/fixture');
+  await expect(page.locator('.link-card').first()).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: SCREENSHOT, fullPage: true });
+  expect(statSync(SCREENSHOT).size).toBeGreaterThan(0);
 });
 
 // Is the stack under test the local test stack that tests/stack.sh starts? The same predicate, by the same name, in
