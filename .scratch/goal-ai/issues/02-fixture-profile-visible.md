@@ -4,7 +4,7 @@ Spec: docs/spec/phase-00-new-repo-ground.md
 Covers: user stories 8, 9, 10, 11, 14, 15, 18, 19, 20, 21, 22, 23, 25
 Seams: the Dev-Server Stand-in's HTTP surface at baseURL, driven by Playwright's `page` (smoke tests 1–3 and the Age Gate step of test 4); the fixture's shape through the spec's Acceptance fixture check
 Blocked by: 01: The test loop serves the Page Copy
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T19:26:27Z
 
 **What to build:** A test-only Fixture Profile with the Username `fixture` lives in the fixtures. It uses the v1 Snapshot's Profile file format and directory layout. Its shape follows `juliafilippo_`: display name "Fixture Profile", avatar, verified badge, bio, a default Mode (Escape Mode), and ordered Links that each carry an icon, a background image, an Adult flag, a tracking flag and a Geo Rule. The Mode values are plan D3's.
 
