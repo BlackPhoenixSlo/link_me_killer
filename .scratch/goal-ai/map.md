@@ -1,5 +1,7 @@
 # Map — goal-ai (run 2, under plan amendment §8)
 
+`--execute` — invoked 2026-10-04 as `/spec-auto goal_ai.txt --execute --tickets 24`; run id 20261004T191309Z; resumed at step 5 (steps 0–4 committed at 4e9e361). Plan §11 answers ports and country source.
+
 Run id: 20261002T174527Z. Mode: design-only (no `--execute`). Run 1 (64 tickets, Netlify-first) is superseded and kept at `.scratch/goal-ai-superseded-run1/` and `docs/spec-superseded-run1/`.
 
 ## Destination
