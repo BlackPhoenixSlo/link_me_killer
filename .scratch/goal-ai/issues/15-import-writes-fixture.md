@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 22, 29, 37, 44, 53
 Seams: the v1 Import CLI through `docker compose run`, as the Operator runs it, observed through its output and exit code; PocketBase's REST API on its loopback port, as the superuser, to inspect what was written. `./check.sh` still runs on the Dev-Server Stand-in
 Blocked by: 13: The Operator's network commands fetch the stack's packages and images, 14: The v1 Import repairs or refuses every v1 file before it writes anything
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T21:33:22Z
 
 **What to build:** The test stack comes up healthy from one Compose command with the committed test env. PocketBase starts with its superuser upserted from the environment. Its versioned migrations create:
 - the profiles collection;
