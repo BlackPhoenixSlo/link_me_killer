@@ -82,27 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (deepLinkParam) {
                 console.log('Deep link detected, fetching secure URL...');
-                let fetchUrl = `/.netlify/functions/reveal?id=${deepLinkParam}&user=${username}`;
-
-                // Get link object to check if tracking is enabled
-                const link = linksData.find(l => l.id === deepLinkParam);
-
-                if (link && link.tracking) {
-                    let trackingIdToUse = localStorage.getItem('linkme_tracking_id');
-
-                    if (!trackingIdToUse) {
-                        // Priority 2: Modified - Only use Link Default
-                        if (link.default_tracknumber) {
-                            trackingIdToUse = link.default_tracknumber;
-                        }
-                    }
-
-                    if (trackingIdToUse) {
-                        fetchUrl += `&trackingId=${trackingIdToUse}`;
-                    }
-                }
-
-                fetch(fetchUrl)
+                fetch(revealUrl(deepLinkParam))
                     .then(res => res.json())
                     .then(data => {
                         if (data.realUrl) {
@@ -196,6 +176,9 @@ document.addEventListener('DOMContentLoaded', () => {
             card.addEventListener('click', () => {
                 if (link.isAdult) {
                     openOverlay(link.id);
+                } else if (effectiveMode(link) === 'deeplink' || !link.url) {
+                    // Deeplink Mode always, and any Link without a url, gets its Destination from Reveal
+                    revealAndGo(link);
                 } else {
                     window.location.href = link.url;
                 }
@@ -203,6 +186,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
             linksContainer.appendChild(card);
         });
+    }
+
+    // Mode: the Link's own if recognised, else the Profile's default if recognised, else Escape Mode
+    const MODES = ['direct', 'escape_ig', 'deeplink'];
+    function effectiveMode(link) {
+        if (MODES.includes(link.mode)) return link.mode;
+        if (currentProfile && MODES.includes(currentProfile.mode)) return currentProfile.mode;
+        return 'escape_ig';
+    }
+
+    // Reveal URL: Link Id, Username, and a Tracking Code when the Link has tracking on
+    function revealUrl(linkId) {
+        const link = linksData.find(l => l.id === linkId);
+        let fetchUrl = `/.netlify/functions/reveal?id=${linkId}&user=${username}`;
+
+        if (link && link.tracking) {
+            let trackingIdToUse = localStorage.getItem('linkme_tracking_id');
+
+            if (!trackingIdToUse) {
+                // Priority 2: Modified - Only use Link Default
+                if (link.default_tracknumber) {
+                    trackingIdToUse = link.default_tracknumber;
+                }
+            }
+
+            if (trackingIdToUse) {
+                fetchUrl += `&trackingId=${trackingIdToUse}`;
+            }
+        }
+        return fetchUrl;
+    }
+
+    function revealAndGo(link) {
+        fetch(revealUrl(link.id))
+            .then(res => {
+                if (!res.ok) throw new Error('Network response was not ok');
+                return res.json();
+            })
+            .then(data => {
+                if (data.realUrl) {
+                    performBounce(data.realUrl);
+                }
+            })
+            .catch(err => console.error('Error revealing link:', err));
     }
 
     // Overlay Logic
@@ -228,26 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
         continueBtn.textContent = 'loading...';
         continueBtn.disabled = true;
 
-        const link = linksData.find(l => l.id === currentLinkId);
-        // Pass username here too
-        let fetchUrl = `/.netlify/functions/reveal?id=${currentLinkId}&user=${username}`;
-
-        if (link && link.tracking) {
-            let trackingIdToUse = localStorage.getItem('linkme_tracking_id');
-
-            if (!trackingIdToUse) {
-                // Priority 2: Modified - Only use Link Default
-                if (link.default_tracknumber) {
-                    trackingIdToUse = link.default_tracknumber;
-                }
-            }
-
-            if (trackingIdToUse) {
-                fetchUrl += `&trackingId=${trackingIdToUse}`;
-            }
-        }
-
-        fetch(fetchUrl)
+        fetch(revealUrl(currentLinkId))
             .then(res => {
                 if (!res.ok) throw new Error('Network response was not ok');
                 return res.json();

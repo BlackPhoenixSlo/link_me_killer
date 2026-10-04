@@ -4,7 +4,7 @@ Spec: docs/spec/phase-01-link-modes-and-escape.md
 Covers: user stories 1, 3, 6, 7, 11, 14, 25, 30, 36, 38, 39, 41, 42
 Seams: the public page in Chromium under Playwright, served by the Dev-Server Stand-in, with the desktop Chrome User-Agent; observed through the network fence (Reveal watched with `waitForResponse`, Destinations landing on the fence's empty page) and Profile variants
 Blocked by: 04: Age Gate then Reveal on fixture data with no v1 Snapshot in the loop
-Status: claimed 20261004T191309Z 2026-10-04T19:47:35Z
+Status: done
 
 **What to build:** The page now reads a default Mode for the Profile and a Mode for each Link from the Profile JSON it already fetches. Each Link's effective Mode is its own Mode if the page recognises it. Otherwise the Link takes the Profile's default if that is recognised, and otherwise Escape Mode. In a System Browser, every Link then travels by its effective Mode:
 - A Direct or Escape Mode Link with a non-empty url goes to that url as given, with no Tracking Code, as v1's non-Adult Links do. If its url is absent or empty, it gets its Destination from Reveal at the moment of the Click and goes there.
