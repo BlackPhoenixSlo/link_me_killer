@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 2, 6, 11, 13, 15, 37, 38, 54, 55, 56
 Seams: the running v2 stack's public HTTP surface at baseURL, driven by Playwright through `./check.sh`: pages, plus the `request` fixture for Profile JSON and for redirects (not followed). The parity spec's Fixture Profile journeys, with every Destination host answered by `page.route`
 Blocked by: 10: The escaped Link opens by itself in the System Browser credited to the same Tracking Code, 15: The v1 Import writes the Fixture Profile into PocketBase on a running test stack
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-04T21:52:15Z
 
 **What to build:** From this ticket on, `./check.sh` runs every spec against v2:
 - It starts the test stack in its own Compose project and waits until it is healthy.
