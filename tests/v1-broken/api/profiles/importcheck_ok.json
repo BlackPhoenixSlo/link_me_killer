@@ -1,0 +1,29 @@
+{
+  "profile": {
+    "username": "importcheck_ok",
+    "displayName": "Import Check OK",
+    "avatarUrl": "",
+    "verified": false,
+    "bio": "The one valid Profile of the broken tree"
+  },
+  "links": [
+    {
+      "url": "https://example.com/importcheck-ok",
+      "id": "importcheck_ok_1",
+      "tracking": false,
+      "title": "Plain Link",
+      "isAdult": false,
+      "icon": null,
+      "geo": null
+    },
+    {
+      "url": "",
+      "id": "importcheck_ok_2",
+      "tracking": true,
+      "title": "Adult Link",
+      "isAdult": true,
+      "icon": null,
+      "geo": null
+    }
+  ]
+}

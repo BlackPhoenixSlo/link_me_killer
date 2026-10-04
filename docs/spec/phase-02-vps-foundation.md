@@ -506,16 +506,18 @@ ASSUMPTION: edits are driven through PocketBase's REST API rather than by clicki
     - exactly three `skipped: … case twin` lines (Jaka, JakaJaka, weiWEi);
     - Profile and Link counts unchanged;
     - every served Link Id unchanged.
-  - **Refusal.** The tree is `tests/fixtures/v1-broken/`, plus a case twin with different bytes written inside the container. The tree holds:
+  - **Refusal.** The tree is `tests/v1-broken/`, plus a case twin with different bytes written inside the container. The tree holds:
     - one valid Profile, `importcheck_ok`;
     - one file that is still invalid after the trailing-comma repair;
     - one Profile without a `links` array.
 
+    ASSUMPTION: the tree sits at `tests/v1-broken/`, not `tests/fixtures/v1-broken/`. Rung 1: Phase 0's Acceptance pins the exact file list of `tests/fixtures/` (phase-00-new-repo-ground.md:149), so a tree inside it fails that check. The same reason places the re-run trees below at `tests/v1-rerun-a/` and `tests/v1-rerun-b/`. Overturned if that check is narrowed to leave these folders out; the trees then move back under `tests/fixtures/`.
+
     The run exits 1 with one `invalid v1 file:` line per bad file. Afterwards `/importcheck_ok` lands on the landing page and the PocketBase counts are what they were.
   - **Re-run with changes.**
-    1. Import `tests/fixtures/v1-rerun-a/`.
+    1. Import `tests/v1-rerun-a/`.
     2. Set its Profile's Mode to `direct` through the API.
-    3. Import `tests/fixtures/v1-rerun-b/`, which retitles one Link, drops one and adds one.
+    3. Import `tests/v1-rerun-b/`, which retitles one Link, drops one and adds one.
 
     Expected: the retitled Link shows its new title and keeps its Link Id; the added Link has a fresh id; the dropped Link is named `stale in v2` and is still served; and the Profile's Mode is still `direct`.
   - **No Destination printed.** No run's output contains any Destination of its input.

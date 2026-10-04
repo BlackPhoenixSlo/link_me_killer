@@ -25,7 +25,7 @@ The v1 Import gains its write half. After 14's validation, it writes as the supe
 - each Link, with its private v1 key, its Destination, Geo Rule and default Tracking Code, and a fresh Link Id;
 - every image, copied byte for byte.
 
-A run ends with exit 0 and a summary count of Profiles, Links, images and warnings. A PocketBase error while writing gives exit 2. The import runs inside the app image through `docker compose run`, with its site mounted read-only for that run only. The Fixture site is mounted the way the seed will mount it: the fixtures folder, with the Page Copy's stock icons as its images, read-only.
+A run ends with exit 0 and a summary count of Profiles, Links, images and warnings. A PocketBase error while writing gives exit 2. The write phase prints only fixed reasons after `write failed:`, never a PocketBase error body (it can hold a Destination). The import runs inside the app image through `docker compose run`, with its site mounted read-only for that run only. The Fixture site is mounted the way the seed will mount it: the fixtures folder, with the Page Copy's stock icons as its images, read-only.
 
 ASSUMPTION: the stack and the import's write half are split from serving Visitors (16) so each ticket fits one fresh context window. This one is checked through the Operator's two doors while `./check.sh` stays on the stand-in (rung 3: Phase 0 kept the loop green at every ticket boundary; rung 5). Overturned if the build run prefers one ticket. 15 and 16 then merge, with the same end state.
 
