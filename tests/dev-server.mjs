@@ -1,8 +1,7 @@
 // Tiny stand-in for `netlify dev`: serves the Page Copy (app/public) statically,
-// rewrites unknown paths to /index.html, and mounts netlify/functions/<name>.js at
+// rewrites unknown paths to /index.html, and mounts tests/fixtures/netlify/functions/<name>.js at
 // /.netlify/functions/<name>. Phase 2 replaces this with docker compose.
-// Profiles (/api/profiles/*.json) come from tests/fixtures/api/profiles.
-// Until ticket 04, functions still come from the v1 Snapshot.
+// Profiles (/api/profiles/*.json) come from tests/fixtures/api/profiles. Nothing is read from the v1 Snapshot.
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { readFile, stat } from 'node:fs/promises';
@@ -10,9 +9,8 @@ import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../app/public/', import.meta.url));
-const SNAPSHOT = fileURLToPath(new URL('../linkme_clone3/', import.meta.url));
 const PROFILES_DIR = fileURLToPath(new URL('./fixtures/api/profiles/', import.meta.url));
-const FUNCTIONS_DIR = join(SNAPSHOT, 'netlify', 'functions');
+const FUNCTIONS_DIR = fileURLToPath(new URL('./fixtures/netlify/functions/', import.meta.url));
 const PORT = Number(process.env.PORT) || 4173;
 const require = createRequire(import.meta.url);
 

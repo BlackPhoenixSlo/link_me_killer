@@ -46,12 +46,38 @@ test('a normal browser does not see the Instagram overlay', async ({ page }) => 
   await expect(page.locator('#igOverlay')).toBeHidden();
 });
 
-// Stops at the Age Gate: the Reveal on fixture data arrives with ticket 04.
-test('tapping the adult link shows the age gate', async ({ page }) => {
+// The Reveal id comes from the page's own served Profile JSON, never the fixture file or a literal.
+// Destinations are compared as booleans so a failure never prints one.
+test('tapping the adult link shows the age gate, then continue reveals and follows the destination', async ({ page }) => {
+  const profileResponse = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/profiles/fixture.json');
   await page.goto(PROFILE);
+  const served: { links: { id: string; title: string }[] } = await (await profileResponse).json();
+  const adultId = served.links.find((link) => link.title === 'Adult Link')!.id;
+  const destination = TEST_SECRETS[adultId];
+  expect(typeof destination).toBe('string');
+
   await page.locator('.link-card', { hasText: 'Adult Link' }).click();
   await expect(page.locator('#overlay')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
+
+  // The Reveal passes through unchanged; its body is read here because the onward navigation discards it.
+  let reveal: { url: URL; status: number; realUrl: unknown } | undefined;
+  await page.route('**/.netlify/functions/reveal?*', async (route) => {
+    const response = await route.fetch();
+    reveal = { url: new URL(route.request().url()), status: response.status(), realUrl: (await response.json()).realUrl };
+    await route.fulfill({ response });
+  });
+  const onward = page.waitForEvent('requestfailed', (req) => req.url() === destination);
+  await page.getByRole('button', { name: 'Continue (18+)' }).click();
+
+  // The off-machine guard aborts the onward navigation, so it surfaces as a failed request; the Reveal ran before it.
+  expect((await onward).failure()?.errorText).toBe('net::ERR_BLOCKED_BY_CLIENT');
+  if (!reveal) throw new Error('no Reveal was observed before the onward navigation');
+  expect(reveal.url.pathname).toBe('/.netlify/functions/reveal');
+  expect(reveal.url.searchParams.get('id') === adultId).toBe(true);
+  expect(reveal.url.searchParams.get('user')).toBe('fixture');
+  expect(reveal.status).toBe(200);
+  expect(reveal.realUrl === destination).toBe(true);
 });
 
 // The status is not asserted: the stand-in answers its 200 catch-all, Phase 2's app a 404 with the landing page.
