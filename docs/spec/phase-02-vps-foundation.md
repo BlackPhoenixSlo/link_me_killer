@@ -590,7 +590,7 @@ for s in 02-profile-parity 02-v1-import 02-live-edit 02-image-upload 02-reveal-g
 # no v1 Destination in any file git tracks or would add (prints file names only, never a Destination)
 node -e '
   const fs = require("fs"), cp = require("child_process"), dir = "linkme_clone3/api/profiles";
-  // parse unchanged; only a file that fails gets the import's trailing-comma repair
+  // parse unchanged; only a file that fails gets the trailing-comma repair the import uses
   const parse = t => { try { return JSON.parse(t); } catch { return JSON.parse(t.replace(/,(\s*[}\]])/g, "$1")); } };
   const urls = new Set(Object.values(parse(fs.readFileSync("linkme_clone3/netlify/functions/secrets.json", "utf8"))));
   for (const f of fs.readdirSync(dir))

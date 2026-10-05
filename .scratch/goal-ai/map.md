@@ -46,7 +46,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 | 16 | [The Fixture Profile is served by v2's stack and every Phase 0 and Phase 1 spec passes on it](issues/16-fixture-served-on-stack.md) | phase-02 | 10, 15 | done |
 | 17 | [Every v1 Profile page on v2 matches the v1 Snapshot card for card](issues/17-v1-pages-match.md) | phase-02 | 16 | done |
 | 18 | [Every Click on a v1 Link ends at v1's Destination for the same Tracking Code and Visitor location](issues/18-v1-clicks-match.md) | phase-02 | 17 | done |
-| 19 | [Re-running the v1 Import keeps every Link Id and refuses a broken v1 tree without writing](issues/19-import-reruns-and-refusal.md) | phase-02 | 17 | claimed 20261004T191309Z |
+| 19 | [Re-running the v1 Import keeps every Link Id and refuses a broken v1 tree without writing](issues/19-import-reruns-and-refusal.md) | phase-02 | 17 | done |
 | 20 | [A PocketBase admin edit shows on the next page load while PocketBase's API stays closed](issues/20-live-edit-closed-api.md) | phase-02 | 16 | ready-for-agent |
 | 21 | [A photo uploaded in any D4 format is stored upright and resized as WebP](issues/21-image-upload-webp.md) | phase-02 | 16 | ready-for-agent |
 | 22 | [Reveal and /r answer only v2's own origin within a per-client limit](issues/22-reveal-guard.md) | phase-02 | 18, 19, 20, 21 | ready-for-agent |

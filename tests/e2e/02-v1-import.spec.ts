@@ -72,6 +72,7 @@ const startsWith = (lines: string[], prefix: string) => lines.filter((l) => l.st
 // 02-v1-import and 02-profile-parity.
 const onLocalStack = () => !process.env.PLAYWRIGHT_BASE_URL || new URL(process.env.PLAYWRIGHT_BASE_URL).origin === 'http://localhost:4173';
 
+// Kept beside the compose-run refusal in 're-runs': this one runs with this machine's Node and no stack, the off-stack path.
 test('the broken tree is refused with one line per bad file, before any write', () => {
   const { status, lines } = runImport([BROKEN]);
   expect(status).toBe(1);
@@ -151,6 +152,29 @@ test('a root-relative url whose backslash a browser reads as a second slash is r
   expect(invalid[0].includes('backslash.json: card 1')).toBe(true);
   expect(holdsDestination(lines, [site])).toBe(false);
 });
+
+// `\\host/x`: a browser reads both backslashes as slashes, a protocol-relative url to another host (review note from
+// ticket 15); it must not be rewritten into the root-relative `/x`. So must `\/host/x`, and `\\host/x` behind a leading
+// tab, which the URL parser strips (review notes from ticket 19). The token marks the value in any printed form.
+for (const [name, url] of [
+  ['a url beginning with two backslashes, which a browser sends off-site, is refused and never printed', '\\\\urltoken9q.example/x'],
+  ['a url beginning with a backslash and a slash, which a browser sends off-site, is refused and never printed', '\\/urltoken9q.example/x'],
+  ['a url beginning with a tab and two backslashes, which a browser sends off-site, is refused and never printed', '\t\\\\urltoken9q.example/x'],
+]) {
+  test(name, () => {
+    const site = throwawaySite('v1-twobackslash-', {
+      'twobackslash.json': [{ id: 'twobackslash_1', title: 'Plain', isAdult: false, url, tracking: false }],
+    });
+    const { status, lines } = runImport([site]);
+    expect(status).toBe(1);
+    const invalid = startsWith(lines, 'invalid v1 file: ');
+    expect(invalid.length).toBe(lines.length);
+    expect(invalid.length).toBe(1);
+    expect(invalid[0].includes('twobackslash.json: card 1')).toBe(true);
+    expect(lines.some((l) => l.includes('urltoken9q'))).toBe(false);
+    expect(holdsDestination(lines, [site])).toBe(false);
+  });
+}
 
 test('a .json entry or an image path that is a directory is refused as unreadable, not a crash', () => {
   const site = throwawaySite('v1-dirs-', {});
@@ -350,7 +374,7 @@ test.describe('repairs, seen over HTTP on the seeded stack', () => {
 // checked through the Operator's three doors: PocketBase's REST API on its loopback port (as the superuser from tests/e2e.env,
 // and anonymously), the import through `docker compose run`, and Compose's own status and inspect output. The harness's seed (tests/stack.sh) is the import run whose
 // records are checked here; the CLI runs again only where a check needs its printed lines, on a copy of the Fixture site
-// under another Username, which is removed afterwards. Destinations are compared as booleans and never printed.
+// under another Username, which is removed afterwards, and in the re-runs at the end of this block. Destinations are compared as booleans and never printed.
 // ASSUMPTION: these checks live in 02-v1-import, the spec's import spec, schema and anonymous checks included, rather than in
 // 02-live-edit, which ticket 20 creates (rung 5: one file for what one script held). Overturned by ticket 20; the schema and
 // anonymous checks then move there.
@@ -485,31 +509,59 @@ test.describe('on the test stack', () => {
     expect(slots.length).toBe(9);
   });
 
-  test('the import\'s printed lines: exit 0 with three dropped lines and the summary, then exit 2 on an existing Username; no Destination printed', async () => {
+  // The import through `docker compose run`, as the Operator runs it; its site is mounted read-only at /site, with the given
+  // images directory as /site/images. Compose's own `Container …` lines are left out.
+  const importLines = (r: { stdout: string; stderr: string }) =>
+    `${r.stdout}${r.stderr}`.split('\n').filter((l) => l && !/^\s*Container /.test(l));
+  const treeMounts = (tree: string) => [`${join(tree, 'api')}:/site/api:ro`, `${join(tree, 'netlify')}:/site/netlify:ro`];
+  const composeImport = (siteMounts: string[], images = IMAGES) => {
+    const r = compose('run', '--rm', ...siteMounts.flatMap((m) => ['-v', m]), '-v', `${images}:/site/images:ro`, 'app', 'import-v1', '--site', '/site');
+    return { status: r.status, lines: importLines(r) };
+  };
+  const SUMMARY = /^imported: \d+ Profiles, \d+ Links, \d+ images, \d+ warnings$/;
+
+  test('the import\'s printed lines: a write error exits 2, the next run completes it with three dropped lines, the stale Profiles named and the summary; no Destination printed', async () => {
     // The Fixture site under another Username, so a full run can write; its Profile is removed at the end.
     const site = tempDir('v1-stackcheck-');
     mkdirSync(join(site, 'api', 'profiles'), { recursive: true });
     cpSync(join(FIXTURES, 'api', 'profiles', 'fixture.json'), join(site, 'api', 'profiles', 'stackcheck.json'));
     cpSync(join(FIXTURES, 'netlify'), join(site, 'netlify'), { recursive: true });
-    const composeImport = (siteMounts: string[]) => {
-      const r = compose('run', '--rm', ...siteMounts.flatMap((m) => ['-v', m]), '-v', `${IMAGES}:/site/images:ro`, 'app', 'import-v1', '--site', '/site');
-      return { status: r.status, lines: `${r.stdout}${r.stderr}`.split('\n').filter((l) => l && !/^\s*Container /.test(l)) };
-    };
+    // The same site, but card 2's icon is a WebP header padded past the schema's 5 MB: the import accepts it and PocketBase
+    // refuses it, after the Profile and card 1 are written.
+    const oversized = tempDir('v1-stackcheck-big-');
+    mkdirSync(join(oversized, 'api', 'profiles'), { recursive: true });
+    cpSync(join(FIXTURES, 'netlify'), join(oversized, 'netlify'), { recursive: true });
+    cpSync(IMAGES, join(oversized, 'images'), { recursive: true });
+    const big = Buffer.alloc(5 * 1024 * 1024 + 64);
+    big.write('RIFF', 0, 'latin1');
+    big.writeUInt32LE(big.length - 8, 4);
+    big.write('WEBPVP8 ', 8, 'latin1');
+    writeFileSync(join(oversized, 'images', 'oversized.webp'), big);
+    const file = JSON.parse(readFileSync(join(FIXTURES, 'api', 'profiles', 'fixture.json'), 'utf8'));
+    file.links[1].icon = '/images/oversized.webp';
+    writeFileSync(join(oversized, 'api', 'profiles', 'stackcheck.json'), JSON.stringify(file));
     try {
-      const run = composeImport([`${join(site, 'api')}:/site/api:ro`, `${join(site, 'netlify')}:/site/netlify:ro`]);
+      const failed = composeImport(treeMounts(oversized), join(oversized, 'images'));
+      expect(holdsDestination(failed.lines, [oversized])).toBe(false);
+      expect(failed.status).toBe(2);
+      expect(failed.lines.at(-1)).toBe('write failed: stackcheck card 2 refused');
+      const [partial] = await list('profiles', "username='stackcheck'");
+      const partialLinks = await list('links', `profile='${partial.id}'`, 'order');
+      expect(partialLinks.length).toBe(1);
+
+      const run = composeImport(treeMounts(site));
       expect(holdsDestination(run.lines, [site])).toBe(false);
       expect(run.status).toBe(0);
       expect(startsWith(run.lines, 'dropped: stackcheck card ').length).toBe(3);
-      expect(run.lines.at(-1)).toBe('imported: 1 Profiles, 4 Links, 6 images, 3 warnings');
-
-      // The seeded Username again: a PocketBase error while writing exits 2 with a fixed reason and writes nothing
-      // (re-runs become upserts in ticket 19).
-      const before = (await list('links', "profile.username='fixture'")).length;
-      const again = composeImport([`${join(FIXTURES, 'api')}:/site/api:ro`, `${join(FIXTURES, 'netlify')}:/site/netlify:ro`]);
-      expect(holdsDestination(again.lines, [FIXTURES])).toBe(false);
-      expect(again.status).toBe(2);
-      expect(again.lines.at(-1)).toBe('write failed: profile fixture refused');
-      expect((await list('links', "profile.username='fixture'")).length).toBe(before);
+      // Every other v1-imported Profile is absent from this run's input, so each is named once; none is deleted.
+      const stale = startsWith(run.lines, 'stale in v2: ');
+      const imported = (await list('profiles', "v1Key!=''")).map((p: { username: string }) => p.username).filter((u: string) => u !== 'stackcheck');
+      expect(stale.map((l) => l.slice('stale in v2: '.length)).sort()).toEqual(imported.sort());
+      expect(run.lines.at(-1)).toBe(`imported: 1 Profiles, 4 Links, 6 images, ${3 + stale.length} warnings`);
+      expect((await list('profiles', "username='stackcheck'")).length).toBe(1);
+      const written = await list('links', `profile='${partial.id}'`, 'order');
+      expect(written.length).toBe(4); // no duplicate: card 1 matched by its v1Key
+      expect(written[0].id === partialLinks[0].id && written[0].linkId === partialLinks[0].linkId).toBe(true);
 
       const appId = compose('ps', '-q', 'app').stdout.trim();
       const mounts = JSON.parse(spawnSync('docker', ['inspect', '--format', '{{json .Mounts}}', appId], { encoding: 'utf8' }).stdout);
@@ -553,5 +605,156 @@ test.describe('on the test stack', () => {
     } finally {
       await pb(`/api/collections/profiles/records/${profile.id}`, { method: 'DELETE', token }); // cascades to its Links
     }
+  });
+
+  // Ticket 19: re-runs of the v1 Import (spec, Testing Decisions, 02-v1-import: case twins and a stable re-run, refusal,
+  // re-run with changes, no Destination printed, survives recreation). They write to the stack and recreate two of its
+  // containers, so they come last in this file, one after another, and leave the Fixture Profile in place.
+  test.describe('re-runs', () => {
+    test.describe.configure({ mode: 'serial' });
+    const RERUN_A = join(ROOT, 'tests', 'v1-rerun-a');
+    const RERUN_B = join(ROOT, 'tests', 'v1-rerun-b');
+    type Served = { profile: { mode: string; displayName: string; avatarUrl: string }; links: { id: string; title: string }[] };
+    const total = async (c: string) => (await (await pb(`/api/collections/${c}/records?perPage=1`, { token })).json()).totalItems as number;
+    const counts = async () => ({ profiles: await total('profiles'), links: await total('links') });
+    const served = async (request: import('@playwright/test').APIRequestContext, username: string) => {
+      const res = await request.get(`/api/profiles/${username}.json`);
+      expect(res.status(), username).toBe(200);
+      return (await res.json()) as Served;
+    };
+    // Every Profile's served Link Ids, by Username.
+    const servedIds = async (request: import('@playwright/test').APIRequestContext) => {
+      const ids: Record<string, string[]> = {};
+      for (const p of await list('profiles', "id!=''", 'username')) ids[p.username] = (await served(request, p.username)).links.map((l) => l.id);
+      return ids;
+    };
+
+    test('v1\'s git tree, archived and unpacked inside the container: three case twins skipped, counts and served Link Ids unchanged', async ({ request }) => {
+      test.skip(!SNAPSHOT_PRESENT, 'v1 Snapshot absent');
+      test.setTimeout(180_000);
+      const before = await counts();
+      const idsBefore = await servedIds(request);
+      // The archive is read from git and unpacked only inside the one-off container, so all 30 Profile files exist there
+      // (Linux is case-sensitive) and nothing is written into the v1 Snapshot. The Fixture site comes last, as in the seed.
+      const fixtureMounts = ['-v', `${join(FIXTURES, 'api')}:/site/api:ro`, '-v', `${join(FIXTURES, 'netlify')}:/site/netlify:ro`, '-v', `${IMAGES}:/site/images:ro`];
+      const r = spawnSync(
+        'bash',
+        [
+          '-c',
+          'set -o pipefail; git -C "$1" archive HEAD | docker compose --env-file tests/e2e.env run --rm -T "${@:2}" app sh -c ' +
+            '"mkdir -p /tmp/v1 && tar -x -C /tmp/v1 && import-v1 --site /tmp/v1 --site /site"',
+          'bash',
+          SNAPSHOT,
+          ...fixtureMounts,
+        ],
+        { cwd: ROOT, encoding: 'utf8' },
+      );
+      const lines = importLines(r);
+      expect(holdsDestination(lines, [SNAPSHOT, FIXTURES])).toBe(false);
+      expect(r.status).toBe(0);
+      expect(startsWith(lines, 'invalid v1 file: ').length).toBe(0);
+      const twins = lines.map((l) => l.match(/^skipped: \/tmp\/v1\/api\/profiles\/([^/]+): case twin of /)?.[1]).filter(Boolean);
+      expect(twins.sort()).toEqual(['Jaka.json', 'JakaJaka.json', 'weiWEi.json']);
+      expect(lines.filter((l) => l.includes('case twin')).length).toBe(3);
+      expect(startsWith(lines, 'stale in v2: ').length).toBe(0);
+      expect(SUMMARY.test(lines.at(-1) ?? '')).toBe(true);
+      expect(await counts()).toEqual(before);
+      expect(await servedIds(request)).toEqual(idsBefore);
+      const snapshotStatus = spawnSync('git', ['-C', SNAPSHOT, 'status', '--porcelain'], { encoding: 'utf8' });
+      expect(snapshotStatus.status === 0 && snapshotStatus.stdout === '').toBe(true);
+    });
+
+    test('the broken tree plus a case twin with other bytes is refused, one line per bad file, and nothing is written', async ({ page }) => {
+      const before = await counts();
+      // The twin is written inside the container, into a copy of the read-only tree.
+      const r = compose('run', '--rm', '-v', `${BROKEN}:/broken:ro`, 'app', 'sh', '-c',
+        'cp -R /broken /tmp/broken && printf \'{"profile":{},"links":[]}\' > /tmp/broken/api/profiles/Importcheck_ok.json && import-v1 --site /tmp/broken');
+      const lines = importLines(r);
+      expect(holdsDestination(lines, [BROKEN])).toBe(false);
+      expect(r.status).toBe(1);
+      const invalid = startsWith(lines, 'invalid v1 file: ');
+      expect(invalid.length).toBe(lines.length);
+      expect(invalid.filter((l) => l.includes('/importcheck_badjson.json: ')).length).toBe(1);
+      expect(invalid.filter((l) => l.includes('/importcheck_nolinks.json: ')).length).toBe(1);
+      expect(invalid.filter((l) => l.includes('/Importcheck_ok.json: case twin of importcheck_ok.json')).length).toBe(1);
+      expect(invalid.length).toBe(3);
+      // The good file is named only as the twin's other half, never on a line of its own.
+      expect(lines.filter((l) => l.includes('importcheck_ok')).length).toBe(1);
+      expect(await counts()).toEqual(before);
+      await page.goto('/importcheck_ok');
+      await expect(page).toHaveURL(/\/landing\.html$/);
+    });
+
+    test('tree A, then Direct Mode set through the API, then tree B: Link Ids kept, a fresh one for the new Link, the dropped one named and served, Mode kept', async ({ request }) => {
+      test.setTimeout(120_000);
+      const a = composeImport(treeMounts(RERUN_A));
+      expect(holdsDestination(a.lines, [RERUN_A])).toBe(false);
+      expect(a.status).toBe(0);
+      expect(a.lines.some((l) => l.includes('reruncheck'))).toBe(false);
+      const [profile] = await list('profiles', "username='reruncheck'");
+      expect(profile.mode).toBe('escape_ig');
+      const linksA = await list('links', `profile='${profile.id}'`, 'order');
+      expect(linksA.map((l: { title: string }) => l.title)).toEqual(['Adult Link', 'Old Title', 'Dropped Link', 'Twin Link', 'Twin Link']);
+      const idA = linksA.map((l: { linkId: string }) => l.linkId);
+      expect(new Set(idA).size).toBe(5);
+
+      const setMode = await pb(`/api/collections/profiles/records/${profile.id}`, { ...json({ mode: 'direct' }), method: 'PATCH', token });
+      expect(setMode.status).toBe(200);
+      // A Link born in v2 (no v1Key): never named, never touched.
+      const born = await pb('/api/collections/links/records', { ...json({ profile: profile.id, title: 'Born in v2', order: 9, destination: '/landing.html' }), token });
+      expect(born.status).toBe(200);
+      const bornId = (await born.json()).linkId;
+
+      const b = composeImport(treeMounts(RERUN_B));
+      expect(holdsDestination(b.lines, [RERUN_B, RERUN_A])).toBe(false);
+      expect(b.status).toBe(0);
+      const stale = b.lines.filter((l) => l.startsWith('stale in v2: reruncheck'));
+      expect(stale.length).toBe(1);
+      expect(stale[0].startsWith('stale in v2: reruncheck card 3') && stale[0].includes(idA[2])).toBe(true);
+      expect(b.lines.some((l) => l.includes(bornId))).toBe(false);
+      expect(SUMMARY.test(b.lines.at(-1) ?? '')).toBe(true);
+
+      const json_ = await served(request, 'reruncheck');
+      expect(json_.profile.mode).toBe('direct');
+      expect(json_.profile.displayName).toBe('Rerun Check B'); // v1 wins on its fields
+      const byId = new Map(json_.links.map((l) => [l.id, l.title]));
+      expect(byId.get(idA[0])).toBe('Adult Link');
+      expect(byId.get(idA[1])).toBe('New Title');
+      expect(byId.get(idA[2])).toBe('Dropped Link'); // still served until the Operator deletes it
+      expect(byId.get(idA[3]) === 'Twin Link' && byId.get(idA[4]) === 'Twin Link').toBe(true);
+      expect(byId.get(bornId)).toBe('Born in v2');
+      const added = json_.links.filter((l) => l.title === 'Added Link');
+      expect(added.length).toBe(1);
+      expect(/^[a-z0-9]{12}$/.test(added[0].id) && !idA.includes(added[0].id) && added[0].id !== bornId).toBe(true);
+      expect(json_.links.length).toBe(7);
+      // v1 wins on the Destination, compared as a boolean.
+      const secretsB: Record<string, string> = JSON.parse(readFileSync(join(RERUN_B, 'netlify', 'functions', 'secrets.json'), 'utf8'));
+      const [adult] = await list('links', `linkId='${idA[0]}'`);
+      expect(adult.destination === secretsB.reruncheck_1, 'the Adult Link\'s Destination is tree B\'s').toBe(true);
+    });
+
+    test('pocketbase and app recreated: the re-run Profile still serves in Direct Mode and the Fixture avatar with the same bytes', async ({ request }) => {
+      test.setTimeout(180_000);
+      const avatarBytes = async () => {
+        const res = await request.get((await served(request, 'fixture')).profile.avatarUrl);
+        expect(res.status()).toBe(200);
+        return Buffer.from(await res.body());
+      };
+      const stock = readFileSync(join(IMAGES, fixture.profile.avatarUrl.replace(/^\/images\//, '')));
+      expect((await avatarBytes()).equals(stock)).toBe(true);
+      const idsBefore = (await served(request, 'reruncheck')).links.map((l) => l.id);
+
+      const up = compose('up', '-d', '--force-recreate', '--wait', 'pocketbase', 'app');
+      expect(up.status).toBe(0);
+      await expect.poll(async () => (await request.get('/api/profiles/reruncheck.json')).status(), { timeout: 60_000 }).toBe(200);
+
+      const after = await served(request, 'reruncheck');
+      expect(after.profile.mode).toBe('direct');
+      expect(after.links.map((l) => l.id)).toEqual(idsBefore);
+      expect((await avatarBytes()).equals(stock)).toBe(true);
+      const ps = compose('ps', '--format', 'json').stdout.trim().split('\n').map((l) => JSON.parse(l));
+      expect(['app', 'caddy', 'pocketbase'].every((s) => ps.some((c) => c.Service === s && c.State === 'running'))).toBe(true);
+      await signIn(); // the recreated PocketBase keeps its data; a fresh token for anything after this
+    });
   });
 });

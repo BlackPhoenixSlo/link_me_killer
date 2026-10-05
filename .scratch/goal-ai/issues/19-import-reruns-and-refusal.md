@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 28, 37, 45, 51, 52, 53
 Seams: the v1 Import CLI through `docker compose run`, as the Operator runs it, observed through its output and exit code; PocketBase's REST API on its loopback port, to arrange and inspect state; the running stack's public HTTP surface at baseURL, to see what Visitors get
 Blocked by: 17: Every v1 Profile page on v2 matches the v1 Snapshot card for card
-Status: claimed 20261004T191309Z 2026-10-05T00:04:41Z
+Status: done
 
 **What to build:** The Operator can re-run the import against a refreshed v1 Snapshot until Cutover, and v1 wins:
 - **Matching.** Profiles match by Username and Links by their private v1 key. No duplicate appears, and every Link keeps its v2 Link Id, duplicated v1 ids included.
