@@ -4,7 +4,7 @@ Spec: docs/spec/phase-05-cutover-and-domains.md
 Covers: user stories 2, 3, 18, 19
 Seams: offline, the local Caddy image in front of a header-echo upstream (as the spec's review observed, D2a), and `./check.sh`; live, the Operator's terminal, the Namecheap registrar and the Cloudflare dashboard (plan §11). The lines of `RUN.md`'s `## Cutover` that rest on the country source
 Blocked by: 41: Caddy asks the app before every certificate and the Cutover runbook is written
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T16:36:39Z
 
 **What to build:** Geo Rules and Stats get the Visitor's country and US state only from the production country source, never from a header the Visitor sends, and Reveal's rate limit keys on the Visitor's own address. ofl.ink's DNS is made ready, at least 48 hours ahead, for a switch and a rollback that are each one record change taking effect within minutes, while v1 keeps serving. This ticket holds every Cloudflare-specific part of the Phase. Host Resolution, the TLS Ask, the page, the Domains schema, Custom and Spare Domain serving, backups, the freeze, the final import and the hand-over do not wait for it.
 
