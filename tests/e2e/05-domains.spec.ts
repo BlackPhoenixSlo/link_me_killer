@@ -1,8 +1,8 @@
 import { expect, test, type APIRequestContext, type Browser, type Page, type Request } from '@playwright/test';
 import { join } from 'node:path';
 import {
-  account, asSuperuser, createOwnerlessProfile, escapeOverlay, eventCount, fresh, intents, logInToHandedOver, only, onLocalStack, operator,
-  ownerOf, phoneContext, proxy, recordIds, recordNavigations, setOwner, superuserToken, UA, verifiedCreator, xSafari,
+  account, asSuperuser, createOwnerlessProfile, EDITOR, escapeOverlay, eventCount, featured, fresh, handOver, heading, intents, logIn, only,
+  onLocalStack, operator, ownerOf, phoneContext, proxy, recordIds, recordNavigations, superuserToken, UA, verifiedCreator, xSafari,
 } from './helpers';
 
 // Phase 5 (docs/spec/phase-05-cutover-and-domains.md, Testing Decisions): one seam, this spec against the local stack at the
@@ -17,6 +17,9 @@ import {
 // Set-up, not a second seam: `beforeAll` gives the Fixture Profile the Custom Domain `creator.test` and lists the Spare Domain
 // `spare.test` as a superuser through PocketBase's REST API; `afterAll` removes both. `unknown.test` is never added, and the
 // seed is unchanged.
+// Phase 6 (docs/spec/phase-06-sites-and-domains.md, ticket 4): a Custom Domain is a `customDomains` record, and only a live one
+// gets a certificate or a Profile. The Operator's path stays, a superuser's live record made without the DNS proof, so the
+// set-up makes one; the Creator's self-service path and its DNS check are 07-domains'.
 const CUSTOM = 'creator.test';
 const SPARE = 'spare.test';
 const UNKNOWN = 'unknown.test';
@@ -31,10 +34,20 @@ const SCREENSHOT = join(__dirname, '..', '..', '.scratch', 'goal_ai', 'shots', '
 test.use({ launchOptions: { args: ['--host-resolver-rules=MAP *.test 127.0.0.1 , MAP * ~NOTFOUND , EXCLUDE localhost'] } });
 test.skip(!onLocalStack(), 'the domain set-up needs the local stack\'s PocketBase port');
 
-// The Operator's admin-UI edits (helpers.ts's operator: a superuser's call, status only): a Profile's Custom Domain ('' clears
-// it), and one Spare Domain listed or removed.
-const setCustomDomain = async (username: string, domain: string) =>
-  operator('PATCH', `/api/collections/profiles/records/${(await recordIds(username)).profileId}`, { customDomain: domain });
+// The Operator's admin-UI edits (helpers.ts's operator: a superuser's call, status only): a Profile's Custom Domain, as its one
+// `customDomains` record (any record it had is deleted first; `status` '' leaves the new one pending), removed, and one Spare
+// Domain listed or removed.
+async function removeCustomDomain(username: string) {
+  const { profileId } = await recordIds(username);
+  const found = await (await asSuperuser(await superuserToken(), `/api/collections/customDomains/records?filter=${encodeURIComponent(`profile='${profileId}'`)}`)).json();
+  const statuses: number[] = [];
+  for (const { id } of found.items) statuses.push(await operator('DELETE', `/api/collections/customDomains/records/${id}`));
+  return statuses;
+}
+async function setCustomDomain(username: string, domain: string, status = 'live') {
+  expect(await removeCustomDomain(username), `${username}'s earlier Custom Domain removed`).not.toContain(404);
+  return operator('POST', '/api/collections/customDomains/records', { profile: (await recordIds(username)).profileId, domain, status });
+}
 const listSpareDomain = (domain: string) => operator('POST', '/api/collections/spareDomains/records', { domain });
 const unlistSpareDomain = async (domain: string) =>
   operator('DELETE', `/api/collections/spareDomains/records/${(await only(await superuserToken(), 'spareDomains', `domain='${domain}'`)).id}`);
@@ -49,7 +62,7 @@ test.beforeAll(async () => {
 
 // Tear-down removes both, and the TLS Ask then refuses them: nothing this spec added outlives it.
 test.afterAll(async ({ request }) => {
-  expect(await setCustomDomain('fixture', ''), 'the Fixture Profile\'s Custom Domain cleared').toBe(200);
+  expect(await removeCustomDomain('fixture'), 'the Fixture Profile\'s Custom Domain removed').toEqual([204]);
   expect(await unlistSpareDomain(SPARE), `the Spare Domain ${SPARE} removed`).toBe(204);
   for (const domain of [CUSTOM, SPARE]) expect((await tlsAsk(request, domain)).status(), `the TLS Ask for ${domain} after tear-down`).toBe(404);
 });
@@ -63,6 +76,27 @@ test('the TLS Ask answers an empty 200 for a Custom Domain, a Spare Domain and a
   expect((await tlsAsk(request, UNKNOWN)).status(), `the TLS Ask for ${UNKNOWN}`).toBe(404);
   expect((await tlsAsk(request)).status(), 'the TLS Ask with no domain').toBe(400);
   expect((await tlsAsk(request, 'not a hostname')).status(), 'the TLS Ask for a value that is not a hostname').toBe(400);
+});
+
+test('a pending Custom Domain gets no certificate and shows no Profile; set live, it gets both', async ({ browser, request }) => {
+  const PENDING = 'pending.test';
+  const owner = fresh().username; // a throwaway Profile made here as the Operator would, and deleted in `finally`
+  await createOwnerlessProfile(owner, 'Pending Domain Profile', { title: 'Pending card', destination: 'https://example.com/domains-pending' });
+  try {
+    expect(await setCustomDomain(owner, PENDING, ''), `${PENDING} pending on ${owner}`).toBe(200);
+    expect((await tlsAsk(request, PENDING)).status(), `the TLS Ask for the pending ${PENDING}`).toBe(404);
+    const landing = await visit(browser, at(PENDING), '/');
+    await expect(landing.locator('#displayName'), `a Profile on the pending ${PENDING}`).toHaveCount(0);
+    await landing.context().close();
+    expect(await setCustomDomain(owner, PENDING), `${PENDING} live on ${owner}`).toBe(200);
+    expect((await tlsAsk(request, PENDING)).status(), `the TLS Ask for the live ${PENDING}`).toBe(200);
+    const page = await visit(browser, at(PENDING), '/');
+    await expect(page.locator('#displayName'), `the Profile on the live ${PENDING}`).toHaveText('Pending Domain Profile');
+    await page.context().close();
+  } finally {
+    expect(await operator('DELETE', `/api/collections/profiles/records/${(await recordIds(owner)).profileId}`), `the Profile ${owner} deleted`).toBe(204);
+  }
+  expect((await tlsAsk(request, PENDING)).status(), `the TLS Ask for ${PENDING} once its Profile is deleted (cascade)`).toBe(404);
 });
 
 // A Visitor on `origin`, in a fresh 390×844 context that reaches no other host, opens `path`. The caller closes the context.
@@ -171,27 +205,25 @@ test('a Custom Domain belongs to one Profile, and a Spare Domain outranks a Cust
   }
 });
 
-// The Creator's writes go through the same-origin proxy, as the Editor sends them (Phase 3); the stored value is read as the
-// Operator reads it. PocketBase 0.40.4 drops the hidden `customDomain` from a Creator's body before its rules run, so both writes
-// answer 200 and store no Custom Domain: 1791140008_domains.js's ASSUMPTION reads "refused" as never stored. A migration that
-// drops `hidden` turns both into refusals, and this test changes with it.
+// The Creator's writes go through the same-origin proxy, as the Editor sends them (Phase 3); what is stored is read as the
+// Operator reads it. From Phase 6 on Profiles have no Custom Domain field (1791140012_custom_domains.js): PocketBase 0.40.4
+// ignores a body field the collection does not have, so both writes answer 200 and no Custom Domain comes of them. A Creator's
+// own Custom Domain is a `customDomains` record, live only through the DNS check (07-domains).
 test('a Creator can neither create a Profile with a Custom Domain nor set one on their own Profile', async ({ request }) => {
   const token = await superuserToken();
-  const storedDomains = async (username: string) => {
-    const found = await (await asSuperuser(token, `/api/collections/profiles/records?filter=${encodeURIComponent(`username='${username}'`)}`)).json();
-    return found.items.map((p: { customDomain: string }) => p.customDomain);
-  };
+  const storedDomains = async () =>
+    (await (await asSuperuser(token, `/api/collections/customDomains/records?filter=${encodeURIComponent("domain='mine.test'")}`)).json()).items;
   const unclaimed = await account(request);
-  const claim = { username: unclaimed.creator.username, owner: unclaimed.id, mode: 'escape_ig', customDomain: 'mine.test' };
+  const claim = { username: unclaimed.creator.username, owner: unclaimed.id, mode: 'escape_ig', slot: 1, customDomain: 'mine.test' };
   const created = await proxy(request, unclaimed.token).post('profiles/records', claim);
   expect(created.status(), 'a claim naming a Custom Domain').toBe(200);
-  expect((await storedDomains(claim.username)).filter(Boolean), `a Custom Domain stored on ${claim.username}`).toEqual([]);
+  expect(await storedDomains(), `a Custom Domain stored for ${claim.username}`).toEqual([]);
 
   const owner = await verifiedCreator(request, []);
   const as = proxy(request, owner.token);
   const updated = await as.patch(`profiles/records/${owner.profileId}`, { customDomain: 'mine.test' });
   expect(updated.status(), 'the owner setting a Custom Domain').toBe(200);
-  expect(await storedDomains(owner.creator.username), `${owner.creator.username}'s stored Custom Domain`).toEqual(['']);
+  expect(await storedDomains(), `a Custom Domain stored for ${owner.creator.username}`).toEqual([]);
   const own = await (await as.get(`profiles/records/${owner.profileId}`)).json();
   expect('customDomain' in own, 'the Custom Domain field in the owner\'s own read').toBe(false);
 });
@@ -208,7 +240,7 @@ test('the domains stay out of every public answer: the baseURL page and the reco
   await context.close();
 
   const fixtureId = (await only(await superuserToken(), 'profiles', "username='fixture'")).id;
-  for (const path of ['profiles/records', `profiles/records/${fixtureId}`, 'spareDomains/records']) {
+  for (const path of ['profiles/records', `profiles/records/${fixtureId}`, 'spareDomains/records', 'customDomains/records']) {
     const text = await (await request.get(`/api/collections/${path}`)).text();
     for (const domain of [CUSTOM, SPARE]) expect(text.includes(domain), `${domain} in the anonymous answer to ${path}`).toBe(false);
   }
@@ -505,23 +537,33 @@ test('a fetch from a page on creator.test to Reveal on spare.test cannot be read
   await context.close();
 });
 
-// Ticket 41: the order of the Cutover runbook's step 12 (RUN.md, ## Cutover). A v1 Creator who claimed another Username before
-// the hand-over owns that bare Profile; Phase 3's partial unique index on owner (idx_profiles_owner, pocketbase/pb_migrations/
-// 1791140004_sign_up_and_claim.js) refuses the imported Profile's owner even to a superuser until the bare Profile is deleted.
-// The imported Profile is a throwaway made as the v1 Import makes one (helpers.ts, createOwnerlessProfile); the Operator's
-// steps are helpers.ts's setOwner and operator, as in the admin UI. Nothing shared is changed.
+// Ticket 41, as Phase 6 changes it (docs/spec/phase-06-sites-and-domains.md, § 2 Option A): the Cutover runbook's step 12
+// (RUN.md, ## Cutover). A v1 Creator who claimed another Username before the hand-over owns that bare Profile in slot 1; the
+// unique index on (owner, slot) (pocketbase/pb_migrations/1791140011_several_profiles.js) refuses the imported Profile in a
+// taken slot even to a superuser, and takes it in a free one with the bare Profile kept. The imported Profile is a throwaway
+// made as the v1 Import makes one (helpers.ts, createOwnerlessProfile); the Operator's step is helpers.ts's handOver, as in the
+// admin UI. Nothing shared is changed.
 // ASSUMPTION: here rather than beside 03's hand-over case (rung 2: Phase 5's one seam is this spec, Phase 3's suite is one spec,
-// and 03-auth-and-editor.spec.ts may not grow past its 1000-line limit; the two cases share helpers.ts's logInToHandedOver).
-// Overturned if 03 gains room; the case then moves beside its hand-over case.
-test('step 12\'s hand-over order: setting the owner while the Creator\'s bare Profile exists is refused; once it is deleted the owner is set, the next log-in lands in the Editor on the handed-over Profile with its Links, and the Creator owns exactly one Profile', async ({ browser, request, baseURL }) => {
-  const { creator, id, profileId: bare } = await verifiedCreator(request, []);
+// and 03-auth-and-editor.spec.ts may not grow past its 1000-line limit). Overturned if 03 gains room; the case then moves
+// beside its hand-over case.
+test('step 12\'s hand-over: the owner with a taken slot is refused; with a free slot it is set beside the bare Profile, and the Creator switches to the handed-over Profile in the Editor and finds its Links', async ({ browser, request, baseURL }) => {
+  const origin = new URL(baseURL!).origin;
+  const { creator, id } = await verifiedCreator(request, [['Bare card', '']]);
   const imported = fresh().username;
   await createOwnerlessProfile(imported, 'Handed Over', { title: 'Imported card', destination: `https://example.com/${imported}` });
-  expect(await setOwner(imported, creator.email), 'setting the owner while the bare Profile exists').toBe(400);
+  expect(await handOver(imported, creator.email, 1), 'the owner with the bare Profile\'s slot').toBe(400);
   expect(await ownerOf(imported), 'the imported Profile\'s owner after the refusal').toBe('');
-  expect(await operator('DELETE', `/api/collections/profiles/records/${bare}`), 'the bare Profile deleted').toBe(204);
-  expect(await setOwner(imported, creator.email), 'setting the owner once the bare Profile is gone').toBe(200);
-  const editor = await logInToHandedOver(browser, new URL(baseURL!).origin, creator, imported, 'Handed Over', ['Imported card']);
+  expect(await handOver(imported, creator.email, 2), 'the owner with a free slot').toBe(200);
+  const owned = await (await asSuperuser(await superuserToken(), `/api/collections/profiles/records?sort=slot&filter=${encodeURIComponent(`owner='${id}'`)}`)).json();
+  expect(owned.items.map((p: { username: string; slot: number }) => [p.username, p.slot]), 'the Profiles the Creator owns').toEqual([[creator.username, 1], [imported, 2]]);
+
+  const editor = await (await phoneContext(browser)).newPage();
+  await logIn(editor, creator);
+  await expect(heading(editor, EDITOR)).toBeVisible();
+  await expect(featured(editor)).toHaveText(['Bare card']);
+  await editor.getByLabel('Profile', { exact: true }).selectOption({ label: `@${imported}` });
+  await expect(editor.getByText(`${origin}/${imported}`, { exact: true })).toBeVisible();
+  await expect(editor.getByLabel('Display name')).toHaveValue('Handed Over');
+  await expect(featured(editor)).toHaveText(['Imported card']);
   await editor.context().close();
-  expect((await only(await superuserToken(), 'profiles', `owner='${id}'`)).username, 'the one Profile the Creator owns').toBe(imported);
 });

@@ -19,6 +19,7 @@ const { toWebp, TARGETS } = require('./src/image');
 const { allow, allowPing, clientIp, originOf, sameOrigin } = require('./src/click-guard');
 const { createEventRecorder } = require('./src/event-recorder');
 const { createHostResolver } = require('./src/host-resolver');
+const { checkDomain, recordsFor } = require('./src/domain-check');
 
 const PUBLIC = path.join(__dirname, 'public');
 const EDITOR = path.join(__dirname, 'editor');
@@ -167,7 +168,7 @@ app.post('/api/upload/:collection/:recordId/:field', async (c) => {
   if (!maxSide) return c.json({ error: 'Not found' }, 404);
   if (Number(c.req.header('content-length')) > UPLOAD_CAP) return c.json({ error: 'Over 20 MB' }, 413);
   const viewed = await gateway.viewRecord(collection, recordId, token);
-  if (viewed !== 200) return c.json({ error: 'Refused by PocketBase' }, viewed);
+  if (viewed.status !== 200) return c.json({ error: 'Refused by PocketBase' }, viewed.status);
   const body = await readCapped(c.req.raw.body, UPLOAD_CAP);
   if (!body) return c.json({ error: 'Over 20 MB' }, 413);
   let file;
@@ -188,8 +189,35 @@ app.post('/api/upload/:collection/:recordId/:field', async (c) => {
   return c.json({ url: `/api/files/${collection}/${recordId}/${replaced.filename}` });
 });
 
+// The Custom Domain check (Phase 6 spec, § 3 Option 1, Check route), on the upload's pattern: the caller's token is required
+// (401), Reveal's per-address limit applies (429), and the record is viewed through PocketBase with that token, its status
+// passed through, so the rules decide ownership. Then app/src/domain-check.js asks the DNS; when every check passes the record
+// is set live as the superuser, and a clash on the live index (another Profile's live domain) is the problem "taken". The
+// answer is { status: 'pending' | 'live', problems, records }. A live record is answered as it is, with no DNS lookup.
+// ASSUMPTION: the limit comes before PocketBase's view, as Reveal's comes before its Link lookup, so a refused call costs no
+// PocketBase read (rung 3). Overturned if a Creator's checks must not share a Visitor's window on one address.
+app.post('/api/domain-check/:id', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const token = c.req.header('authorization');
+  if (!token) return c.json({ error: 'Token required' }, 401);
+  if (!underLimit(c)) return c.json(TOO_MANY, 429);
+  const viewed = await gateway.viewRecord('customDomains', c.req.param('id'), token, 'id,domain,token,status');
+  if (viewed.status !== 200) return c.json({ error: 'Refused by PocketBase' }, viewed.status);
+  const { record } = viewed;
+  if (record.status === 'live') return c.json({ status: 'live', problems: [], records: recordsFor(record.domain, record.token) });
+  const { problems, records } = await checkDomain(record, { isOwnHost: hosts.isOwnHost });
+  if (!problems.length) {
+    const written = await gateway.setDomainLive(record.id);
+    if (written === 200) return c.json({ status: 'live', problems, records });
+    if (written === 404) return c.json({ error: 'Refused by PocketBase' }, 404); // removed since the view
+    if (written !== 400) throw new Error('PocketBase refused the live write');
+    problems.push(`Another Profile already uses ${record.domain}.`);
+  }
+  return c.json({ status: 'pending', problems, records });
+});
+
 // Same-origin API proxy (Phase 3 spec, Interfaces): PocketBase's users, profiles and links collection paths, records and auth
-// alike, and from Phase 4 on the Stats page's dailyStats view (never events), go to PocketBase with the caller's own method, headers (its token, or none) and body, and PocketBase's answer comes
+// alike, from Phase 4 on the Stats page's dailyStats view (never events), and from Phase 6 on customDomains, go to PocketBase with the caller's own method, headers (its token, or none) and body, and PocketBase's answer comes
 // back as it is. The superuser's token is never added: PocketBase's collection rules decide every call.
 // ASSUMPTION: only hop-by-hop headers are dropped, plus Accept-Encoding on the way in and the encoding and length headers on
 // the way out, because Node's fetch decodes a compressed answer and the stream it hands on is no longer the one those headers
@@ -197,7 +225,7 @@ app.post('/api/upload/:collection/:recordId/:field', async (c) => {
 // ASSUMPTION: a path holding an encoded slash or backslash is not forwarded (404), so nothing past the collection name can
 // step into another collection on PocketBase's side (rung 4: a closed default). Overturned if a PocketBase path in these
 // collections ever needs one.
-const PROXIED = /^\/api\/collections\/(users|profiles|links|dailyStats)\/[^/]/;
+const PROXIED = /^\/api\/collections\/(users|profiles|links|dailyStats|customDomains)\/[^/]/;
 const DROP_IN = ['connection', 'keep-alive', 'proxy-connection', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'host', 'content-length', 'accept-encoding'];
 const DROP_OUT = ['connection', 'keep-alive', 'transfer-encoding', 'content-encoding', 'content-length'];
 app.all('/api/collections/*', async (c, next) => {

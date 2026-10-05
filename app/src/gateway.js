@@ -71,8 +71,8 @@ function createGateway({ url, email, password }) {
     return true;
   }
 
-  async function records(collection, filter, sort) {
-    const query = `perPage=1000&filter=${encodeURIComponent(filter)}${sort ? `&sort=${sort}` : ''}`;
+  async function records(collection, filter, sort, expand) {
+    const query = `perPage=1000&filter=${encodeURIComponent(filter)}${sort ? `&sort=${sort}` : ''}${expand ? `&expand=${expand}` : ''}`;
     const list = async () => {
       const { res, sent, fresh } = await asSuperuser(`/api/collections/${collection}/records?${query}`);
       if (!res.ok) throw new Error(`PocketBase list of ${collection} refused`);
@@ -111,11 +111,12 @@ function createGateway({ url, email, password }) {
       if (!HOSTNAME.test(host)) return false;
       return (await records('spareDomains', `domain='${host}'`)).length > 0;
     },
-    // The Profile whose Custom Domain is `host`, or null.
+    // The Profile whose live Custom Domain is `host`, or null. From Phase 6 on a Custom Domain is a `customDomains` record, and
+    // a pending one is no Profile's (docs/spec/phase-06-sites-and-domains.md, § 3, Host Resolution).
     async profileWithDomain(host) {
       if (!HOSTNAME.test(host)) return null;
-      const [profile] = await records('profiles', `customDomain='${host}'`);
-      return profile || null;
+      const [domain] = await records('customDomains', `domain='${host}' && status='live'`, '', 'profile');
+      return (domain && domain.expand && domain.expand.profile) || null;
     },
     async getLink(linkId) {
       if (!LINK_ID.test(linkId || '')) return null;
@@ -142,11 +143,26 @@ function createGateway({ url, email, password }) {
       await res.body?.cancel();
       if (!res.ok) throw new Error('PocketBase refused the Event');
     },
-    // The upload's two calls carry the caller's token, never the superuser's, so PocketBase alone decides ownership.
-    // Each answers PocketBase's own status; nothing of a record (a Link holds its Destination) leaves here but a file name.
-    async viewRecord(collection, recordId, callerToken) {
-      if (!RECORD_ID.test(recordId || '')) return 404;
-      const res = await fetch(`${url}/api/collections/${collection}/records/${recordId}?fields=id`, { headers: { Authorization: callerToken } });
+    // The upload's two calls, and the Custom Domain check's view (Phase 6), carry the caller's token, never the superuser's,
+    // so PocketBase alone decides ownership. Each answers PocketBase's own status; the view hands back only the `fields` asked
+    // for (a Link holds its Destination): { status } on a refusal, else { status: 200, record }.
+    async viewRecord(collection, recordId, callerToken, fields = 'id') {
+      if (!RECORD_ID.test(recordId || '')) return { status: 404 };
+      const res = await fetch(`${url}/api/collections/${collection}/records/${recordId}?fields=${fields}`, { headers: { Authorization: callerToken } });
+      if (!res.ok) {
+        await res.body?.cancel();
+        return { status: res.status };
+      }
+      return { status: 200, record: await res.json() };
+    },
+    // Sets a Custom Domain live, as the superuser (no Creator may update one). PocketBase's status: 400 when another record
+    // already holds the domain live (the partial unique index).
+    async setDomainLive(recordId) {
+      const { res } = await asSuperuser(`/api/collections/customDomains/records/${recordId}?fields=id`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'live', checked: new Date().toISOString() }),
+      });
       await res.body?.cancel();
       return res.status;
     },

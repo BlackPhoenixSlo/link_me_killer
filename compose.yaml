@@ -48,6 +48,12 @@ services:
       REVEAL_LIMIT_PER_MINUTE: ${REVEAL_LIMIT_PER_MINUTE:-60}
       # ofl.ink's own hosts for Host Resolution (Phase 5 spec, PRIMARY_HOSTS); no default, as the app refuses to start without one.
       PRIMARY_HOSTS: ${PRIMARY_HOSTS:?set PRIMARY_HOSTS (see .env.example)}
+      # Self-service Custom Domains (Phase 6 spec, § 3): the VPS's addresses a Creator's A and AAAA records must name, and the
+      # DNS servers the check asks (the test stack's fake DNS only). Empty by default, so a VPS .env without them still starts;
+      # with no ORIGIN_IPV4 no Custom Domain can go live.
+      ORIGIN_IPV4: ${ORIGIN_IPV4:-}
+      ORIGIN_IPV6: ${ORIGIN_IPV6:-}
+      DNS_SERVERS: ${DNS_SERVERS:-}
 
   pocketbase:
     # Context is pocketbase/; vendor/ is a named extra context, so the repo root (and linkme_clone3/) is never sent.

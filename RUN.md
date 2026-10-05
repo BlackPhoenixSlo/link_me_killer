@@ -125,6 +125,36 @@ The automated Acceptance cannot prove that a real phone inside Instagram is reco
 |---|---|---|---|---|---|---|---|---|
 | 1 | Any phone | Instagram | In-App Browser recorded | Open a Profile on v2's VPS host. In PocketBase's admin UI the newest Event for that Profile shows inAppBrowser = instagram (and country XX until Cutover). |  |  |  | pending |
 
+## Custom Domains
+
+Self-service since Phase 6 (docs/spec/phase-06-sites-and-domains.md, § 3 Option 1). A Creator puts their Profile on a domain they own, served there directly; the Operator only sets two values once and holds the abuse lever. There is no redirect mode: a Creator who only wants `jakabasej.com` to forward to `ofl.ink/jakabasej` sets up URL forwarding at their registrar, with nothing from ofl.ink.
+
+**Once, on the VPS** (before the first Creator adds a domain): in the untracked `.env`, set `ORIGIN_IPV4=<the VPS's public IPv4>` and `ORIGIN_IPV6=<its public IPv6, or empty if it has none>`, and leave `DNS_SERVERS` empty (the test stack's fake DNS only). Then deploy by Phase 2's procedure. Until `ORIGIN_IPV4` is set, no domain can go live, and the check says so. These are the addresses every Creator's A and AAAA records name, so changing the VPS's address means every Creator edits their DNS.
+
+**The Creator's steps** (the Editor's Domain screen, `/edit/domain`; a verified email is needed, and one domain per Profile):
+
+1. Type the domain, e.g. `jakabasej.com`, exactly as it will go in the bio, and press "Add domain".
+2. Add the records the screen lists where the domain's DNS is managed: `A` (and `AAAA` if `ORIGIN_IPV6` is set) to the VPS, and `TXT _oflink` holding `oflink-verify=<token>`. Every other A or AAAA for that name is deleted; on Cloudflare the record is DNS only (grey cloud). No CNAME to ofl.ink.
+3. Press "Check now". The screen says what is still missing: no TXT, A pointing elsewhere, an extra AAAA, a CAA record that does not allow letsencrypt.org, a name under one of ofl.ink's own hosts or Spare Domains, or "Another Profile already uses …".
+4. Once every check passes the record is `live`: the TLS Ask admits it, and the first visit to `https://jakabasej.com` gets its certificate in a few seconds. The Editor's Bio Link shows `https://jakabasej.com/` from then on; `ofl.ink/jakabasej` keeps working.
+
+Check a Creator's domain from the Mac (`DOMAIN`, `VPS_IPV4` as in the Cutover's "Set once"):
+
+```sh
+test "$(curl -s -o /dev/null -w '%{http_code}' "https://ofl.ink/internal/tls-ask?domain=$DOMAIN")" = 200   # live; 404 while pending
+test "$(dig +short A "$DOMAIN")" = "$VPS_IPV4" && test "$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/")" = 200
+```
+
+**The Operator's own path stays:** in the PocketBase admin UI, `customDomains`, a new record with the Profile, the domain and status `live` is live on the next load, with no DNS proof. Nothing re-checks a live domain's DNS; one pointed away later fails only its own certificate renewals.
+
+**Removal.** The Creator presses "Remove domain" (it asks first), or the Operator deletes the record in the admin UI (`customDomains`); deleting the Profile deletes it too. From the next request the host is unknown: its `/` shows the landing page and the TLS Ask says no. Caddy keeps the certificate it holds in memory until it restarts, so to stop HTTPS on that name at once:
+
+```sh
+ssh "$VPS" "cd $V2_DIR && docker compose restart caddy"
+```
+
+**Abuse.** Every verified sign-up can point a domain at the VPS and serve its own Links from it, and every Custom Domain is DNS-only, so it publishes the VPS's address that Cloudflare hides for ofl.ink. An abuse report to Hostinger names that address, and a suspension takes ofl.ink, every domain and n8n down together. The Operator's lever: delete the `customDomains` record, or the account (Phase 3 story 56), then restart Caddy as above. "Powered by ofl.ink" stays on every Custom Domain.
+
 ## Cutover (docs/spec/phase-05-cutover-and-domains.md, Acceptance, steps 1 to 15)
 
 For the Operator. Run the steps in this order, every command from this repo's root on the Mac (it reaches the VPS over SSH). Steps 1 to 5 prepare: step 3 must be done at least 48 hours before the switch, and step 4 may follow it. Steps 6 to 13 are one sitting. Steps 14 and 15 come later, whenever they are needed.
@@ -298,10 +328,10 @@ Invite imported Profiles' Creators to the Editor now.
 
 **Hand-over, never before step 8:** step 6's import must be the last, and a re-run would overwrite the Creator's edits. For each v1 Creator who has signed up, in the PocketBase admin UI:
 
-- (a) If they claimed another Username meanwhile, delete that bare Profile first (Profiles: the record whose owner is their account).
-- (b) Then set their imported Profile's owner to their account.
+- (a) Look up the slots their account already holds (Profiles: the records whose owner is their account, column `slot`). A Username they claimed meanwhile is a bare Profile in slot 1; it may stay.
+- (b) Set their imported Profile's owner to their account and its `slot` to a free one, in the same save: 1 if they own none, else the lowest of 1, 2 and 3 not taken. With all three taken, the Operator first deletes one the Creator names.
 
-PocketBase refuses the owner while the Creator still owns another Profile (Phase 3's unique index on owner, which binds the admin UI too), so the order cannot be got wrong silently: a refusal means the bare Profile was not deleted first. The Creator's next log-in lands in the Editor on the handed-over Profile. `tests/e2e/05-domains.spec.ts` proves this order on the local stack.
+PocketBase refuses a slot the account already holds (Phase 6's unique index on owner and slot, which binds the admin UI too). Always set the slot: an owner saved with none leaves the Profile outside the three slots. The Creator's next log-in lands in the Editor on their lowest slot; the "Profile" select at the top of the Editor switches to the handed-over Profile. `tests/e2e/05-domains.spec.ts` proves this on the local stack.
 
 ### 13. Rollback, if needed
 
@@ -315,7 +345,7 @@ curl -s -D - -o /dev/null "https://ofl.ink/$USERNAME" | grep -qi '^server: netli
 
 ### 14. Each Custom Domain
 
-**The Creator creates one DNS record:** A `$DOMAIN` -> `$VPS_IPV4`, DNS-only (and AAAA -> the VPS's IPv6 only if it has one). The Operator then sets that Profile's Custom Domain (`customDomain`) in the PocketBase admin UI, live on the next load. Then:
+**The Creator adds it in the Editor** (Domain, `/edit/domain`) and sets the records it lists; the app's check sets it live (see Custom Domains, above the Cutover, for the Creator's steps, the Operator's settings and removal). Then:
 
 ```sh
 test "$(dig +short A "$DOMAIN")" = "$VPS_IPV4" && test "$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/")" = 200
@@ -323,11 +353,7 @@ test "$(dig +short A "$DOMAIN")" = "$VPS_IPV4" && test "$(curl -s -o /dev/null -
 
 Open `https://$DOMAIN/` inside Instagram on iOS and on Android, and tap a Link of each Mode the Profile uses: an Escape lands on `$DOMAIN`, not on ofl.ink.
 
-**To remove a Custom Domain later:** clear the field in the PocketBase admin UI, then restart Caddy. From then on the TLS Ask says no, and Caddy asks again before it uses the certificate it holds; until the restart it keeps serving that certificate from memory.
-
-```sh
-ssh "$VPS" "cd $V2_DIR && docker compose restart caddy"
-```
+**To remove a Custom Domain later:** see Custom Domains, Removal.
 
 ### 15. When ofl.ink is Flagged
 

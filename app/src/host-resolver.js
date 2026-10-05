@@ -34,6 +34,9 @@ function createHostResolver({ primaryHosts, gateway }) {
   // the schema could store; the pattern then runs alone.
   const isAskable = (domain) => primary.has(normalize(domain)) || HOSTNAME.test(normalize(domain));
 
+  // Is `name` one of ofl.ink's own hosts, a primary host or a Spare Domain? (The Custom Domain check, Phase 6.)
+  const isOwnHost = async (name) => primary.has(normalize(name)) || gateway.isSpareDomain(normalize(name));
+
   // The Profile a page request is for: { username, trackingCode, profilePath }, or null when no Profile answers the path.
   // On a Custom Domain `/` is its Profile and `/{code}` that Profile with that Tracking Code; deeper paths are null, which the
   // page answers as Phase 2 answers an unknown Username. Every other host keeps `/{username}[/{code}]`, unknown hosts included,
@@ -49,7 +52,7 @@ function createHostResolver({ primaryHosts, gateway }) {
     return { username, trackingCode, profilePath: `/${username}` };
   }
 
-  return { resolveHost, isAskable, resolveProfileRequest };
+  return { resolveHost, isAskable, isOwnHost, resolveProfileRequest };
 }
 
 module.exports = { createHostResolver };

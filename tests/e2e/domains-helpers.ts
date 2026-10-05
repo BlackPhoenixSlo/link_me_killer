@@ -6,3 +6,11 @@
 // reads the block itself.
 const BOOTSTRAP = /<script type="application\/json" id="profile-bootstrap">.*?<\/script>\n {4}/s;
 export const withoutBootstrap = (body: string) => body.replace(BOOTSTRAP, '');
+
+// Phase 6's fake DNS (tests/fake-dns.mjs): the answers it gives from now on, set through its control API on loopback. Each named
+// entry replaces that name's records whole; null removes the name. Only the local test stack has it.
+type DnsRecords = { A?: string[]; AAAA?: string[]; TXT?: string[]; CAA?: { flags?: number; tag: string; value: string }[] };
+export async function dnsAnswers(port: string, zone: Record<string, DnsRecords | null>) {
+  const res = await fetch(`http://127.0.0.1:${port}/records`, { method: 'POST', body: JSON.stringify(zone) });
+  if (res.status !== 204) throw new Error(`the fake DNS refused the records: ${res.status}`);
+}
