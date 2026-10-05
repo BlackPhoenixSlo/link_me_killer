@@ -1,0 +1,49 @@
+/* app/editor/tokens.css — custom properties only. Light theme, after the link.me Template's light palette. */
+:root {
+  color-scheme: light;
+  --e-color-bg: #fafafa;             --e-color-surface: #ffffff;        --e-color-surface-muted: #f4f4f5;
+  --e-color-border: #e4e4e7;         --e-color-border-strong: #8a8a95; /* inputs, switches: 3.4:1 on white */
+  --e-color-text: #18181b;           --e-color-text-muted: #6b6b75;    /* 5.3:1 on white, 5.0:1 on bg */
+  --e-color-text-inverse: #ffffff;
+  --e-color-primary: #3550f0;        /* white on it 5.9:1; as text on white 5.9:1 */
+  --e-color-primary-hover: #2a41d1;  --e-color-primary-soft: #eef1ff;
+  --e-color-danger: #c8102e;         --e-color-danger-soft: #fdecee;   /* 5.9:1 */
+  --e-color-success: #0a7a3a;        --e-color-success-soft: #e8f6ee;  /* 5.4:1 */
+  --e-color-focus: #3550f0;          --e-color-scrim: rgb(24 24 27 / 0.5);
+  --e-color-views: #3550f0;          --e-color-clicks: #e0457b;        /* Stats bars, decorative only */
+
+  --e-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --e-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;  /* Geo Rule only */
+  --e-text-xs: 12px;  --e-leading-xs: 16px;   /* captions, tab labels */
+  --e-text-sm: 14px;  --e-leading-sm: 20px;   /* helpers, table cells, buttons */
+  --e-text-md: 16px;  --e-leading-md: 24px;   /* body, every input */
+  --e-text-lg: 18px;  --e-leading-lg: 28px;   /* lead, h2 */
+  --e-text-xl: 20px;  --e-leading-xl: 28px;   /* live address */
+  --e-text-2xl: 24px; --e-leading-2xl: 32px;  /* h1 at 375, stat values */
+  --e-text-3xl: 30px; --e-leading-3xl: 36px;  /* h1 from 768 */
+  --e-text-4xl: 36px; --e-leading-4xl: 40px;  /* landing hero at 375 */
+  --e-text-5xl: 48px; --e-leading-5xl: 52px;  /* landing hero from 1024 */
+  --e-weight-regular: 400; --e-weight-medium: 500; --e-weight-semibold: 600; --e-weight-bold: 700;
+
+  --e-space-1: 4px;  --e-space-2: 8px;   --e-space-3: 12px;  --e-space-4: 16px;  --e-space-5: 20px;
+  --e-space-6: 24px; --e-space-8: 32px;  --e-space-10: 40px; --e-space-12: 48px; --e-space-16: 64px;
+
+  --e-radius-sm: 6px;    /* segmented buttons */     --e-radius-md: 12px;  /* inputs, rows, stat cards */
+  --e-radius-lg: 16px;   /* cards */                 --e-radius-xl: 24px;  /* sheet top, dialog, landing shots */
+  --e-radius-pill: 999px; /* buttons, nav pill */
+
+  --e-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);                  /* cards */
+  --e-shadow-md: 0 4px 16px rgb(24 24 27 / 0.08);              /* sticky sheet foot, landing shots */
+  --e-shadow-lg: 0 12px 40px -12px rgb(24 24 27 / 0.35);       /* nav pill, dialog */
+
+  --e-tap: 44px;  --e-control-h: 48px;  --e-topbar-h: 56px;  --e-tabbar-h: 64px;  --e-sidebar-w: 224px;
+  --e-content-max: 640px;  --e-auth-max: 440px;  --e-dialog-max: 400px;  --e-bar-max: 56px;
+
+  --e-dur-fast: 120ms;  --e-dur-base: 200ms;  --e-dur-slow: 280ms;
+  --e-ease: cubic-bezier(0.4, 0, 0.2, 1);  --e-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --e-focus-width: 3px;  --e-focus-offset: 2px;   /* :focus-visible { outline: var(--e-focus-width) solid var(--e-color-focus); outline-offset: var(--e-focus-offset); } */
+  --e-z-bar: 10;  --e-z-dialog: 20;
+}
+@media (prefers-reduced-motion: reduce) { :root { --e-dur-fast: 0ms; --e-dur-base: 0ms; --e-dur-slow: 0ms; } }
+/* Breakpoints (literal in @media; custom properties do not work there): base = 375 phone; min-width 768px = sidebar
+   replaces the nav pill, wider column; min-width 1024px = Stats tables side by side, landing hero in two columns. */

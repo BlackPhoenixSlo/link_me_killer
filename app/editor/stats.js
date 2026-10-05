@@ -1,8 +1,7 @@
-'use strict';
 // The Stats page (docs/spec/phase-04-stats.md, Stats page; tickets 33 and 34), a screen of the creator-only area at
-// `/edit/stats`, next to the Editor in its navigation. Its own file so editor.js stays under 1000 lines; it is loaded first and
-// calls the Editor's helpers (api, el, select, render, show, onboarded, drawRetry, creatorNav) only once editor.js has run and
-// routed here. It reads the `dailyStats` view through the same-origin proxy with the Creator's token and sends no Profile
+// `/edit/stats`, next to the Editor in its navigation. Its own module: it imports the Editor's helpers (api, el, select, render,
+// show, onboarded, creatorNav from app.js; drawRetry from screens/auth.js), and app.js's router calls openStats. It reads the
+// `dailyStats` view through the same-origin proxy with the Creator's token and sends no Profile
 // filter, so PocketBase's list rule alone decides which rows it gets; it never asks for events. Numbers are as of page load or
 // of the last range tab picked.
 // Laid out after the link.me Template's analytics page (link.me/analytics.html): the range tabs with their date span, a Link
@@ -13,6 +12,9 @@
 // ASSUMPTION: the Links table lists every Link of the Creator's, those with no Click in the range at 0, plus "Deleted link" once
 // a deleted Link's Clicks are in the range (rung 6: the spec fixes the columns and the order, not which Links show). Overturned
 // if only Links with Clicks should show, as the Countries table shows only countries seen.
+
+import { api, el, select, render, show, onboarded, creatorNav } from './app.js';
+import { drawRetry } from './screens/auth.js';
 
 const DAY_MS = 86_400_000;
 const PAGE_SIZE = 500;
@@ -41,7 +43,7 @@ const RANGES = [['Today', 1], ['7D', 7], ['30D', 30]];
 
 // `/edit/stats` for a signed-in Creator past Onboarding (the Editor's onboarded(), which otherwise draws the step that applies):
 // their Profile's Links, read the way the Editor reads them, and the 7D range for every Link and country.
-async function openStats() {
+export async function openStats() {
   const done = await onboarded();
   if (!done) return;
   return showRange(done.links, 7, { link: '', country: '' });
