@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type APIResponse, type Browser, type Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -164,8 +164,15 @@ export const proxy = (request: APIRequestContext, token?: string) => {
     get: (path: string) => request.get(`/api/collections/${path}`, { headers }),
     post: (path: string, data: object = {}) => request.post(`/api/collections/${path}`, { headers, data }),
     patch: (path: string, data: object = {}) => request.patch(`/api/collections/${path}`, { headers, data }),
+    delete: (path: string) => request.delete(`/api/collections/${path}`, { headers }),
+    // A multipart update, as PocketBase's records API takes files directly, skipping Phase 2's converter.
+    patchFiles: (path: string, multipart: Record<string, ReturnType<typeof pngFile>>) => request.patch(`/api/collections/${path}`, { headers, multipart }),
   };
 };
+
+// Phase 2's upload endpoint, called as the Editor calls it: a PNG for `target` (`profiles/<id>/avatar`, `links/<id>/backgroundImage`).
+export const upload = (request: APIRequestContext, token: string | undefined, target: string, file = pngFile('probe.png', [10, 120, 200])) =>
+  request.post(`/api/upload/${target}`, { headers: token ? { Authorization: token } : {}, multipart: { file } });
 
 // An account made and signed in through the proxy: its token and record id.
 export async function account(request: APIRequestContext, creator: Creator = fresh()) {
@@ -204,7 +211,7 @@ export async function verifiedCreator(request: APIRequestContext, links: [string
     expect(res.status(), title).toBe(200);
     linkIds.push((await res.json()).id);
   }
-  return { creator, token, profileId, linkIds };
+  return { creator, token, id, profileId, linkIds };
 }
 
 export type Served = {
@@ -219,16 +226,99 @@ export const servedProfile = async (request: APIRequestContext, username: string
   return JSON.parse(body);
 };
 
-// "Featured Links": one row per Link, its title the row's only text; Edit is the title, Up, Down and Delete are named buttons.
-export const featured = (page: Page) => page.getByRole('list', { name: 'Links' }).getByRole('listitem');
-
-// The next load of the public Profile, in a fresh context: its Link titles in the order Visitors see them.
-export async function visitorSees(browser: Browser, origin: string, username: string, titles: string[]) {
-  const context = await phoneContext(browser, { origin });
+// The public Profile opened in a fresh context, with an optional User-Agent, once its Link titles show in the order Visitors
+// see them. The caller closes the page's context.
+export async function openProfile(browser: Browser, origin: string, username: string, titles: string[], userAgent?: string) {
+  const context = await phoneContext(browser, { origin, userAgent });
   const visitor = await context.newPage();
   const served = visitor.waitForResponse((res) => new URL(res.url()).pathname === `/api/profiles/${username}.json`);
   await visitor.goto(`/${username}`);
   await served;
   await expect(visitor.locator('.link-card .link-title')).toHaveText(titles);
-  await context.close();
+  return visitor;
+}
+
+// A Creator arranged over HTTP at an Onboarding stage, named by its screen's heading: a refused claim (CLAIM), claimed but
+// unverified (VERIFY), verified with no display name, or named with no Link (moved here by ticket 30).
+export async function reach(request: APIRequestContext, stage: string) {
+  const { creator, token, id } = await account(request);
+  const as = proxy(request, token);
+  const claimed = await as.post('profiles/records', { username: stage === CLAIM ? 'edit' : creator.username, owner: id, mode: 'escape_ig' });
+  expect(claimed.status(), stage).toBe(stage === CLAIM ? 400 : 200);
+  if (stage === CLAIM || stage === VERIFY) return creator;
+  await markVerified(creator.email);
+  if (stage === 'Add your first Link') expect((await as.patch(`profiles/records/${(await claimed.json()).id}`, { displayName: 'Half way' })).status()).toBe(200);
+  return creator;
+}
+
+// "Featured Links": one row per Link, its title the row's only text; Edit is the title, Up, Down and Delete are named buttons.
+export const featured = (page: Page) => page.getByRole('list', { name: 'Links' }).getByRole('listitem');
+
+// The next load of the public Profile, in a fresh context: its Link titles in the order Visitors see them.
+export async function visitorSees(browser: Browser, origin: string, username: string, titles: string[]) {
+  await (await openProfile(browser, origin, username, titles)).context().close();
+}
+
+// ---- Ticket 30: the owner rules, probed over HTTP -----------------------------------------------------------------------------
+
+// A verified Creator as the rule probes need one: a Profile, an avatar and two Links with backgrounds, all arranged as the
+// Creator through the proxy and the upload endpoint. `secret` is the prefix every one of their Destinations starts with.
+export async function furnishedCreator(request: APIRequestContext) {
+  const made = await verifiedCreator(request, [['First card', ''], ['Second card', 'direct']]);
+  for (const target of [`profiles/${made.profileId}/avatar`, ...made.linkIds.map((id) => `links/${id}/backgroundImage`)]) {
+    expect((await upload(request, made.token, target)).status(), target).toBe(200);
+  }
+  return { ...made, secret: `https://example.com/${made.creator.username}/` };
+}
+
+// What the owner reads of their Profile and its Links through the proxy, to compare before and after a refused write.
+export async function readBack(request: APIRequestContext, { token, profileId }: { token: string; profileId: string }) {
+  const as = proxy(request, token);
+  const profile = await as.get(`profiles/records/${profileId}`);
+  expect(profile.status()).toBe(200);
+  const links = await as.get(`links/records?sort=order&filter=${encodeURIComponent(`profile='${profileId}'`)}`);
+  expect(links.status()).toBe(200);
+  return { profile: await profile.json(), links: (await links.json()).items };
+}
+
+// The proxy and the upload endpoint for a caller who must not see `secret`, another Creator's Destinations: every answer is
+// checked to hold neither it nor a Fixture Destination before the test sees it.
+export function probe(request: APIRequestContext, token: string | undefined, secret: string) {
+  const as = proxy(request, token);
+  const clean = async (pending: Promise<APIResponse>) => {
+    const res = await pending;
+    const body = await res.text();
+    expect(holdsDestination(body) || body.includes(secret), `a Destination in the answer to ${res.url()}`).toBe(false);
+    return res;
+  };
+  return {
+    get: (path: string) => clean(as.get(path)),
+    post: (path: string, data: object) => clean(as.post(path, data)),
+    patch: (path: string, data: object) => clean(as.patch(path, data)),
+    delete: (path: string) => clean(as.delete(path)),
+    patchFiles: (path: string, multipart: Record<string, ReturnType<typeof pngFile>>) => clean(as.patchFiles(path, multipart)),
+    upload: (target: string) => clean(upload(request, token, target)),
+  };
+}
+
+// A write the rules refuse: PocketBase answers 400 to a create, 404 where the caller may not change the record and 403 where
+// the rule is superuser-only; the upload endpoint passes PocketBase's status through.
+// ASSUMPTION: any of the three counts as refused, since the owner's read-back proves nothing changed (rung 5: the spec says
+// "refused", not which status). Overturned if each probe must pin PocketBase's exact status.
+export const refused = (res: APIResponse) => expect([400, 403, 404], res.url()).toContain(res.status());
+
+// The Operator in PocketBase's admin UI, which calls the same API: a superuser's call at the loopback port. Only the status comes
+// back, so no record, and no Destination, reaches the test from here.
+// ASSUMPTION: the account edit the Operator's power is proved with is the stock users `name` field (rung 6: any field a Creator
+// cannot write would do). Overturned if the Operator's account edits must touch another field.
+export async function operator(method: string, path: string, body?: object) {
+  return (await asSuperuser(await superuserToken(), path, body ? json(method, body) : { method })).status;
+}
+
+// The record ids of a Profile and its Links, as the Operator reads them: ids only.
+export async function recordIds(username: string) {
+  const token = await superuserToken();
+  const profile = await only(token, 'profiles', `username='${username}'`);
+  const links = await (await asSuperuser(token, `/api/collections/links/records?fields=id&filter=${encodeURIComponent(`profile='${profile.id}'`)}`)).json();
+  return { profileId: profile.id as string, linkIds: links.items.map((l: { id: string }) => l.id) as string[] };
 }

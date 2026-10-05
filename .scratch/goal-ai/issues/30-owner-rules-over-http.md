@@ -4,7 +4,7 @@ Spec: docs/spec/phase-03-auth-and-editor.md
 Covers: user stories 42, 43, 44, 45, 46, 47, 48, 49, 55, 56
 Seams: the `request` fixture at the public origin, calling the proxy exactly as the Editor does, as two signed-in Creators and an anonymous caller; Phase 2's upload endpoint at the same origin. Operator steps at PocketBase's loopback port, as a superuser, arrange state and stand in for the admin UI, which calls the same API
 Blocked by: 26: A verified Creator goes through Onboarding to a live Profile whose Links act like imported ones
-Status: claimed 20261005T084628Z 2026-10-05T10:06:51Z
+Status: done
 
 **What to build:** Proof that one Creator's Profile, Links and images are theirs alone, and that a Visitor gets a Destination only through Reveal or the redirect. The rules offer no screen on which a non-owner could even try, so HTTP is the highest seam that reaches them. 25 and 26 wrote the auth-and-ownership rules. Wherever a probe here gets through, this ticket closes it in the migration, to the spec's Schema and with no new rule. After every refused write, the owner reads the record back unchanged.
 
@@ -29,7 +29,27 @@ The Operator keeps every power, because superusers bypass the rules:
 
 ASSUMPTION: the rules are written in the tickets whose paths first use them (25, 26) and proven together here (rung 5: one probe set rather than a scattered one; nothing deploys before 32, so no gap between tickets reaches the public). Overturned if each rule must ship with its own refusal test; those probes then move into 25 and 26, and this ticket keeps the cross-Creator and Operator cases.
 
-- [ ] Every probe above is refused or returns nothing, and the owner reads every record back unchanged.
-- [ ] No response body in this ticket's run holds a Destination, except the owner's own reads.
-- [ ] Both Operator powers work, and the deleted Profile's page lands on the landing page.
-- [ ] `./check.sh` passes.
+- [x] Every probe above is refused or returns nothing, and the owner reads every record back unchanged.
+- [x] No response body in this ticket's run holds a Destination, except the owner's own reads.
+- [x] Both Operator powers work, and the deleted Profile's page lands on the landing page.
+- [x] `./check.sh` passes.
+
+## Notes
+
+Every probe passed on first run: 25 and 26's rules already hold, so this ticket's tests are regression tests and no migration was needed (no new migration file).
+- Cross-Creator writes, moves, uploads (box 1): `another Creator cannot change, delete, add to or take from a Profile…`.
+- Reads by Creator B and an anonymous caller, the Fixture, accounts and emails (boxes 1, 2): `another Creator and an anonymous caller read nothing…`. It replaces ticket 25's `no proxied answer holds a Destination…` test, which it covers with Links in place.
+- Owner-self refusals, direct multipart, Link Id, second Profile, Destination prefixes (box 1): `the owner cannot change their Username…`.
+- A Profile created with the badge or a display name, and a sign-up setting `verified: true` (box 1): ticket 25's `the claim sets only Username, owner and default Mode…`, on an unverified account. The profiles create rule has no verified clause (1791140004_sign_up_and_claim.js), so that account stands for a verified one.
+- Operator powers (box 3): `the Operator edits a Creator's Profile, Link and account, then deletes…`.
+- Box 2: every non-owner call goes through `probe` (tests/e2e/helpers.ts), which fails on an answer holding the other Creator's Destinations or a Fixture Destination. Operator calls return only a status.
+
+ASSUMPTION: the probes replace ticket 25's read test, so off the local test stack no read probe runs (rung 5). Overturned if they must run against a deployed stack.
+ASSUMPTION: any of 400, 403 or 404 counts as refused, since the owner's read-back proves nothing changed (rung 5). Overturned if each probe must pin PocketBase's exact status.
+ASSUMPTION: the Operator's account edit is proved on the stock users `name` field (rung 6). Overturned if it must touch another field.
+ASSUMPTION: the Operator deletes the Profile and then the account, because `profiles.owner` has `cascadeDelete: false` (1791140001_profiles.js), so deleting the account alone would leave an ownerless Profile live (rung 1 for the cascade, rung 5 for the order). Overturned if deleting an account must take its Profile with it; that would be a migration setting the cascade.
+ASSUMPTION: two existing drivers, `openInInstagram` (ticket 27, folded into `openProfile` in fix round 1) and `reach` (ticket 29), moved into tests/e2e/helpers.ts so the spec stays under 1000 lines (rung 3: helpers.ts precedent; rung 5).
+
+## Landed
+
+Run 20261005T084628Z. Reviewer: REQUEST CHANGES round 1 (5 findings: duplicate openInInstagram/visitorSees driver, shadowed readBack/refused imports, inline uploads, casts nit, unprobed answers), fix round 1, APPROVE round 2. All tests are regression tests: tickets 25–26's rules already held, no migration written. ASSUMPTION (evidence blocked): a throwaway rule-weakening migration to prove the probes can fail was denied by the permission classifier; the probes' power rests on the reviewer's reading of each payload against the migrations and on the owner-reads-own-Destination control. Coordinator cold `./check.sh --reporter=line`: exit 0, `325 passed (3.6m)`, `1 skipped`.

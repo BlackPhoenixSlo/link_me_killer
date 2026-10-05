@@ -4,9 +4,9 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  account, CLAIM, createOwnerlessProfile, expectVerifyScreen, featured, fresh, heading, holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN,
-  logIn, markVerified, onLocalStack, ownerOf, PHONE, phoneContext, pngFile, proxy, servedProfile, setOwner, SIGN_UP, signUp, VERIFY,
-  verifiedCreator, visitorSees,
+  account, CLAIM, createOwnerlessProfile, expectVerifyScreen, featured, fresh, furnishedCreator, heading, holdsDestination, INSTAGRAM_UA,
+  isWebp, LOG_IN, logIn, markVerified, onLocalStack, openProfile, operator, ownerOf, PHONE, phoneContext, pngFile, probe, proxy, reach,
+  readBack, recordIds, refused, servedProfile, setOwner, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees,
 } from './helpers';
 
 // Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL,
@@ -141,13 +141,13 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
     const other = await account(request);
     const as = proxy(request, first.token);
     const username = () => `signup_${randomBytes(4).toString('hex')}`;
-    const refused: [string, object][] = [
+    const refusedClaims: [string, object][] = [
       ['a display name', { username: username(), owner: first.id, displayName: 'x' }],
       ['the verified badge', { username: username(), owner: first.id, verified: true }],
       ['another owner', { username: username(), owner: other.id }],
       ['no owner', { username: username() }],
     ];
-    for (const [name, body] of refused) expect((await as.post('profiles/records', body)).status(), name).toBe(400);
+    for (const [name, body] of refusedClaims) expect((await as.post('profiles/records', body)).status(), name).toBe(400);
     expect((await proxy(request).post('profiles/records', { username: username(), owner: '' })).status(), 'anonymous claim').toBe(400);
     const claimed = await as.post('profiles/records', { username: username(), owner: first.id, mode: 'escape_ig' });
     expect(claimed.status()).toBe(200);
@@ -201,55 +201,6 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
     const admin = await request.get('/_/');
     expect((await admin.body()).equals(readFileSync(join(ROOT, 'app', 'public', 'index.html')))).toBe(true);
   });
-
-  test('no proxied answer holds a Destination or another Creator\'s record, for an anonymous caller or a Creator', async ({ request }) => {
-    const first = await account(request);
-    expect((await proxy(request, first.token).post('profiles/records', { username: first.creator.username, owner: first.id })).status()).toBe(200);
-    const other = await account(request);
-    for (const [who, token] of [['anonymous', undefined], ['another Creator', other.token]] as const) {
-      const as = proxy(request, token);
-      const reads = [
-        'profiles/records',
-        `profiles/records?filter=${encodeURIComponent("username='fixture'")}`,
-        `profiles/records?filter=${encodeURIComponent(`username='${first.creator.username}'`)}`,
-        'profiles/records?expand=owner',
-        'users/records',
-        `users/records/${first.id}`,
-        'links/records',
-        'links/records?expand=profile',
-      ];
-      for (const path of reads) {
-        const res = await as.get(path);
-        const body = await res.text();
-        expect(holdsDestination(body), `a Destination in the answer to ${who}: ${path}`).toBe(false);
-        expect(body.includes(first.creator.email) || body.includes(first.creator.username), `the first Creator's record in the answer to ${who}: ${path}`).toBe(false);
-        if (res.status() === 200) {
-          // Another Creator lists only their own account; nobody lists the first Creator's records or the ownerless Fixture.
-          const items: { id: string; owner?: string; username?: string }[] = JSON.parse(body).items;
-          expect(items.every((r) => r.id !== first.id && r.owner !== first.id && r.username !== 'fixture'), `${who}: ${path}`).toBe(true);
-          expect(items.length, `${who}: ${path}`).toBe(token && path === 'users/records' ? 1 : 0);
-        } else {
-          expect([403, 404], `${who}: ${path}`).toContain(res.status());
-        }
-      }
-    }
-    // The owner reaches no other Profile's Link through their own Profile: since ticket 26 the links read rule is open to the
-    // owner of a Link's Profile, so the back-relation may expand and a filter on it runs, but this owner has no Link and gets
-    // nothing of anyone else's. Another Creator's or an anonymous expand of a Profile that has Links is ticket 30's.
-    const own = proxy(request, first.token);
-    const expanded = await own.get('profiles/records?expand=links_via_profile');
-    const expandedBody = await expanded.text();
-    expect(holdsDestination(expandedBody), 'a Destination in the owner\'s expand').toBe(false);
-    expect(expanded.status()).toBe(200);
-    const items: { username: string; expand?: Record<string, unknown> }[] = JSON.parse(expandedBody).items;
-    expect(items.map((p) => p.username)).toEqual([first.creator.username]);
-    expect(items.every((p) => !p.expand || !('links_via_profile' in p.expand)), 'links expanded for an owner with none').toBe(true);
-    const filtered = await own.get(`profiles/records?filter=${encodeURIComponent("links_via_profile.destination != ''")}`);
-    const filteredBody = await filtered.text();
-    expect(holdsDestination(filteredBody), 'a Destination in the answer to a filter on links').toBe(false);
-    expect(filtered.status()).toBe(200);
-    expect(JSON.parse(filteredBody).items, 'a filter on links finds nothing for an owner with no Link').toEqual([]);
-  });
 });
 
 // ---- Ticket 26: the verified-email gate, and Onboarding to a live Profile -------------------------------------------------
@@ -261,14 +212,7 @@ test.describe('the verified-email gate', () => {
     const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig' });
     expect(claimed.status()).toBe(200);
     const profileId = (await claimed.json()).id as string;
-    const readBack = async () => {
-      const profile = await as.get(`profiles/records/${profileId}`);
-      expect(profile.status()).toBe(200);
-      const links = await as.get(`links/records?filter=${encodeURIComponent(`profile='${profileId}'`)}`);
-      expect(links.status()).toBe(200);
-      return { profile: await profile.json(), links: (await links.json()).items };
-    };
-    const before = await readBack();
+    const before = await readBack(request, { token, profileId });
     expect(before.links).toEqual([]);
 
     // PocketBase answers an update its rule refuses as a record it cannot find (404), and a refused create with a bare 400.
@@ -277,10 +221,10 @@ test.describe('the verified-email gate', () => {
     const link = await as.post('links/records', { profile: profileId, title: 'Not yet', order: 0, destination: `https://example.com/${creator.username}` });
     expect(link.status(), 'Link create').toBe(400);
     // The upload endpoint writes with the caller's token, so PocketBase's refusal is its answer.
-    const avatar = await request.post(`/api/upload/profiles/${profileId}/avatar`, { headers: { Authorization: token }, multipart: { file: pngFile('avatar.png', [200, 40, 40]) } });
+    const avatar = await upload(request, token, `profiles/${profileId}/avatar`);
     expect(avatar.status(), 'avatar upload').toBe(404);
 
-    const after = await readBack();
+    const after = await readBack(request, { token, profileId });
     expect(after).toEqual(before);
     expect(after.profile.displayName === '' && after.profile.bio === '' && after.profile.avatar === '').toBe(true);
   });
@@ -453,7 +397,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     const { creator, token, profileId } = await verifiedCreator(request, [['First card', '']]);
     const address = `${origin}/${creator.username}`;
     // An avatar already in place, uploaded with the Creator's own token, so the Editor's is a replacement.
-    const first = await request.post(`/api/upload/profiles/${profileId}/avatar`, { headers: { Authorization: token }, multipart: { file: pngFile('first.png', [200, 40, 40]) } });
+    const first = await upload(request, token, `profiles/${profileId}/avatar`, pngFile('first.png', [200, 40, 40]));
     expect(first.status()).toBe(200);
     const before = (await servedProfile(request, creator.username)).profile.avatarUrl;
     expect(before.startsWith('/api/files/')).toBe(true);
@@ -534,15 +478,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     test.setTimeout(120_000);
     const origin = new URL(baseURL!).origin;
     const { creator } = await verifiedCreator(request, [['Default card', ''], ['Escape card', 'escape_ig']]);
-    const openAsInstagram = async () => {
-      const context = await phoneContext(browser, { origin, userAgent: INSTAGRAM_UA });
-      const visitor = await context.newPage();
-      const served = visitor.waitForResponse((res) => new URL(res.url()).pathname === `/api/profiles/${creator.username}.json`);
-      await visitor.goto(`/${creator.username}`);
-      await served;
-      await expect(visitor.locator('.link-card .link-title')).toHaveText(['Default card', 'Escape card']);
-      return visitor;
-    };
+    const openAsInstagram = () => openProfile(browser, origin, creator.username, ['Default card', 'Escape card'], INSTAGRAM_UA);
 
     // While the default is Escape Mode, the Escape Overlay shows when the page opens in Instagram.
     let visitor = await openAsInstagram();
@@ -593,7 +529,7 @@ test.describe('the Editor\'s Links', () => {
     const origin = new URL(baseURL!).origin;
     const { creator, token, linkIds } = await verifiedCreator(request, [['First card', ''], ['Second card', '']]);
     // A background already in place, uploaded with the Creator's own token, so the Editor's is a replacement.
-    const first = await request.post(`/api/upload/links/${linkIds[0]}/backgroundImage`, { headers: { Authorization: token }, multipart: { file: pngFile('first.png', [200, 40, 40]) } });
+    const first = await upload(request, token, `links/${linkIds[0]}/backgroundImage`, pngFile('first.png', [200, 40, 40]));
     expect(first.status()).toBe(200);
     const backgroundOf = async (title: string) => {
       const link = (await servedProfile(request, creator.username)).links.find((l) => l.title === title);
@@ -731,7 +667,7 @@ test.describe('the Editor\'s Links', () => {
     test.setTimeout(120_000);
     const { creator, token, linkIds } = await verifiedCreator(request, [['Plain card', '']]);
     // An icon made from no stock file, uploaded with the Creator's own token.
-    const uploaded = await request.post(`/api/upload/links/${linkIds[0]}/icon`, { headers: { Authorization: token }, multipart: { file: pngFile('own.png', [40, 40, 200]) } });
+    const uploaded = await upload(request, token, `links/${linkIds[0]}/icon`, pngFile('own.png', [40, 40, 200]));
     expect(uploaded.status()).toBe(200);
     const servedLink = async () => (await servedProfile(request, creator.username)).links[0];
     const ownIcon = (await servedLink()).icon;
@@ -777,12 +713,12 @@ test.describe('the Editor\'s Links', () => {
     test.setTimeout(120_000);
     const { creator, token, linkIds } = await verifiedCreator(request, [['Geo card', '']]);
     const own = proxy(request, token);
-    const readBack = async () => {
+    const readLink = async () => {
       const res = await own.get(`links/records/${linkIds[0]}`);
       expect(res.status()).toBe(200);
       return res.json();
     };
-    const before = await readBack();
+    const before = await readLink();
     expect(before.geo).toBeNull();
 
     await logIn(page, creator);
@@ -797,7 +733,7 @@ test.describe('the Editor\'s Links', () => {
       await expect(page.getByRole('status'), typed).toHaveText('Geo Rule: write a JSON object, such as {"US": "5"}, or leave it empty for no Geo Rule.');
       await expect(heading(page, 'Edit link')).toBeVisible();
       await expect(geo).toHaveValue(typed);
-      expect(await readBack(), typed).toEqual(before);
+      expect(await readLink(), typed).toEqual(before);
     }
 
     // A valid object saves; after a reload the textarea holds it, pretty-printed.
@@ -805,7 +741,7 @@ test.describe('the Editor\'s Links', () => {
     await geo.fill('{"US": {"CA": "3", "default": "4"}, "default": "9"}');
     await page.getByRole('button', { name: 'Save link' }).click();
     await expect(heading(page, 'Edit Profile')).toBeVisible();
-    expect((await readBack()).geo).toEqual({ US: { CA: '3', default: '4' }, default: '9' });
+    expect((await readLink()).geo).toEqual({ US: { CA: '3', default: '4' }, default: '9' });
     await page.reload();
     await page.getByRole('button', { name: 'Geo card', exact: true }).click();
     await expect(geo).toHaveValue('{\n  "US": {\n    "CA": "3",\n    "default": "4"\n  },\n  "default": "9"\n}');
@@ -814,7 +750,7 @@ test.describe('the Editor\'s Links', () => {
     await geo.fill('');
     await page.getByRole('button', { name: 'Save link' }).click();
     await expect(heading(page, 'Edit Profile')).toBeVisible();
-    expect((await readBack()).geo).toBeNull();
+    expect((await readLink()).geo).toBeNull();
     await page.getByRole('button', { name: 'Geo card', exact: true }).click();
     await expect(geo).toHaveValue('');
   });
@@ -822,9 +758,7 @@ test.describe('the Editor\'s Links', () => {
   test('a Link saved with a javascript: Destination is refused by PocketBase; the Editor shows the reason and keeps every field as typed', async ({ page, request }) => {
     test.setTimeout(120_000);
     const { creator, token, profileId, linkIds } = await verifiedCreator(request, [['Safe card', '']]);
-    const own = proxy(request, token);
-    const readBack = async () => (await (await own.get(`links/records?sort=order&filter=${encodeURIComponent(`profile='${profileId}'`)}`)).json()).items;
-    const before = await readBack();
+    const before = (await readBack(request, { token, profileId })).links;
     expect(before.length).toBe(1);
     const typed = { title: 'Typed title', destination: 'javascript:alert(document.cookie)', code: '12', geo: '{"US": "5"}' };
     const fillAll = async () => {
@@ -850,7 +784,7 @@ test.describe('the Editor\'s Links', () => {
       await expect(page.getByLabel('Default Tracking Code')).toHaveValue(typed.code);
       await expect(page.getByLabel('Geo Rule')).toHaveValue(typed.geo);
       await expect(page.getByRole('button', { name: 'Save link' })).toBeEnabled();
-      expect(await readBack(), what).toEqual(before);
+      expect((await readBack(request, { token, profileId })).links, what).toEqual(before);
     };
 
     // An opened Link, changed.
@@ -866,6 +800,92 @@ test.describe('the Editor\'s Links', () => {
     await fillAll();
     await page.getByRole('button', { name: 'Save link' }).click();
     await expectKept('Add link');
+  });
+});
+
+// ---- Ticket 30: only a Profile's owner and the Operator read or change it ---------------------------------------------------
+// Creators A and B: each verified, with a Profile, an avatar and two Links with backgrounds. A non-owner's every call goes
+// through `probe`, which fails on any answer holding the other Creator's Destinations or a Fixture Destination.
+// ASSUMPTION: these probes replace ticket 25's anonymous-and-other-Creator read test, which they cover with Links in place, so
+// off the local test stack no read probe runs (rung 5). Overturned if the probes must run against a deployed stack (needs 31's mail).
+
+test.describe('owner rules, over HTTP at the public origin', () => {
+  test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
+
+  test('another Creator cannot change, delete, add to or take from a Profile, nor replace its images; the owners read all back unchanged', async ({ request }) => {
+    const [a, b] = [await furnishedCreator(request), await furnishedCreator(request)];
+    const before = [await readBack(request, a), await readBack(request, b)];
+    const [asA, asB] = [probe(request, a.token, b.secret), probe(request, b.token, a.secret)];
+    refused(await asB.patch(`profiles/records/${a.profileId}`, { displayName: 'Taken' }));
+    refused(await asB.delete(`profiles/records/${a.profileId}`));
+    refused(await asB.patch(`links/records/${a.linkIds[0]}`, { title: 'Taken', destination: 'https://example.com/taken' }));
+    refused(await asB.delete(`links/records/${a.linkIds[0]}`));
+    refused(await asB.post('links/records', { profile: a.profileId, title: 'Planted', order: 9, destination: 'https://example.com/planted' }));
+    refused(await asB.patch(`links/records/${b.linkIds[0]}`, { profile: a.profileId }));
+    refused(await asA.patch(`links/records/${a.linkIds[0]}`, { profile: b.profileId }));
+    refused(await asB.upload(`profiles/${a.profileId}/avatar`));
+    refused(await asB.upload(`links/${a.linkIds[1]}/backgroundImage`));
+    expect([await readBack(request, a), await readBack(request, b)]).toEqual(before);
+  });
+
+  test('another Creator and an anonymous caller read nothing of the first Creator\'s, and nobody reads the ownerless Fixture', async ({ request }) => {
+    const [a, b, fixture] = [await furnishedCreator(request), await furnishedCreator(request), await recordIds('fixture')];
+    expect((await (await proxy(request, a.token).get(`links/records/${a.linkIds[0]}`)).text()).includes(a.secret), 'the owner reads their Destination').toBe(true);
+    const theirs = [a.creator.email, a.creator.username, a.id, a.profileId, ...a.linkIds, fixture.profileId, ...fixture.linkIds];
+    const filter = (f: string) => `filter=${encodeURIComponent(f)}`;
+    const callers: [string, string | undefined, string[]][] = [['anonymous', undefined, []], ['another Creator', b.token, [b.id, b.profileId, ...b.linkIds]]];
+    for (const [who, token, own] of callers) {
+      for (const path of [
+        'users/records', `users/records/${a.id}`, 'profiles/records?expand=owner,links_via_profile', 'links/records?expand=profile',
+        `profiles/records?${filter(`username='${a.creator.username}' || username='fixture'`)}`, `profiles/records?${filter("links_via_profile.destination != ''")}`,
+        `links/records?${filter(`profile='${fixture.profileId}'`)}`,
+        ...[a.profileId, fixture.profileId].flatMap((id) => [`profiles/records/${id}`, `profiles/records/${id}?expand=links_via_profile`]),
+        ...[a.linkIds[0], fixture.linkIds[0]].flatMap((id) => [`links/records/${id}`, `links/records/${id}?expand=profile`]),
+      ]) {
+        const res = await probe(request, token, a.secret).get(path);
+        const body = await res.text();
+        expect(theirs.filter((t) => body.includes(t)), `${who}: ${path}`).toEqual([]);
+        // A list answers 200 with the caller's own records only, none for an anonymous caller; a view of another's is a 404.
+        if (res.status() !== 200) expect(res.status(), `${who}: ${path}`).toBe(404);
+        else expect(JSON.parse(body).items.filter((r: { id: string }) => !own.includes(r.id)), `${who}: ${path}`).toEqual([]);
+      }
+    }
+  });
+
+  test('the owner cannot change their Username, owner or badge, delete their Profile, add a second, choose a Link Id, upload a file directly or store a Destination outside https://, http:// and /', async ({ request }) => {
+    const [a, b] = [await furnishedCreator(request), await furnishedCreator(request)];
+    const before = await readBack(request, a);
+    const as = probe(request, a.token, b.secret);
+    const link = { profile: a.profileId, title: 'Probe', order: 9, destination: 'https://example.com/probe' };
+    for (const change of [{ username: `${a.creator.username}x` }, { owner: b.id }, { verified: true }]) refused(await as.patch(`profiles/records/${a.profileId}`, change));
+    refused(await as.delete(`profiles/records/${a.profileId}`));
+    refused(await as.post('profiles/records', { username: `${a.creator.username}x`, owner: a.id, mode: 'escape_ig' }));
+    for (const chosen of [{ id: 'chosenrecord123' }, { linkId: 'chosenlinkid' }]) refused(await as.post('links/records', { ...link, ...chosen }));
+    refused(await as.patch(`links/records/${a.linkIds[0]}`, { linkId: 'chosenlinkid' }));
+    refused(await as.patchFiles(`profiles/records/${a.profileId}`, { avatar: pngFile('direct.png', [0, 200, 0]) }));
+    refused(await as.patchFiles(`links/records/${a.linkIds[0]}`, { backgroundImage: pngFile('direct.png', [0, 200, 0]) }));
+    for (const destination of ['javascript:alert(1)', 'data:text/html,x', 'ftp://example.com/x', 'example.com/x', '//example.com/x']) {
+      refused(await as.post('links/records', { ...link, destination }));
+      refused(await as.patch(`links/records/${a.linkIds[0]}`, { destination }));
+    }
+    expect(await readBack(request, a)).toEqual(before);
+  });
+
+  test('the Operator edits a Creator\'s Profile, Link and account, then deletes the account and its Profile: the page lands on the landing page and log-in is refused', async ({ page, request }) => {
+    const a = await furnishedCreator(request);
+    const record = (collection: string, id: string) => `/api/collections/${collection}/records/${id}`;
+    expect(await operator('PATCH', record('profiles', a.profileId), { displayName: 'Set by Operator', verified: true })).toBe(200);
+    expect(await operator('PATCH', record('links', a.linkIds[0]), { title: 'Titled by Operator' })).toBe(200);
+    expect(await operator('PATCH', record('users', a.id), { name: 'Named by Operator' })).toBe(200);
+    const { profile, links } = await readBack(request, a);
+    expect([profile.displayName, profile.verified, links[0].title]).toEqual(['Set by Operator', true, 'Titled by Operator']);
+    expect((await (await proxy(request, a.token).get(`users/records/${a.id}`)).json()).name).toBe('Named by Operator');
+    expect([await operator('DELETE', record('profiles', a.profileId)), await operator('DELETE', record('users', a.id))]).toEqual([204, 204]);
+    await page.goto(`/${a.creator.username}`);
+    await expect(page).toHaveURL(`${new URL(page.url()).origin}/landing.html`);
+    const landed = await page.content();
+    expect(holdsDestination(landed) || landed.includes(a.secret), 'a Destination on the page').toBe(false);
+    refused(await probe(request, undefined, a.secret).post('users/auth-with-password', { identity: a.creator.email, password: a.creator.password }));
   });
 });
 
@@ -899,20 +919,10 @@ test.describe('the session and where log-in lands', () => {
   });
 
   test('a Creator who logs in partway through Onboarding resumes at the claim step, the verify screen, the Profile step or the first-Link step', async ({ browser, request }) => {
-    // Each stage arranged over HTTP as the Creator would reach it; only the verification is the Operator's step.
-    const reach = async (stage: string) => {
-      const { creator, token, id } = await account(request);
-      const as = proxy(request, token);
-      const claimed = await as.post('profiles/records', { username: stage === CLAIM ? 'edit' : creator.username, owner: id, mode: 'escape_ig' });
-      expect(claimed.status(), stage).toBe(stage === CLAIM ? 400 : 200);
-      if (stage === CLAIM || stage === VERIFY) return creator;
-      await markVerified(creator.email);
-      if (stage === 'Add your first Link') expect((await as.patch(`profiles/records/${(await claimed.json()).id}`, { displayName: 'Half way' })).status()).toBe(200);
-      return creator;
-    };
+    // Each stage arranged over HTTP as the Creator would reach it (helpers.ts, reach); only the verification is the Operator's step.
     const stages: [string, RegExp][] = [[CLAIM, /\/edit\/claim$/], [VERIFY, /\/edit\/verify-email$/], ['Your Profile', /\/edit\/profile$/], ['Add your first Link', /\/edit\/first-link$/]];
     for (const [stage, url] of stages) {
-      const creator = await reach(stage);
+      const creator = await reach(request, stage);
       const context = await phoneContext(browser);
       const resumed = await context.newPage();
       await logIn(resumed, creator);
