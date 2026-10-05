@@ -64,7 +64,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 45 tickets (45 added 20
 | 34 | [Reveals and Link Shortcuts count as Clicks and Stats read per Link per day per country](issues/34-reveals-and-shortcuts-count.md) | phase-04 | 33, 22 | done |
 | 35 | [A Tracking Code stays with the Profile it arrived on](issues/35-tracking-code-stays-with-profile.md) | phase-04 | 33, 01, 10, 18 | done |
 | 36 | [Only the owner reads a Profile's Stats and recording never blocks a Click or a deletion](issues/36-owner-only-stats-and-safe-recording.md) | phase-04 | 34, 35, 22, 31 | done |
-| 37 | [Events carry each Visitor's real country from the production country source](issues/37-production-country-source.md) | phase-04 | 36, 42 | ready-for-agent |
+| 37 | [Events carry each Visitor's real country from the production country source](issues/37-production-country-source.md) | phase-04 | 36, 42 | claimed 20261005T084628Z |
 | 38 | [A phone inside Instagram is recorded as Instagram on v2's VPS host](issues/38-instagram-recorded-on-vps.md) | phase-04 | 36, 32 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 39 | [Custom Domains and Spare Domains listed in PocketBase serve Profiles by host and pass the TLS Ask](issues/39-domains-served-by-host.md) | phase-05 | 22, 30 | done |
 | 40 | [On a Custom Domain or Spare Domain every Mode and Escape and Reveal works and counts as on ofl.ink](issues/40-every-host-behaves-as-ofl-ink.md) | phase-05 | 39, 10, 36 | done |

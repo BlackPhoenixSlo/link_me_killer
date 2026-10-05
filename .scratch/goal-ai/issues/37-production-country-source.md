@@ -4,7 +4,7 @@ Spec: docs/spec/phase-04-stats.md
 Covers: user stories 6, 7, 31, 32
 Seams: locally, the running v2 stack at Playwright's baseURL through `./check.sh`, with the Visitor's country set through the `CF-IPCountry` header in `extraHTTPHeaders` (plan §11: Cloudflare). In production, after Phase 5's switch, the Operator's terminal, PocketBase's admin UI through an SSH tunnel and a phone on mobile data. The spec's Acceptance block
 Blocked by: 36: Only the owner reads a Profile's Stats and recording never blocks a Click or a deletion, 42: Visitor location trusts only the production country source and ofl.ink's DNS is ready for a one-record switch
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T17:00:15Z
 
 **What to build:** Every Event carries the Visitor's real country in production. Unknown stays "Unknown", never US. This ticket holds everything about Phase 4 that depends on where the country comes from. Events, the ping, `dailyStats`, the Stats page, the Tracking Code key and the owner rules are built in 33–36 and do not wait for it.
 
