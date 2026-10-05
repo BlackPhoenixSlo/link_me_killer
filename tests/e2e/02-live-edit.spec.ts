@@ -146,13 +146,15 @@ test.describe('live edits through PocketBase\'s API', () => {
 
   // Amended by ticket 25 (Phase 3), only where it opens a rule: an anonymous sign-up now succeeds, and an anonymous list or
   // view of profiles returns no record (an empty list or a refusal both pass). Every other call is still refused.
-  test('anonymous calls to PocketBase: sign-up succeeds, profiles show no record, the rest are refused, and no answer holds a Destination', async () => {
+  // Amended by ticket 26, only where it opens a rule: links reads are open to the owner of a Link's Profile, so an anonymous
+  // list or view of links returns no record too.
+  test('anonymous calls to PocketBase: sign-up succeeds, profiles and links show no record, the rest are refused, and no answer holds a Destination', async () => {
     type Expected = 'refused' | 'no record' | 'created';
     const calls: [string, string, Expected, RequestInit?][] = [
       ['list profiles', '/api/collections/profiles/records', 'no record'],
       ['view a profile', `/api/collections/profiles/records/${profileId}`, 'no record'],
-      ['list links', '/api/collections/links/records', 'refused'],
-      ['view a link', `/api/collections/links/records/${links.second.id}`, 'refused'],
+      ['list links', '/api/collections/links/records', 'no record'],
+      ['view a link', `/api/collections/links/records/${links.second.id}`, 'no record'],
       ['list events', '/api/collections/events/records', 'refused'],
       // Nothing writes an Event in this Phase, so no events record id exists to view; a well-formed one stands in.
       ['view an event', '/api/collections/events/records/aaaaaaaaaaaaaaa', 'refused'],

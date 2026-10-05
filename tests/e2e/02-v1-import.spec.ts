@@ -427,6 +427,8 @@ test.describe('on the test stack', () => {
 
   // Amended by ticket 25 (Phase 3), only where it opens a rule: users sign-up, log-in and own-record reads, and the profiles
   // claim and owner reads (1791140004_sign_up_and_claim.js); the Username's length and the one-Profile-per-owner index.
+  // Amended by ticket 26, only where it opens a rule: the profiles update and every links rule, for the signed-in owner of the
+  // Link's Profile (1791140005_content_rules.js). The file fields were already webp-only and stay as they were.
   test('the schema: fields, patterns, relations, file fields, and every rule superuser-only but the ones Phase 3 opens', async () => {
     const collection = async (name: string) => (await pb(`/api/collections/${name}`, { token })).json();
     const [users, profiles, links, events] = await Promise.all(['users', 'profiles', 'links', 'events'].map(collection));
@@ -436,11 +438,23 @@ test.describe('on the test stack', () => {
     expect(users.type === 'auth' && rulesClosed(users, ['updateRule', 'deleteRule']) && users.manageRule === null, 'users update and delete closed').toBe(true);
     expect(users.authRule === '' && users.listRule === OWN && users.viewRule === OWN, 'users sign in, and read only their own record').toBe(true);
     expect(users.createRule.includes('@request.body.verified:isset = false'), 'users sign-up sets nothing but email and password').toBe(true);
-    expect(rulesClosed(profiles, ['updateRule', 'deleteRule']), 'profiles update and delete closed').toBe(true);
+    expect(rulesClosed(profiles, ['deleteRule']), 'profiles delete closed').toBe(true);
+    expect(profiles.updateRule, 'profiles updated by their verified owner, not Username, owner, badge or v1Key').toBe(
+      `${OWNER} && @request.auth.verified = true && @request.body.username:isset = false && @request.body.owner:isset = false && @request.body.verified:isset = false && @request.body.v1Key:isset = false`,
+    );
     expect(profiles.listRule === OWNER && profiles.viewRule === OWNER, 'profiles read by their owner only').toBe(true);
     expect(profiles.createRule.startsWith('@request.auth.id != "" && @request.body.owner = @request.auth.id && '), 'profiles claimed by a signed-in Creator for itself').toBe(true);
     expect(profiles.indexes.some((i: string) => /UNIQUE INDEX .*\(owner\) WHERE owner != ''/.test(i)), 'one Profile per owner, ownerless ones exempt').toBe(true);
-    expect(rulesClosed(links), 'links closed').toBe(true);
+    const LINK_OWNER = '@request.auth.id != "" && profile.owner = @request.auth.id';
+    const DESTINATION_OK = '(@request.body.destination ~ "https://%" || @request.body.destination ~ "http://%" || @request.body.destination ~ "/%")';
+    expect(links.listRule === LINK_OWNER && links.viewRule === LINK_OWNER, 'links read by the owner of their Profile only').toBe(true);
+    expect(links.createRule, 'links added by the verified owner, no id, Link Id or v1Key, a checked Destination').toBe(
+      `@request.auth.id != "" && @request.body.profile.owner = @request.auth.id && @request.auth.verified = true && @request.body.id:isset = false && @request.body.linkId:isset = false && @request.body.v1Key:isset = false && ${DESTINATION_OK}`,
+    );
+    expect(links.updateRule, 'links edited by the verified owner, not Profile, Link Id or v1Key, a sent Destination checked').toBe(
+      `${LINK_OWNER} && @request.auth.verified = true && @request.body.profile:isset = false && @request.body.linkId:isset = false && @request.body.v1Key:isset = false && (@request.body.destination:isset = false || ${DESTINATION_OK})`,
+    );
+    expect(links.deleteRule, 'links deleted by the verified owner').toBe(`${LINK_OWNER} && @request.auth.verified = true`);
     expect(events.type === 'base' && rulesClosed(events), 'events closed').toBe(true);
     type Field = { name: string; type: string; system?: boolean; [k: string]: unknown };
     const field = (c: { fields: Field[] }, name: string) => c.fields.find((f) => f.name === name) || ({} as Field);
@@ -587,13 +601,22 @@ test.describe('on the test stack', () => {
     const password = ENV.PB_SUPERUSER_PASSWORD;
     const reset = await pb(`/api/collections/_superusers/records/${superuser.id}`, { ...json({ password, passwordConfirm: password }), method: 'PATCH', token });
     expect(reset.status).toBe(200);
-    // The old token is now a guest's. Probed on links, which stay superuser-only: since ticket 25 a guest lists profiles as an
-    // empty list (200), which the app's gateway confirms with a token refresh (app/src/gateway.js).
-    expect((await pb('/api/collections/links/records', { token })).status).toBe(403);
+    // The old token is now a guest's. Probed on events, which stay superuser-only: since ticket 25 a guest lists profiles, and
+    // since ticket 26 links, as an empty list (200), which the app's gateway confirms with a token refresh (app/src/gateway.js).
+    expect((await pb('/api/collections/events/records', { token })).status).toBe(403);
     await signIn();
     const res = await request.get('/api/profiles/fixture.json');
     expect(res.status()).toBe(200);
-    expect((await res.json()).links.length).toBe(4);
+    const served = (await res.json()).links as { id: string; title: string }[];
+    expect(served.length).toBe(4);
+    // Once more, with a Link read first: `/r` lists links before anything lists profiles, so a guest's empty links list must not
+    // read as an unknown Link Id.
+    const reset2 = await pb(`/api/collections/_superusers/records/${superuser.id}`, { ...json({ password, passwordConfirm: password }), method: 'PATCH', token });
+    expect(reset2.status).toBe(200);
+    await signIn();
+    const direct = served.find((l) => l.title === 'Direct Link')!;
+    const redirect = await request.get(`/r/${direct.id}`, { maxRedirects: 0 });
+    expect(redirect.status()).toBe(302);
   });
 
   test('PocketBase refuses a Destination that is neither absolute http(s) nor root-relative', async () => {

@@ -3,12 +3,16 @@ import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { deflateSync } from 'node:zlib';
 
 // Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL,
 // the public origin. Creator journeys run in the browser at 390×844; the Visitor side and every second log-in run in a fresh
 // context with no Editor session; rule and proxy checks use the `request` fixture at the same origin, calling the proxy
 // exactly as the Editor does.
 // Ticket 25: sign-up, the claim and its refusals, the verify screen, the landing page's button, and the proxy's allow-list.
+// Ticket 26: the verified-email gate over HTTP, and Onboarding after verification to a live Profile whose Links act like
+// imported ones. Its one Operator step, marking the account verified, goes to PocketBase as a superuser at the loopback port the
+// test stack publishes (spec, Testing Decisions, Operator steps; the ticket's ASSUMPTION until 31 brings mail).
 // Every account is a throwaway with a fresh `signup_<hex>` email and Username; nothing is cleaned up, because the test stack
 // is taken down with its data after the run (tests/stack.sh). Destinations are compared as booleans and never printed.
 const ROOT = join(__dirname, '..', '..');
@@ -287,8 +291,9 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
         }
       }
     }
-    // The owner, too, reaches no Link through the Profile while links rules are null: the back-relation does not expand, and a
-    // filter on it is refused.
+    // The owner reaches no other Profile's Link through their own Profile: since ticket 26 the links read rule is open to the
+    // owner of a Link's Profile, so the back-relation may expand and a filter on it runs, but this owner has no Link and gets
+    // nothing of anyone else's. Another Creator's or an anonymous expand of a Profile that has Links is ticket 30's.
     const own = proxy(request, first.token);
     const expanded = await own.get('profiles/records?expand=links_via_profile');
     const expandedBody = await expanded.text();
@@ -296,10 +301,269 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
     expect(expanded.status()).toBe(200);
     const items: { username: string; expand?: Record<string, unknown> }[] = JSON.parse(expandedBody).items;
     expect(items.map((p) => p.username)).toEqual([first.creator.username]);
-    expect(items.every((p) => !p.expand || !('links_via_profile' in p.expand)), 'links expanded for the owner').toBe(true);
+    expect(items.every((p) => !p.expand || !('links_via_profile' in p.expand)), 'links expanded for an owner with none').toBe(true);
     const filtered = await own.get(`profiles/records?filter=${encodeURIComponent("links_via_profile.destination != ''")}`);
     const filteredBody = await filtered.text();
     expect(holdsDestination(filteredBody), 'a Destination in the answer to a filter on links').toBe(false);
-    expect(filtered.status(), 'a filter on links refused').toBe(400);
+    expect(filtered.status()).toBe(200);
+    expect(JSON.parse(filteredBody).items, 'a filter on links finds nothing for an owner with no Link').toEqual([]);
+  });
+});
+
+// ---- Ticket 26: the verified-email gate, and Onboarding to a live Profile -------------------------------------------------
+
+// Is the stack under test the local test stack that tests/stack.sh starts? The same predicate as the 02 specs: the Operator
+// step needs PocketBase's loopback port, which only that stack publishes.
+const onLocalStack = () => !process.env.PLAYWRIGHT_BASE_URL || new URL(process.env.PLAYWRIGHT_BASE_URL).origin === 'http://localhost:4173';
+const ENV: Record<string, string> = Object.fromEntries(
+  readFileSync(join(ROOT, 'tests', 'e2e.env'), 'utf8')
+    .split('\n')
+    .filter((l) => /^[A-Z_]+=/.test(l))
+    .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]),
+);
+const PB = `http://127.0.0.1:${ENV.PB_PORT}`;
+async function superuserToken() {
+  const res = await fetch(`${PB}/api/collections/_superusers/auth-with-password`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ identity: ENV.PB_SUPERUSER_EMAIL, password: ENV.PB_SUPERUSER_PASSWORD }),
+  });
+  expect(res.status).toBe(200);
+  return (await res.json()).token as string;
+}
+const asSuperuser = async (token: string, path: string, init: RequestInit = {}) =>
+  fetch(PB + path, { ...init, headers: { ...(init.headers as Record<string, string>), Authorization: token } });
+
+// The Operator step: a superuser marks the account verified, as the Operator would in the admin UI.
+async function markVerified(email: string) {
+  const token = await superuserToken();
+  const found = await (await asSuperuser(token, `/api/collections/users/records?filter=${encodeURIComponent(`email='${email}'`)}`)).json();
+  expect(found.items.length).toBe(1);
+  const res = await asSuperuser(token, `/api/collections/users/records/${found.items[0].id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ verified: true }),
+  });
+  expect(res.status).toBe(200);
+}
+
+// An in-memory PNG of one colour (spec, Testing Decisions, Images): no fixture file, and proof a non-webp input comes out webp.
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+function png(width: number, height: number, [r, g, b]: [number, number, number]) {
+  const crc = (buf: Buffer) => {
+    let c = 0xffffffff;
+    for (const x of buf) c = CRC_TABLE[(c ^ x) & 255] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const out = Buffer.alloc(body.length + 8);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(crc(body), body.length + 4);
+    return out;
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // 8 bits per channel
+  ihdr[9] = 2; // RGB
+  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: width }, () => [r, g, b]).flat())]);
+  const pixels = Buffer.concat(Array.from({ length: height }, () => row));
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(pixels)), chunk('IEND', Buffer.alloc(0))]);
+}
+const pngFile = (name: string, colour: [number, number, number]) => ({ name, mimeType: 'image/png', buffer: png(600, 400, colour) });
+const isWebp = (b: Buffer) => b.length >= 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP';
+
+test.describe('the verified-email gate', () => {
+  test('over HTTP an unverified Creator\'s token cannot update its Profile, add a Link or upload an avatar; the owner reads both back unchanged', async ({ request }) => {
+    const { token, id, creator } = await account(request);
+    const as = proxy(request, token);
+    const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig' });
+    expect(claimed.status()).toBe(200);
+    const profileId = (await claimed.json()).id as string;
+    const readBack = async () => {
+      const profile = await as.get(`profiles/records/${profileId}`);
+      expect(profile.status()).toBe(200);
+      const links = await as.get(`links/records?filter=${encodeURIComponent(`profile='${profileId}'`)}`);
+      expect(links.status()).toBe(200);
+      return { profile: await profile.json(), links: (await links.json()).items };
+    };
+    const before = await readBack();
+    expect(before.links).toEqual([]);
+
+    // PocketBase answers an update its rule refuses as a record it cannot find (404), and a refused create with a bare 400.
+    const update = await request.patch(`/api/collections/profiles/records/${profileId}`, { headers: { Authorization: token }, data: { displayName: 'Not yet', bio: 'not yet' } });
+    expect(update.status(), 'Profile update').toBe(404);
+    const link = await as.post('links/records', { profile: profileId, title: 'Not yet', order: 0, destination: `https://example.com/${creator.username}` });
+    expect(link.status(), 'Link create').toBe(400);
+    // The upload endpoint writes with the caller's token, so PocketBase's refusal is its answer.
+    const avatar = await request.post(`/api/upload/profiles/${profileId}/avatar`, { headers: { Authorization: token }, multipart: { file: pngFile('avatar.png', [200, 40, 40]) } });
+    expect(avatar.status(), 'avatar upload').toBe(404);
+
+    const after = await readBack();
+    expect(after).toEqual(before);
+    expect(after.profile.displayName === '' && after.profile.bio === '' && after.profile.avatar === '').toBe(true);
+  });
+
+});
+
+test.describe('Onboarding after verification', () => {
+  test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
+
+  test('at 390×844 a verified Creator goes through Onboarding to a live Profile whose Links act like imported ones', async ({ page, browser, request, baseURL }) => {
+    test.setTimeout(180_000);
+    const creator = fresh();
+    const origin = new URL(baseURL!).origin;
+    const address = `${origin}/${creator.username}`;
+    // Test-only Destinations on example.com: referenced by variable, still compared as booleans.
+    const adultDestination = `https://example.com/${creator.username}`;
+    const directDestination = `https://example.com/direct/${creator.username}`;
+    const holdsEither = (body: string) => body.includes(adultDestination) || body.includes(directDestination);
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+
+    await signUp(page, creator);
+    await expectVerifyScreen(page);
+    await markVerified(creator.email);
+    await page.getByRole('button', { name: 'Continue' }).click();
+
+    // The Profile step: no display name, no move.
+    await expect(heading(page, 'Your Profile')).toBeVisible();
+    await expect(page).toHaveURL(/\/edit\/profile$/);
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByRole('status')).toHaveText('Enter a display name.');
+    await expect(heading(page, 'Your Profile')).toBeVisible();
+    await page.getByLabel('Display name').fill('Onboarding Creator');
+    await page.getByLabel('Bio').fill('Made in the Editor.');
+    await page.getByLabel('Profile picture').setInputFiles(pngFile('avatar.png', [200, 40, 40]));
+    await page.getByRole('button', { name: 'Continue' }).click();
+
+    // The first-Link step is the Link form.
+    await expect(heading(page, 'Add your first Link')).toBeVisible();
+    await expect(page).toHaveURL(/\/edit\/first-link$/);
+    const mode = page.getByLabel('Mode');
+    await expect(mode).toHaveValue('');
+    await expect(mode.locator('option:checked')).toHaveText('Profile default (currently Escape)');
+    await page.getByLabel('Title').fill('Adult card');
+    await page.getByLabel('Destination').fill(adultDestination);
+    await page.getByLabel('Icon').selectOption({ label: 'OnlyFans' });
+    await page.getByLabel('Background image').setInputFiles(pngFile('background.png', [40, 40, 200]));
+    await page.getByLabel('18+ Age Gate').check();
+    await mode.selectOption({ label: 'Escape' });
+    await page.getByLabel('OnlyFans tracking').check();
+    await page.getByLabel('Default Tracking Code').fill('7');
+    await page.getByRole('button', { name: 'Save link' }).click();
+
+    // The live address, with Open and Copy.
+    await expect(heading(page, 'Your page is live')).toBeVisible();
+    await expect(page.getByText(address, { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open' })).toHaveAttribute('href', address);
+    await page.getByRole('button', { name: 'Copy' }).click();
+    await expect(page.getByRole('status')).toHaveText('Copied.');
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(address);
+
+    // The Editor: the Links list, and "Add link" opening the same form.
+    await page.getByRole('button', { name: 'Go to the Editor' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    const rows = page.getByRole('list', { name: 'Links' }).getByRole('listitem');
+    await expect(rows).toHaveText(['Adult card']);
+    await page.getByRole('button', { name: 'Add link' }).click();
+    await expect(heading(page, 'Add link')).toBeVisible();
+    await expect(page.getByLabel('Mode').locator('option:checked')).toHaveText('Profile default (currently Escape)');
+    await page.getByLabel('Title').fill('Direct card');
+    await page.getByLabel('Destination').fill(directDestination);
+    await page.getByLabel('Mode').selectOption({ label: 'Direct' });
+    await expect(page.getByLabel('18+ Age Gate')).not.toBeChecked();
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    await expect(rows).toHaveText(['Adult card', 'Direct card']);
+    await page.screenshot({ path: join(ROOT, '.scratch', 'goal_ai', 'shots', '03-auth-and-editor.png'), fullPage: true });
+    // Progress is derived: opening /edit again lands in the Editor.
+    await page.goto('/edit');
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+
+    // The stored values (spec, Contracts, Stored values), as the Creator reads them through the proxy with the Editor's own
+    // token. Destinations compared as booleans.
+    const own = proxy(request, (await page.evaluate(() => localStorage.getItem('ofl.token')))!);
+    const [profile] = (await (await own.get(`profiles/records?filter=${encodeURIComponent(`username='${creator.username}'`)}`)).json()).items;
+    expect(profile.displayName === 'Onboarding Creator' && profile.bio === 'Made in the Editor.' && profile.avatar !== '' && profile.mode === 'escape_ig').toBe(true);
+    const stored = (await (await own.get(`links/records?sort=order&filter=${encodeURIComponent(`profile='${profile.id}'`)}`)).json()).items;
+    expect(stored.length).toBe(2);
+    const [adult, direct] = stored;
+    expect(adult.destination === adultDestination, 'the Adult Link\'s Destination as entered').toBe(true);
+    expect([adult.order, adult.isAdult, adult.mode, adult.tracking, adult.defaultTrackingCode]).toEqual([0, true, 'escape_ig', true, '7']);
+    expect(adult.icon !== '' && adult.backgroundImage !== '').toBe(true);
+    expect(direct.destination === directDestination, 'the Direct Link\'s Destination as entered').toBe(true);
+    expect([direct.order, direct.isAdult, direct.mode, direct.tracking, direct.defaultTrackingCode, direct.icon, direct.backgroundImage]).toEqual([1, false, 'direct', false, '', '', '']);
+    for (const l of stored) expect(l.linkId).toMatch(/^[a-z0-9]{12}$/);
+
+    // The Visitor, in a fresh context with no Editor session; nothing leaves the machine.
+    const context = await phoneContext(browser);
+    const visitor = await context.newPage();
+    await visitor.route((url) => url.host !== new URL(origin).host, (route) => route.abort('blockedbyclient'));
+    let pressed = false;
+    const seen: Promise<{ url: string; type: string; body: Buffer }>[] = [];
+    visitor.on('response', (res) => {
+      if (pressed) return;
+      seen.push(res.body().then((body) => ({ url: res.url(), type: res.headers()['content-type'] || '', body }), () => ({ url: res.url(), type: '', body: Buffer.alloc(0) })));
+    });
+    const profileJson = visitor.waitForResponse((res) => new URL(res.url()).pathname === `/api/profiles/${creator.username}.json`);
+    await visitor.goto(`/${creator.username}`);
+    const served: { profile: { avatarUrl: string }; links: { id: string; title: string; icon: string; backgroundImage: string; isAdult: boolean }[] } = await (await profileJson).json();
+    await expect(visitor.locator('#displayName')).toHaveText('Onboarding Creator');
+    await expect(visitor.locator('.link-card .link-title')).toHaveText(['Adult card', 'Direct card']);
+    await expect(visitor.locator('#avatar')).toHaveAttribute('src', served.profile.avatarUrl);
+    await visitor.waitForLoadState('networkidle');
+    const responses = await Promise.all(seen);
+    for (const url of [served.profile.avatarUrl, served.links[0].backgroundImage]) {
+      expect(url.startsWith('/api/files/'), url).toBe(true);
+      const hit = responses.find((r) => new URL(r.url).pathname === url);
+      expect(hit, `the page loaded ${url}`).toBeTruthy();
+      expect(hit!.type, url).toBe('image/webp');
+      expect(isWebp(hit!.body), url).toBe(true);
+    }
+    // The stock icon the Visitor is served is the Page Copy's own WebP, byte for byte, as the v1 Import stores one.
+    const icon = await (await request.get(served.links[0].icon)).body();
+    expect(icon.equals(readFileSync(join(ROOT, 'app', 'public', 'images', 'onlyicon.webp'))), 'the stock icon as the Page Copy\'s').toBe(true);
+    // Neither Destination before a press: not in the page's HTML, its Profile JSON or any of its network responses.
+    expect(responses.some((r) => new URL(r.url).pathname === `/${creator.username}`)).toBe(true);
+    expect(responses.some((r) => new URL(r.url).pathname === `/api/profiles/${creator.username}.json`)).toBe(true);
+    expect(responses.filter((r) => holdsEither(r.body.toString('latin1'))).length, 'responses holding a Destination').toBe(0);
+    expect(holdsEither(await (await request.get(`/${creator.username}`)).text()), 'a Destination in the HTML').toBe(false);
+    expect(holdsEither(await (await request.get(`/api/profiles/${creator.username}.json`)).text()), 'a Destination in the Profile JSON').toBe(false);
+
+    // The non-Adult Link's /r answers 302 to its Destination.
+    const directId = served.links.find((l) => l.title === 'Direct card')!.id;
+    const redirect = await request.get(`/r/${directId}`, { maxRedirects: 0 });
+    expect(redirect.status()).toBe(302);
+    expect(redirect.headers()['location'] === directDestination, 'the redirect goes to the Direct Link\'s Destination').toBe(true);
+
+    // The Adult Link: Age Gate, then Reveal's real answer is the entered Destination followed by /c7; the navigation is
+    // intercepted, as in 00-smoke.
+    const adultId = served.links.find((l) => l.title === 'Adult card')!.id;
+    pressed = true;
+    await visitor.locator('.link-card', { hasText: 'Adult card' }).click();
+    await expect(visitor.locator('#overlay')).toBeVisible();
+    await expect(visitor.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
+    let reveal: { url: URL; status: number; realUrl: unknown } | undefined;
+    await visitor.route('**/.netlify/functions/reveal?*', async (route) => {
+      const response = await route.fetch();
+      reveal = { url: new URL(route.request().url()), status: response.status(), realUrl: (await response.json()).realUrl };
+      await route.fulfill({ response });
+    });
+    const expected = `${adultDestination}/c7`;
+    const onward = visitor.waitForEvent('requestfailed', (req) => req.url() === expected);
+    await visitor.getByRole('button', { name: 'Continue (18+)' }).click();
+    expect((await onward).failure()?.errorText).toBe('net::ERR_BLOCKED_BY_CLIENT');
+    if (!reveal) throw new Error('no Reveal was observed before the onward navigation');
+    expect(reveal.url.searchParams.get('id') === adultId).toBe(true);
+    expect(reveal.url.searchParams.get('trackingId')).toBe('7');
+    expect(reveal.status).toBe(200);
+    expect(reveal.realUrl === expected, 'Reveal answers the entered Destination followed by /c7').toBe(true);
+    await context.close();
   });
 });

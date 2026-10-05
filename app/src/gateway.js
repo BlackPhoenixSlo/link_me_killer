@@ -9,11 +9,14 @@
 // accepts reads profiles as a guest's empty list (200), not 403. An empty profiles list is therefore confirmed per token used:
 // when the list's fetch ran on a token `read()` had just signed in for, it stands; when another request has since replaced that
 // token, the list runs once more on the current one with no refresh; otherwise that same token is refreshed through
-// `_superusers/auth-refresh`, and if that is refused the gateway signs in again and reads once more. Links stay superuser-only,
-// so a stale token still gets 403 there and `read()` already signs in again; their lists are not confirmed.
-// ASSUMPTION: only an unknown Username costs one extra call (the refresh or the second list), with no time bound, because a bound
-// would serve a real Profile as missing for up to that long after the token is invalidated (rung 5: a refresh is a token check,
-// not a password hash). Overturned if a scan of unknown Usernames must cost one call each; the gateway then tracks the token's
+// `_superusers/auth-refresh`, and if that is refused the gateway signs in again and reads once more.
+// From ticket 26 on the links list rule is open to the owner of a Link's Profile (1791140005_content_rules.js), and a token
+// PocketBase no longer accepts lists links as a guest's empty list (200) too (observed on the test stack, 2026-10-05: a garbage
+// token lists links 200 empty and events 403), so an empty links list is confirmed the same way.
+// ASSUMPTION: only an unknown Username or Link Id, and a Profile with no Link, costs one extra call (the refresh or the second
+// list), with no time bound, because a bound would serve a real Profile or Link as missing for up to that long after the token
+// is invalidated (rung 5: a refresh is a token check, not a password hash; the Click guard already limits `/r` and Reveal per
+// client). Overturned if a scan of unknown Usernames or Link Ids must cost one call each; the gateway then tracks the token's
 // expiry and invalidation another way.
 const USERNAME = /^[a-z0-9_]+$/;
 const LINK_ID = /^[a-z0-9]{12}$/;
@@ -68,7 +71,7 @@ function createGateway({ url, email, password }) {
       return { items: (await res.json()).items, sent, fresh };
     };
     let { items, sent, fresh } = await list();
-    if (!items.length && collection === 'profiles' && !fresh) {
+    if (!items.length && !fresh) {
       if (sent !== token) ({ items } = await list());
       else if (!(await stillAccepted(sent))) {
         await signIn();

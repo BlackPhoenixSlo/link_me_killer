@@ -63,7 +63,7 @@ form { display: flex; flex-direction: column; gap: 14px; }
 
 label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; }
 
-input {
+input, select {
     height: 44px;
     padding: 0 12px;
     border: 1px solid var(--input);
@@ -73,7 +73,24 @@ input {
     font-size: 16px; /* 16px keeps iOS from zooming in on focus */
 }
 
-input:focus { outline: 2px solid #6d86ff99; outline-offset: 0; }
+textarea {
+    padding: 10px 12px;
+    border: 1px solid var(--input);
+    border-radius: 12px;
+    background: var(--sidebar);
+    color: var(--foreground);
+    font: inherit;
+    font-size: 16px;
+    resize: vertical;
+}
+
+input[type="file"] { height: auto; padding: 10px 12px; font-size: 14px; }
+
+input:focus, select:focus, textarea:focus { outline: 2px solid #6d86ff99; outline-offset: 0; }
+
+/* A checkbox row: the Template's "Age Gate" and toggle rows. */
+.check { flex-direction: row; align-items: center; gap: 10px; }
+.check input { width: 20px; height: 20px; margin: 0; padding: 0; }
 
 .address { display: flex; align-items: center; gap: 0; }
 .address span { color: var(--muted-foreground); font-size: 13px; padding-right: 2px; }
@@ -91,6 +108,18 @@ button {
 }
 
 button.secondary { background: #ffffff1a; color: var(--foreground); }
+a.button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    border-radius: 999px;
+    background: var(--foreground);
+    color: var(--background);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
 button:disabled { opacity: 0.5; cursor: default; }
 
 .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
@@ -114,3 +143,12 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .bio-link .label { padding: 0 12px; color: #fafafa99; border-right: 1px solid #ffffff1a; white-space: nowrap; }
 .bio-link .value { padding: 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+h2 { font-size: 15px; font-weight: 500; margin: 20px 0 8px; }
+
+.live-address { margin: 0 0 12px; padding: 12px; border-radius: 12px; background: var(--sidebar); word-break: break-all; font-size: 15px; }
+
+/* "Featured Links": one row per Link, in the order Visitors see them. */
+.links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.link-row { display: flex; align-items: center; min-height: 48px; padding: 0 14px; border: 0.5px solid var(--border); border-radius: 12px; background: #ffffff0d; }
+.link-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
