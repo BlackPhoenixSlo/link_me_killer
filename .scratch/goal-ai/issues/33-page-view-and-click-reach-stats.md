@@ -4,7 +4,7 @@ Spec: docs/spec/phase-04-stats.md
 Covers: user stories 1, 2, 6, 8, 9, 11, 12, 13, 15, 16, 17, 19, 22, 34
 Seams: the running v2 stack at Playwright's baseURL through `./check.sh`. Visitors in fresh browser contexts, with the country set through a request header and fake User-Agents where needed; `/r/*` intercepted with `page.route`, sent on with `route.fetch({ maxRedirects: 0 })`, and fulfilled with a local stub page. The Stats Creator in the browser at 390×844, with every `dailyStats` request watched through `page.route`. Operator reads of Events at PocketBase's loopback port, as a superuser
 Blocked by: 01: The test loop serves the Page Copy, 10: The escaped Link opens by itself in the System Browser credited to the same Tracking Code, 18: Every Click on a v1 Link ends at v1's Destination for the same Tracking Code and Visitor location, 20: A PocketBase admin edit shows on the next page load while PocketBase's API stays closed, 27: A Creator changes their Profile in the Editor and its default Mode reaches the page, 29: Log-in lands a Creator where they left off and a handed-over Profile opens in the Editor
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T11:40:06Z
 
 **What to build:** The Phase's first path through every layer. A Visitor loads a Profile and follows a Direct Mode Link. Its Creator signs in, opens Stats next to the Editor, and sees one more Page View and one more Click.
 
