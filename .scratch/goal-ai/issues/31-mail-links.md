@@ -4,7 +4,7 @@ Spec: docs/spec/phase-03-auth-and-editor.md
 Covers: user stories 6, 7, 8, 14, 15, 57
 Seams: the running v2 stack at Playwright's baseURL, the Creator in the browser at 390×844; the mail catcher's HTTP API on loopback, read for the newest message to an address, whose link the browser then follows. The spec's Acceptance block
 Blocked by: 24: The Operator pulls the local mail catcher's image, 22: Reveal and /r answer only v2's own origin within a per-client limit, 27: A Creator changes their Profile in the Editor and its default Mode reaches the page, 28: A Creator manages their Links in the Editor and a refused save keeps what they typed, 29: Log-in lands a Creator where they left off and a handed-over Profile opens in the Editor, 30: Only a Profile's owner and the Operator can read or change it through PocketBase's API
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T10:37:09Z
 
 **What to build:** Email ties each account to a mailbox the Creator controls, and the tests follow the real links.
 - **Local mail.** Mailpit joins the local stack only, and the local seed sets it as PocketBase's SMTP and sets the Application URL to the public origin. The VPS stack gains no mail catcher; the Operator's SMTP is set there by hand (32). Phase 2's Compose contract checks still pass.
