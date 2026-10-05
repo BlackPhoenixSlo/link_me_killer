@@ -518,7 +518,7 @@ test.describe('v1 Snapshot', () => {
   });
 
   test('no Destination is in any Profile JSON, the twins\' pages, /netlify/functions/secrets.json (404) or /secrets.json', async ({ page, request }) => {
-    const usernames = [...V1_FILES.map((f) => f.username), 'Jaka', 'JakaJaka', 'weiWEi', 'fixture'];
+    const usernames = [...V1_FILES.map((f) => f.username), 'Jaka', 'JakaJaka', 'weiWEi', ...(served ? ['fixture'] : [])]; // the Fixture only where it is served
     const leaking: string[] = [];
     for (const u of usernames) {
       const res = await request.get(`/api/profiles/${u}.json`);
