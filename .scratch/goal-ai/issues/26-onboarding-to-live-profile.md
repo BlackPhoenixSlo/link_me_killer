@@ -4,7 +4,7 @@ Spec: docs/spec/phase-03-auth-and-editor.md
 Covers: user stories 9, 17, 18, 19, 27, 29, 30, 31, 32, 33, 39, 43, 47, 49, 50
 Seams: the running v2 stack at Playwright's baseURL: Creator journeys in the browser at 390×844; the Visitor side in a fresh context with no Editor session, its navigation intercepted as in the smoke spec; rule checks with the `request` fixture at the same origin. One Operator step arranges state at PocketBase's loopback port, as a superuser: marking the account verified
 Blocked by: 25: Anyone with the sign-up link creates an account and claims a Username, 18: Every Click on a v1 Link ends at v1's Destination for the same Tracking Code and Visitor location, 21: A photo uploaded in any D4 format is stored upright and resized as WebP
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-05T02:55:03Z
 
 **What to build:** The plan's DONE, "new user signs up, adds a link with image, page live". Until 31 brings mail, the Operator step stands in for the verification link.
 
