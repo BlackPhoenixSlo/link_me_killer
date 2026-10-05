@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md (Reveal hardening (D8); Further Notes
 Covers: prefactoring for 23, 41 and 42; RUN.md (run 20261004T191309Z) assumptions 1 and 2
 Seams: offline, the local `caddy:2-alpine` image adapting and validating the Caddyfile under both flag values (rung 1, as 41 plans); the running local stack brought up once with the flag on, called over TCP from inside the Compose network with a hand-written PROXY protocol v1 header, outside `./check.sh`; the Playwright loop through `./check.sh` with the flag off
 Blocked by: 22: Reveal and /r answer only v2's own origin within a per-client limit
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T11:41:35Z
 
 **What to build:** Added by the coordinator at the Operator's instruction (invocation of 2026-10-05, run 20261005T084628Z): a prefactoring ticket before Phase 4, so the VPS deploy (23) has the Caddy side of plan §11 ready and the Reveal limit keys on each Visitor, not on Traefik.
 
