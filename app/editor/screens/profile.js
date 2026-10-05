@@ -1,9 +1,11 @@
 // The Profile's own forms (docs/spec/phase-03-auth-and-editor.md; tickets 26 and 27, see app.js): the Profile step, the
-// Editor's Profile panel, and its "Quick Settings", the Profile's default Mode. The shell's helpers come from app.js.
+// Editor's Profile card, and its "Quick Settings", the Profile's default Mode. The shell's helpers come from app.js; the class
+// names are the design brief's (docs/spec/editor-redesign.md, section 5).
 
-import { api, upload, el, render, message, say, fileInput, select, MODE_NAMES, submitting, fieldReasons, onboard } from '../app.js';
+import { api, upload, el, render, message, say, fileInput, select, MODE_NAMES, submitting, fieldReasons, onboard, field, steps,
+  icon, pageTitle } from '../app.js';
 
-// Writes `fields` to the Profile with the form disabled, saying PocketBase's refusal in `status`. On success PocketBase's answer
+// Writes `fields` to the Profile with the form busy, saying PocketBase's refusal in `status`. On success PocketBase's answer
 // is kept in `profile`, the one place the Editor's in-memory Profile is updated, and the answer is true.
 async function saveProfile(profile, form, status, fields) {
   submitting(form, true);
@@ -17,29 +19,50 @@ async function saveProfile(profile, form, status, fields) {
   return true;
 }
 
-// The Profile's own form, the same for the Profile step and the Editor's Profile panel: display name (required), bio and
-// picture, saved on its one button. Name and bio are saved first, then a picked picture goes to the upload endpoint. The
-// Editor's panel adds the current picture beside "Change Profile Picture" and the @Username read-only; `done(status)` runs
-// after a full save.
+// The Profile's own form, the same for the Profile step and the Editor's Profile card, saved on its one button: in the Editor
+// the picture beside its file input, display name (required), the @Username read-only and bio; on the step (the brief's 4.8)
+// display name, bio, then the picture. Name and bio are saved first, then a picked picture goes to the upload endpoint.
+// `done(status)` runs after a full save.
 // ASSUMPTION: the Editor checks the display name itself (whitespace only counts as none) and shows its own message, and a
 // refused avatar keeps the Creator on the form with the reason, the name and bio already saved (rung 5: no rollback).
 // Overturned if PocketBase must refuse an empty display name, or a half-saved step must be undone.
 export function profileForm(profile, { editor = false, button, done }) {
-  const displayName = el('input', { name: 'displayName', value: profile.displayName || '', autocomplete: 'name' });
-  const bio = el('textarea', { name: 'bio', rows: 3, value: profile.bio || '' });
+  const displayName = el('input', {
+    className: 'e-input',
+    name: 'displayName',
+    value: profile.displayName || '',
+    autocomplete: 'name',
+    required: true,
+    oninput: () => {
+      displayName.removeAttribute('aria-invalid');
+      displayName.removeAttribute('aria-describedby');
+    },
+  });
+  const bio = el('textarea', { className: 'e-textarea', name: 'bio', rows: 3, value: profile.bio || '' });
   const avatar = fileInput('avatar');
   const status = message();
-  const current = el('img', { className: 'avatar', alt: '' });
+  status.id = 'profile-message';
+  // The current picture, or a muted circle with a person icon when there is none; exactly one img.avatar on the screen.
+  const current = el('img', { className: 'avatar e-avatar e-avatar--lg', alt: '', width: 96, height: 96, 'data-test': 'avatar-preview' });
+  const none = el('span', { className: 'e-avatar e-avatar--lg', 'aria-hidden': 'true' }, icon('person'));
   const showAvatar = (url) => {
     current.hidden = !url;
+    none.hidden = Boolean(url);
     if (url) current.src = url;
   };
   showAvatar(profile.avatar ? `/api/files/profiles/${profile.id}/${profile.avatar}` : '');
   const form = el('form', {
+    className: 'e-form',
     noValidate: true,
     onsubmit: async (event) => {
       event.preventDefault();
-      if (!displayName.value.trim()) return say(status, 'Enter a display name.');
+      if (!displayName.value.trim()) {
+        // The field says why it is invalid, and takes the focus so the name can be typed at once.
+        displayName.setAttribute('aria-invalid', 'true');
+        displayName.setAttribute('aria-describedby', status.id);
+        say(status, 'Enter a display name.');
+        return displayName.focus();
+      }
       if (!(await saveProfile(profile, form, status, { displayName: displayName.value.trim(), bio: bio.value }))) return undefined;
       displayName.value = profile.displayName;
       const file = avatar.files[0];
@@ -54,62 +77,83 @@ export function profileForm(profile, { editor = false, button, done }) {
       return done(status);
     },
   });
-  const name = el('label', {}, 'Display name', displayName);
-  const about = el('label', {}, 'Bio', bio);
+  const picture = el('div', { className: 'e-profile__picture' }, current, none, editor
+    ? field('profile-avatar', 'Change Profile Picture', avatar, { hint: 'jpg, png, heic, gif or webp. It uploads when you press Save profile.' })
+    : field('profile-avatar', 'Profile picture', avatar));
+  const name = field('profile-display-name', 'Display name', displayName);
+  const about = field('profile-bio', 'Bio', bio, { hint: 'Optional. A line or two.' });
   if (editor) {
-    const username = el('input', { name: 'username', value: profile.username, readOnly: true });
-    form.append(
-      el('div', { className: 'picture' }, current, el('label', {}, 'Change Profile Picture', avatar)),
-      name,
-      el('label', {}, 'Username', el('div', { className: 'address' }, el('span', { 'aria-hidden': 'true' }, '@'), username)),
-      about,
-    );
+    const username = el('input', { className: 'e-input', name: 'username', value: profile.username, readOnly: true });
+    form.append(picture, name, field('profile-username', 'Username', username, { hint: 'Your page\'s address. It can\'t be changed.', prefix: '@' }), about);
   } else {
-    form.append(name, about, el('label', {}, 'Profile picture', avatar));
+    form.append(name, about, picture);
   }
-  form.append(status, el('button', { type: 'submit' }, button));
+  form.append(el('button', { type: 'submit', className: 'e-btn e-btn--primary e-btn--block' }, button), status);
   return form;
 }
 
-// The Profile step: the Profile's own form, then on to the next Onboarding step.
+// The Profile step, Onboarding step 3 of 5, in one card: the Profile's own form, then on to the next Onboarding step.
 export function drawProfileStep(profile) {
-  render('Your Profile', el('h1', {}, 'Your Profile'), el('p', { className: 'hint' }, 'What Visitors see at the top of your page. A photo in jpg, png, heic, gif or webp.'),
-    profileForm(profile, { button: 'Continue', done: () => onboard() }));
+  render('Your Profile', el('div', { className: 'e-card' },
+    steps(3),
+    pageTitle('Your Profile'),
+    el('p', { className: 'e-page__lead' }, 'What Visitors see at the top of your page. A photo in jpg, png, heic, gif or webp.'),
+    profileForm(profile, { button: 'Continue', done: () => onboard() })));
 }
 
+// What each default Mode does, in one plain sentence, as app/public/script.js does it (the brief's ruling 13).
+const MODE_HELP = {
+  direct: 'Direct opens the Destination straight away.',
+  escape_ig: 'Escape moves Visitors out of the Instagram or TikTok browser into Safari or Chrome. If the phone won\'t switch by itself, your page shows how.',
+  deeplink: 'Deeplink sends a tap in Instagram or TikTok straight to Safari or Chrome, with no how-to screen. On Android it can open the Link\'s own app.',
+};
 // Pop out timing (popOutTiming, docs/spec/phase-01-link-modes-and-escape.md): when an Escape or Deeplink default leaves the
 // Instagram or TikTok browser. Empty reads as "On tap", as the page reads it.
 const POP_OUT_HELP = {
-  open: 'At open pops the visitor out to Safari or Chrome as soon as the page opens in Instagram or TikTok.',
-  tap: 'On tap shows the "Open in System Browser" screen first and pops out when the visitor taps.',
+  open: 'At open moves Visitors in Instagram or TikTok to Safari or Chrome as soon as the page opens, when the default Mode is Escape or Deeplink.',
+  tap: 'On tap waits for the Visitor\'s tap. With Escape, your page shows the "Open in System Browser" screen first.',
 };
 
-// "Quick Settings" on the Editor's home: the Profile's default Mode and Pop out timing, saved on one button (saveProfile).
+// A select field whose hint (`{id}-help`) explains the option chosen and changes with it (aria-live); a change saves nothing.
+function explained(id, label, control, help) {
+  const node = field(id, label, control, { hint: help[control.value] });
+  const hint = node.querySelector(`#${id}-help`);
+  hint.setAttribute('aria-live', 'polite');
+  control.addEventListener('change', () => {
+    hint.textContent = help[control.value];
+  });
+  return node;
+}
+
+// "Quick Settings" on the Editor's home: the Profile's default Mode and Pop out timing, saved on one button (saveProfile). The
+// helper under each select explains the option now selected and changes with it; nothing is saved until "Save default Mode".
+// Under the Mode's helper, a line that does not change says what the default Mode applies to.
 // ASSUMPTION: the default Mode has its own form and Save button in "Quick Settings" rather than saving when the select
 // changes (rung 2: the spec's Contracts, "Each form saves on its own Save button, with no autosave"). Overturned if the
 // Operator wants the Template's toggle that acts at once.
 // An empty stored default Mode shows as Escape, as PocketBase's field reads it (pocketbase/pb_migrations/1791140001_profiles.js:22).
 export function quickSettings(profile) {
   const mode = select('mode', Object.entries(MODE_NAMES), profile.mode || 'escape_ig');
-  const modeSaved = message();
+  const modeField = explained('default-mode', 'Default Mode', mode, MODE_HELP);
+  modeField.querySelector('#default-mode-help').setAttribute('data-test', 'default-mode-help');
+  modeField.append(el('p', { className: 'e-field__hint', id: 'default-mode-note' }, 'Every Link left on “Profile default” follows this Mode.'));
+  mode.setAttribute('aria-describedby', 'default-mode-help default-mode-note');
   const popOut = select('popOutTiming', [['open', 'At open'], ['tap', 'On tap']], profile.popOutTiming || 'tap');
-  popOut.id = 'pop-out';
-  const popOutHelp = el('p', { className: 'hint', id: 'pop-out-help', 'aria-live': 'polite' }, POP_OUT_HELP[popOut.value]);
-  popOut.addEventListener('change', () => {
-    popOutHelp.textContent = POP_OUT_HELP[popOut.value];
-    modeSaved.textContent = '';
-  });
+  const modeSaved = message();
   const settings = el('form', {
+    className: 'e-form',
+    // A changed choice is not saved yet, so an earlier "Default Mode saved." goes.
+    onchange: () => {
+      modeSaved.textContent = '';
+    },
     onsubmit: async (event) => {
       event.preventDefault();
       if (await saveProfile(profile, settings, modeSaved, { mode: mode.value, popOutTiming: popOut.value })) say(modeSaved, 'Default Mode saved.', 'ok');
     },
   },
-  el('label', {}, 'Default Mode', mode),
-  el('p', { className: 'hint' }, 'Escape helps visitors switch to Safari/Chrome from Instagram or TikTok. Every Link left on “Profile default” follows this Mode.'),
-  el('label', { htmlFor: 'pop-out' }, 'Pop out', popOut),
-  popOutHelp,
-  modeSaved,
-  el('button', { type: 'submit', className: 'secondary' }, 'Save default Mode'));
+  modeField,
+  explained('pop-out', 'Pop out', popOut, POP_OUT_HELP),
+  el('button', { type: 'submit', className: 'e-btn e-btn--primary e-btn--block' }, 'Save default Mode'),
+  modeSaved);
   return settings;
 }

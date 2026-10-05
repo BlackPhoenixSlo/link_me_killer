@@ -38,24 +38,33 @@ import { openStats } from './stats.js';
 
 const TOKEN = 'ofl.token';
 const screen = document.getElementById('screen');
-const title = document.getElementById('title');
 export let account = null; // the signed-in users record, from the last sign-in or refresh
 
 // ---- PocketBase, through the proxy --------------------------------------------------------------------------------------
 
-// A FormData body (a Link with its stock icon) goes as it is, and the browser sets the multipart content type itself.
+// What a screen says when a call got no answer at all (offline, or the server down), and what Retry says by default.
+export const NO_ANSWER = 'The server did not answer. Check your connection, then try again.';
+
+// A FormData body (a Link with its stock icon) goes as it is, and the browser sets the multipart content type itself. A call
+// that gets no answer (fetch throws) is answered `{ ok: false, status: 0 }` with NO_ANSWER as its message, so every caller's
+// busy state ends and the screen says so.
 export async function api(path, { method = 'GET', body, keepalive = false } = {}) {
   const headers = {};
   const token = localStorage.getItem(TOKEN);
   if (token) headers.Authorization = token;
   const json = body !== undefined && !(body instanceof FormData);
   if (json) headers['content-type'] = 'application/json';
-  const res = await fetch(`/api/collections/${path}`, {
-    method,
-    headers,
-    body: json ? JSON.stringify(body) : body,
-    keepalive,
-  });
+  let res;
+  try {
+    res = await fetch(`/api/collections/${path}`, {
+      method,
+      headers,
+      body: json ? JSON.stringify(body) : body,
+      keepalive,
+    });
+  } catch {
+    return { ok: false, status: 0, data: { message: NO_ANSWER } };
+  }
   if (token && (await sessionEnded(res, token))) return expired();
   let data = {};
   try {
@@ -72,11 +81,16 @@ export async function upload(collection, recordId, field, file) {
   const form = new FormData();
   form.append('file', file);
   const token = localStorage.getItem(TOKEN) || '';
-  const res = await fetch(`/api/upload/${collection}/${recordId}/${field}`, {
-    method: 'POST',
-    headers: { Authorization: token },
-    body: form,
-  });
+  let res;
+  try {
+    res = await fetch(`/api/upload/${collection}/${recordId}/${field}`, {
+      method: 'POST',
+      headers: { Authorization: token },
+      body: form,
+    });
+  } catch {
+    return { error: NO_ANSWER };
+  }
   if (token && (await sessionEnded(res, token))) return expired();
   if (res.ok) return { error: null, url: (await res.json()).url };
   if (res.status === 413) return { error: 'That image is over 20 MB.' };
@@ -130,7 +144,7 @@ export async function refresh() {
   if (!localStorage.getItem(TOKEN)) return false;
   const res = await api('users/auth-refresh', { method: 'POST' });
   if (!res.ok) {
-    drawRetry(res.data.message || 'PocketBase did not answer.');
+    drawRetry(res.data.message);
     return new Promise(() => {});
   }
   signedIn(res.data);
@@ -150,24 +164,71 @@ export function el(tag, props = {}, ...children) {
   return node;
 }
 
+// Draws a screen: `heading` goes to the tab title (the top bar shows the wordmark alone), `children` into one `e-page` column in
+// <main>. A new screen starts at the top with the focus on its h1. A last argument `{ focus: false }` redraws the same screen in
+// place (a Stats filter or range tab): the scroll and the focus are left to the caller.
+let shown = location.pathname + location.search; // the address of the screen last drawn or being opened (route())
 export function render(heading, ...children) {
-  title.textContent = heading;
+  const last = children[children.length - 1];
+  const { focus = true } = last && Object.getPrototypeOf(last) === Object.prototype ? children.pop() : {};
   document.title = `${heading} · ofl.ink`;
-  screen.replaceChildren(el('section', { className: 'card' }, ...children));
+  shown = location.pathname + location.search;
+  screen.removeAttribute('aria-busy');
+  screen.replaceChildren(el('section', { className: 'e-page' }, ...children));
+  if (!focus) return;
+  window.scrollTo(0, 0);
+  const h1 = screen.querySelector('h1');
+  if (!h1) return;
+  h1.tabIndex = -1;
+  h1.focus({ preventScroll: true });
 }
 
+// A screen's status line, an empty line until say() fills it.
 export function message() {
-  return el('p', { className: 'message', role: 'status' });
+  return el('p', { className: 'e-msg', role: 'status' });
 }
 
+// `kind` is 'error' or 'ok'.
 export function say(node, text, kind = 'error') {
-  node.className = `message ${kind}`;
+  node.className = `e-msg e-msg--${kind}`;
   node.textContent = text;
+}
+
+// A titled card, one of the stacked sections of a screen.
+export function card(heading, ...children) {
+  return el('section', { className: 'e-card' }, el('h2', { className: 'e-card__title' }, heading), ...children);
+}
+
+// A screen's h1. render() gives it tabindex -1 and the focus.
+export const pageTitle = (text) => el('h1', { className: 'e-page__title' }, text);
+
+// An icon from editor.css, decoration only.
+export const icon = (name) => el('span', { className: `e-icon e-icon--${name}`, 'aria-hidden': 'true' });
+
+// The Onboarding step line: plain text, never a status, over a track the stylesheet fills to n/5 from `--e-step`.
+export const steps = (n) => el('p', { className: 'e-steps', style: `--e-step: ${n}` }, `Step ${n} of 5`,
+  el('span', { className: 'e-steps__track', 'aria-hidden': 'true' }));
+
+// One labelled field (`e-field`): the label names `control` alone. A `hint` shows under it, tied to it by aria-describedby
+// (id `{id}-help`), so its words never join the control's accessible name; a `prefix` ("{host}/", "@") shows inside the
+// field's left edge, hidden from assistive technology.
+export function field(id, label, control, { hint = '', prefix = '' } = {}) {
+  control.id = id;
+  const shown = prefix
+    ? el('div', { className: 'e-prefix' }, el('span', { className: 'e-prefix__text', 'aria-hidden': 'true' }, prefix), control)
+    : control;
+  const node = el('div', { className: 'e-field' }, el('label', { className: 'e-field__label', htmlFor: id }, label), shown);
+  if (hint) {
+    control.setAttribute('aria-describedby', `${id}-help`);
+    node.append(el('p', { className: 'e-field__hint', id: `${id}-help` }, hint));
+  }
+  return node;
 }
 
 // The Username field lowercases what is typed, keeping the caret where it was.
 export function usernameInput(value = '') {
   const input = el('input', {
+    className: 'e-input',
     name: 'username',
     value,
     required: true,
@@ -184,10 +245,6 @@ export function usernameInput(value = '') {
     input.setSelectionRange(selectionStart, selectionEnd);
   });
   return input;
-}
-
-export function addressField(input) {
-  return el('label', {}, 'Username', el('div', { className: 'address' }, el('span', {}, `${location.host}/`), input));
 }
 
 // PocketBase's per-field refusals as one line each, e.g. "Password: Must be at least 8 character(s)."
@@ -263,14 +320,14 @@ export async function onboard() {
 // or the first Onboarding step that applies and returns nothing. Its callers hold the fresh token onboard() needs.
 export async function onboarded() {
   const res = await api('profiles/records?perPage=1');
-  if (!res.ok) return drawRetry(res.data.message || 'PocketBase did not answer.');
+  if (!res.ok) return drawRetry(res.data.message);
   const profile = res.data.items[0];
   if (!profile) return show('/edit/claim', () => drawClaim());
   if (!account.verified) return show('/edit/verify-email', drawVerify);
   if (!profile.displayName) return show('/edit/profile', () => drawProfileStep(profile));
   const links = await linksOf(profile);
-  if (!links.ok) return drawRetry(links.data.message || 'PocketBase did not answer.');
-  if (!links.data.items.length) return show('/edit/first-link', () => drawLinkForm(profile, []));
+  if (!links.ok) return drawRetry(links.data.message);
+  if (!links.data.items.length) return show('/edit/first-link', () => drawLinkForm(profile, [], { onboarding: true }));
   return { profile, links: links.data.items };
 }
 
@@ -281,6 +338,7 @@ export function linksOf(profile) {
 }
 
 export async function route() {
+  shown = location.pathname + location.search; // so a Back pressed while this screen loads is not taken for an in-page jump
   const path = location.pathname.replace(/\/+$/, '');
   if (path === '/edit/signup') return drawSignup();
   if (path === '/edit/login') return drawLogin();
@@ -293,19 +351,39 @@ export async function route() {
 }
 
 // The creator-only area's navigation: the Editor and, next to it, Stats. The entry for `current` is marked as the page shown.
+// A floating tab bar at the foot of a phone, a left sidebar from 1024px (editor.css); the icons are aria-hidden, so each link is
+// named by its label alone.
 export function creatorNav(current) {
-  const entry = (text, path) => {
+  const entry = (text, path, name) => {
     const a = link(text, path);
+    a.className = 'e-nav__item';
+    const mark = icon(name);
+    mark.classList.add('e-nav__icon');
+    a.replaceChildren(mark, el('span', { className: 'e-nav__label' }, text));
     if (path === current) a.setAttribute('aria-current', 'page');
     return a;
   };
-  return el('nav', { className: 'creator-nav', 'aria-label': 'Creator' }, entry('Editor', '/edit'), entry('Stats', '/edit/stats'));
+  return el('nav', { className: 'e-nav', 'aria-label': 'Creator' }, entry('Editor', '/edit', 'edit'), entry('Stats', '/edit/stats', 'stats'));
 }
 
 // ---- Shared by the screens ----------------------------------------------------------------------------------------------
 
+// While a request runs, the form says so with aria-busy (which shows its primary button's spinner) and its controls, those
+// tied to it by a `form` attribute included, are disabled. Disabling the focused control sends the focus to the page, so once
+// the request is over it goes back to that control, if it is still on the screen and enabled.
+const hadFocus = new WeakMap();
 export function submitting(form, busy) {
-  for (const control of form.elements) control.disabled = busy;
+  const controls = [...form.elements];
+  if (busy && controls.includes(document.activeElement)) hadFocus.set(form, document.activeElement);
+  for (const control of controls) control.disabled = busy;
+  if (busy) {
+    form.setAttribute('aria-busy', 'true');
+    return;
+  }
+  form.removeAttribute('aria-busy');
+  const back = hadFocus.get(form);
+  hadFocus.delete(form);
+  if (back && back.isConnected && !back.disabled) back.focus();
 }
 
 const IMAGE_TYPES = 'image/jpeg,image/png,image/heic,image/heif,image/gif,image/webp,.heic,.heif';
@@ -326,25 +404,25 @@ export const ICONS = [
 export const address = (profile) => `${location.origin}/${profile.username}`;
 
 export function fileInput(name) {
-  return el('input', { type: 'file', name, accept: IMAGE_TYPES });
+  return el('input', { type: 'file', className: 'e-file', name, accept: IMAGE_TYPES });
 }
 
 export function select(name, options, value = '') {
-  const node = el('select', { name }, ...options.map(([v, text]) => el('option', { value: v }, text)));
+  const node = el('select', { className: 'e-select', name }, ...options.map(([v, text]) => el('option', { value: v }, text)));
   node.value = value;
   return node;
 }
 
 export function check(name, text, checked = false) {
-  const box = el('input', { type: 'checkbox', name, checked });
-  return { box, row: el('label', { className: 'check' }, box, text) };
+  const box = el('input', { type: 'checkbox', className: 'e-switch__input', role: 'switch', name, checked });
+  return { box, row: el('label', { className: 'e-switch' }, box, el('span', { className: 'e-switch__text' }, text)) };
 }
 
 // Copies the address, saying whether it worked.
 export function copyButton(text, status) {
   return el('button', {
     type: 'button',
-    className: 'secondary',
+    className: 'e-btn e-btn--secondary',
     onclick: async () => {
       try {
         await navigator.clipboard.writeText(text);
@@ -364,5 +442,9 @@ export function logOut() {
   show('/edit/login', drawLogin);
 }
 
-window.addEventListener('popstate', route);
+// Back and Forward redraw the screen of the address they reach. A jump link inside a screen (`#…`) also fires popstate, but its
+// address is the screen already shown, which stays as it is.
+window.addEventListener('popstate', () => {
+  if (location.pathname + location.search !== shown) route();
+});
 route();
