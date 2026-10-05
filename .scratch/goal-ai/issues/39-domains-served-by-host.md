@@ -4,7 +4,7 @@ Spec: docs/spec/phase-05-cutover-and-domains.md
 Covers: user stories 22, 23, 24, 29, 31, 32, 33, 34, 36, 40, 41, 43, 45
 Seams: the Playwright spec `05-domains` against the local stack at the existing baseURL through `./check.sh`. Chromium maps `*.test` to loopback, so host-routing checks go through `page` with real `creator.test:4173` and `spare.test:4173` Host headers over plain HTTP; TLS Ask checks go through `request` at the baseURL with `?domain=`. Set-up and tear-down as a superuser through PocketBase's REST API (set-up, not a second seam); the Creator's writes through the API the Editor uses
 Blocked by: 22: Reveal and /r answer only v2's own origin within a per-client limit, 30: Only a Profile's owner and the Operator can read or change it through PocketBase's API
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T14:40:50Z
 
 **What to build:** The Operator types a domain into a Profile, or lists a Spare Domain, in the PocketBase admin UI, and on the next page load that hostname works with no deploy and no Caddy edit.
 - **Host Resolution.** The app turns the request's Host header into one of four kinds, checked in this order: ofl.ink's own hosts (the primary-hosts setting, no database), a listed Spare Domain, a Profile's Custom Domain, anything else. Hostnames are lower-cased and lose any port and trailing dot, and matching is exact. Every non-primary request asks PocketBase; there is no cache.
