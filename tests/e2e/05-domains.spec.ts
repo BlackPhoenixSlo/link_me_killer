@@ -1,13 +1,18 @@
-import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Browser, type Page, type Request } from '@playwright/test';
 import { join } from 'node:path';
 import {
-  account, asSuperuser, createOwnerlessProfile, fresh, only, onLocalStack, operator, phoneContext, proxy, recordIds, superuserToken, verifiedCreator,
+  account, asSuperuser, createOwnerlessProfile, escapeOverlay, eventCount, fresh, intents, only, onLocalStack, operator, phoneContext, proxy,
+  recordIds, recordNavigations, superuserToken, UA, verifiedCreator, xSafari,
 } from './helpers';
 
 // Phase 5 (docs/spec/phase-05-cutover-and-domains.md, Testing Decisions): one seam, this spec against the local stack at the
 // baseURL. Chromium maps `*.test` to loopback, so host-routing checks go through `page` with real `creator.test:4173` and
 // `spare.test:4173` Host headers over plain HTTP; TLS Ask checks go through `request` at the baseURL with `?domain=`.
 // Ticket 39: Host Resolution, the paths per host, the TLS Ask, the Profile page bootstrap and the Domains schema.
+// Ticket 40: on every host each Mode, the Age Gate, Reveal, Escape and the Escape Overlay behave as on the baseURL, Events are
+// credited to the resolved Profile, nothing is requested from another of ofl.ink's hosts, and Reveal refuses another origin.
+// Escapes are captured with Phase 1's navigation recorder and User-Agents (helpers.ts); a Destination a page navigates
+// to is fulfilled with a harmless page, and a redirect hop after `/r`, which no route sees, is stopped by the network guard.
 // Set-up, not a second seam: `beforeAll` gives the Fixture Profile the Custom Domain `creator.test` and lists the Spare Domain
 // `spare.test` as a superuser through PocketBase's REST API; `afterAll` removes both. `unknown.test` is never added, and the
 // seed is unchanged.
@@ -223,4 +228,277 @@ async function bootstrapAt(browser: Browser, origin: string, path: string) {
 test('the Profile page bootstrap carries the path\'s segments literally, `$` patterns included', async ({ browser }) => {
   expect(await bootstrapAt(browser, at('localhost'), "/$'x/$$"), 'the block on localhost').toEqual({ username: "$'x", trackingCode: '$$', profilePath: "/$'x" });
   expect(await bootstrapAt(browser, at(CUSTOM), "/$'$$"), `the block on ${CUSTOM}`).toEqual({ username: 'fixture', trackingCode: "$'$$", profilePath: '/' });
+});
+
+// ---- Ticket 40: every host behaves as the baseURL ---------------------------------------------------------------------------
+
+const REVEAL = '/.netlify/functions/reveal';
+const CODES = ['111', '222'];
+const HOSTS = [CUSTOM, SPARE, 'localhost'];
+// The Fixture Profile with Tracking Code `code` on `host`: `/{code}` on its Custom Domain, `/{username}/{code}` elsewhere.
+const codedPath = (host: string, code: string) => (host === CUSTOM ? `/${code}` : `/fixture/${code}`);
+const card = (visitor: Page, title: string) => visitor.locator('.link-card', { hasText: title });
+const STUB = '<!DOCTYPE html><title>Stub</title><h1>Stub Destination</h1>';
+
+// `act` sends the page off `origin` to a Destination. A fresh navigation there (after a Reveal) is fulfilled with a harmless page;
+// a redirect hop after `/r`, which no route sees, is stopped by the network guard. Returns that navigation's request: callers
+// compare its URL, a Destination, and never print it.
+async function onward(visitor: Page, origin: string, act: () => Promise<unknown>) {
+  await visitor.route((url) => url.origin !== origin, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: STUB }));
+  const left = visitor.waitForEvent('request', (req) => req.isNavigationRequest() && new URL(req.url()).origin !== origin);
+  await act();
+  return left;
+}
+
+// The Visitor taps the Adult Link, sees the Age Gate and taps "Continue (18+)". helpers.ts's passAgeGate does not fit here: it
+// needs the Destination up front and re-sends Reveal from Playwright, whose own requests cannot resolve `.test` names.
+async function tapThroughAgeGate(visitor: Page, where: string) {
+  await card(visitor, 'Adult Link').click();
+  await expect(visitor.getByRole('heading', { name: 'Mature Content Disclaimer' }), `the Age Gate for ${where}`).toBeVisible();
+  await visitor.getByRole('button', { name: 'Continue (18+)' }).click();
+}
+const revealAnswer = (visitor: Page) => visitor.waitForResponse((res) => new URL(res.url()).pathname === REVEAL);
+
+test('with Tracking Codes 111 and 222 on every host, the Adult Link\'s Age Gate sends Reveal to the page\'s own host, which answers 200 with a Destination ending in /c{code}', async ({ browser, request }) => {
+  test.setTimeout(120_000); // six page loads
+  const linkId = await fixtureLinkId(request, 'Adult Link');
+  for (const code of CODES) {
+    for (const host of HOSTS) {
+      const origin = at(host);
+      const where = `Link ${linkId} on ${host}${codedPath(host, code)}`;
+      const visitor = await visit(browser, origin, codedPath(host, code));
+      await showsFixture(visitor, where);
+      const reveal = revealAnswer(visitor);
+      const destination = await onward(visitor, origin, () => tapThroughAgeGate(visitor, where));
+      const answered = await reveal;
+      expect(new URL(answered.url()).origin, `the host the Reveal for ${where} went to`).toBe(origin);
+      expect(new URL(answered.url()).searchParams.get('trackingId'), `the Tracking Code the Reveal for ${where} carried`).toBe(code);
+      expect(answered.status(), `the Reveal for ${where}`).toBe(200);
+      expect(destination.url().endsWith(`/c${code}`), `the Destination for ${where} ends in /c${code}`).toBe(true);
+      await visitor.context().close();
+    }
+  }
+});
+
+// The Fixture Link with public Link Id `linkId` as the Operator reads it: its record id and stored Mode, and nothing else, so no
+// Destination reaches the test.
+async function storedLink(linkId: string): Promise<{ id: string; mode: string }> {
+  const query = `fields=id,mode&filter=${encodeURIComponent(`linkId='${linkId}'`)}`;
+  const found = await (await asSuperuser(await superuserToken(), `/api/collections/links/records?${query}`)).json();
+  expect(found.items, `the stored Link ${linkId}`).toHaveLength(1);
+  return found.items[0];
+}
+
+// The Deeplink Link's Mode is set to Deeplink Mode as the Operator would in the admin UI, and restored in `finally`.
+// ASSUMPTION: the seed already stores the Deeplink Link in Deeplink Mode (01-link-modes-and-escape finds it served so), so the
+// set-up writes the value it holds and changes nothing other specs read while they run (rung 2: the ticket sets the Mode in the
+// REST set-up; rung 4: no shared Link changes Mode mid-run). Overturned if the seed stops storing it; the write then matters.
+test('on every host the Direct Mode Link and the Deeplink Mode Link each end at the same Destination, through `/r` and Reveal on the page\'s own host', async ({ browser, request }) => {
+  test.setTimeout(120_000); // six page loads
+  const deeplink = await fixtureLinkId(request, 'Deeplink Link');
+  const stored = await storedLink(deeplink);
+  try {
+    expect(await operator('PATCH', `/api/collections/links/records/${stored.id}`, { mode: 'deeplink' }), `Link ${deeplink} set to Deeplink Mode`).toBe(200);
+    for (const title of ['Direct Link', 'Deeplink Link']) {
+      const linkId = await fixtureLinkId(request, title);
+      const ends: string[] = [];
+      for (const host of HOSTS) {
+        const origin = at(host);
+        const where = `Link ${linkId} on ${host}${codedPath(host, '111')}`;
+        const visitor = await visit(browser, origin, codedPath(host, '111'));
+        await showsFixture(visitor, where);
+        const reveals: URL[] = [];
+        visitor.on('request', (req) => { if (new URL(req.url()).pathname === REVEAL) reveals.push(new URL(req.url())); });
+        const left = await onward(visitor, origin, () => card(visitor, title).click());
+        // Direct Mode reaches its Destination through `/r` on the page's own host; Deeplink Mode through Reveal there.
+        if (title === 'Direct Link') {
+          expect(left.redirectedFrom()?.url(), `the Click route ${where} went through`).toBe(`${origin}/r/${linkId}`);
+          expect(reveals, `Reveal requests for ${where}`).toEqual([]);
+        } else {
+          expect(reveals.map((url) => `${url.origin} ${url.searchParams.get('id')}`), `the Reveal for ${where}`).toEqual([`${origin} ${linkId}`]);
+        }
+        ends.push(left.url());
+        await visitor.context().close();
+      }
+      expect(ends.every((end) => end === ends[0]), `Link ${linkId} ends at one Destination on ${HOSTS.join(', ')}`).toBe(true);
+      expect(HOSTS.some((host) => new URL(ends[0]).host === `${host}:${PORT}`), `Link ${linkId}'s Destination on one of ofl.ink's hosts`).toBe(false);
+    }
+  } finally {
+    expect(await operator('PATCH', `/api/collections/links/records/${stored.id}`, { mode: stored.mode }), `Link ${deeplink}'s Mode restored`).toBe(200);
+  }
+});
+
+// Is the Escape Overlay showing once the Fixture Profile's Links have rendered at `origin` + `path` with an iOS Instagram
+// User-Agent? `mode`, when given, replaces the Profile's default Mode in the Profile JSON the page receives, as the app serves
+// it for that host (fetched at the baseURL under that host's Host header, which Caddy passes on; observed to give that host's
+// `/r` urls; the ASSUMPTION above the cross-origin Reveal test covers this use of `request`), so the page sees the other default
+// without any shared record changing.
+// ASSUMPTION: "exactly when" is proven both ways, shown with the stored Escape Mode default and hidden with a Direct one, the
+// second through an in-flight Profile JSON as Phase 1's serveVariant does (rung 3), not by changing the Fixture's stored default,
+// which specs running beside this one read (rung 4). Overturned if the parity must be shown on stored data; the default is then
+// changed in REST set-up and restored in `finally`, with the specs that read it kept apart.
+async function overlayShows(browser: Browser, request: APIRequestContext, origin: string, path: string, mode?: string) {
+  const context = await phoneContext(browser, { origin, userAgent: UA.iosInstagram });
+  const visitor = await context.newPage();
+  if (mode) {
+    const served = await (await request.get('/api/profiles/fixture.json', { headers: { host: new URL(origin).host } })).json();
+    served.profile.mode = mode;
+    await visitor.route(`${origin}/api/profiles/fixture.json`, (route) => route.fulfill({ json: served }));
+  }
+  await visitor.goto(origin + path);
+  await showsFixture(visitor, `${origin}${path}`);
+  const shows = await escapeOverlay(visitor).isVisible();
+  await context.close();
+  return shows;
+}
+
+test('with an iOS Instagram User-Agent, creator.test/ shows the Escape Overlay exactly when localhost/{username} does', async ({ browser, request }) => {
+  const shown: boolean[] = [];
+  for (const mode of [undefined, 'direct']) {
+    const onCustom = await overlayShows(browser, request, at(CUSTOM), '/', mode);
+    const onBase = await overlayShows(browser, request, at('localhost'), '/fixture', mode);
+    expect(onCustom, `the Escape Overlay on ${CUSTOM}/ beside localhost/fixture, Profile default ${mode ?? 'as stored'}`).toBe(onBase);
+    shown.push(onBase);
+  }
+  // Both outcomes occur, so the parity above is not vacuous: shown with the stored Escape Mode default, hidden with Direct.
+  expect(shown, 'the Escape Overlay with the stored default, then with Direct Mode').toEqual([true, false]);
+});
+
+// The one Escape a tap on the Escape Link fires at `origin` + `path` with `userAgent`, after closing the Escape Overlay the Profile's
+// Escape Mode default shows on load: an `x-safari-` or `intent://` URL, as Phase 1 captures it.
+async function escapeFired(browser: Browser, origin: string, path: string, userAgent: string) {
+  const context = await phoneContext(browser, { origin, userAgent });
+  const visitor = await context.newPage();
+  const navigations = await recordNavigations(visitor);
+  await visitor.goto(origin + path);
+  await showsFixture(visitor, `${origin}${path}`);
+  await escapeOverlay(visitor).getByRole('button', { name: 'Close' }).click();
+  await card(visitor, 'Escape Link').click();
+  const fired = () => [...xSafari(navigations), ...intents(navigations)];
+  await expect.poll(fired, `the Escapes fired on ${origin}${path}`).toHaveLength(1);
+  await context.close();
+  return fired()[0];
+}
+
+test('an Escape from creator.test/{code} targets creator.test and /{code}, with no Username segment, on iOS and as the Android intent', async ({ browser, request }) => {
+  const linkId = await fixtureLinkId(request, 'Escape Link');
+  const target = `https://${CUSTOM}:${PORT}/111?link=${linkId}`; // the escape target, spelled out as the Phase 1 spec spells it
+  expect(await escapeFired(browser, at(CUSTOM), '/111', UA.iosInstagram), `the iOS Escape for Link ${linkId} on ${CUSTOM}/111`)
+    .toBe(`x-safari-${target}`);
+  expect(await escapeFired(browser, at(CUSTOM), '/111', UA.androidInstagram), `the Android Escape for Link ${linkId} on ${CUSTOM}/111`)
+    .toBe(`intent://${CUSTOM}:${PORT}/111?link=${linkId}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(target)};end`);
+});
+
+test('an Escape from spare.test/{username}/{code} keeps /{username}/{code}', async ({ browser, request }) => {
+  const linkId = await fixtureLinkId(request, 'Escape Link');
+  expect(await escapeFired(browser, at(SPARE), '/fixture/222', UA.iosInstagram), `the iOS Escape for Link ${linkId} on ${SPARE}/fixture/222`)
+    .toBe(`x-safari-https://${SPARE}:${PORT}/fixture/222?link=${linkId}`);
+});
+
+// Events this spec's Visitors make carry their own country, which no other spec sends, so other workers' Fixture traffic is left
+// out of the counts.
+const MARKER = 'ZD';
+
+test('loading creator.test/ adds one Page View Event, and the Adult Link\'s Reveal on creator.test/{code} one Click Event, both for the Fixture Profile', async ({ browser, request }) => {
+  const { profileId } = await recordIds('fixture');
+  const linkId = await fixtureLinkId(request, 'Adult Link');
+  const adult = await storedLink(linkId);
+  const views = () => eventCount(`profile='${profileId}' && kind='page_view' && country='${MARKER}'`);
+  const clicks = () => eventCount(`profile='${profileId}' && kind='click' && link='${adult.id}' && country='${MARKER}'`);
+  const custom = at(CUSTOM);
+  const countedVisit = async (path: string) => {
+    const context = await phoneContext(browser, { origin: custom, headers: { 'CF-IPCountry': MARKER } });
+    const visitor = await context.newPage();
+    const ping = visitor.waitForRequest((req) => req.method() === 'POST' && new URL(req.url()).pathname === '/v/fixture');
+    await visitor.goto(custom + path);
+    const pinged = await ping;
+    expect(new URL(pinged.url()).origin, `the host the Page View Ping on ${CUSTOM}${path} went to`).toBe(custom);
+    expect((await pinged.response())?.status(), `the Page View Ping on ${CUSTOM}${path}`).toBe(204);
+    return visitor;
+  };
+
+  const viewsBefore = await views();
+  await (await countedVisit('/')).context().close();
+  await expect.poll(views, `the Fixture Profile's Page View Events after loading ${CUSTOM}/`).toBe(viewsBefore + 1);
+
+  const clicksBefore = await clicks();
+  const visitor = await countedVisit('/111');
+  const where = `Link ${linkId} on ${CUSTOM}/111`;
+  const reveal = revealAnswer(visitor);
+  await onward(visitor, custom, () => tapThroughAgeGate(visitor, where));
+  expect((await reveal).status(), `the Reveal for ${where}`).toBe(200);
+  await visitor.context().close();
+  await expect.poll(clicks, `the Fixture Profile's Click Events for ${where}`).toBe(clicksBefore + 1);
+});
+
+test('on creator.test and spare.test the page requests nothing from another of ofl.ink\'s hosts, and no request URL names ofl.ink', async ({ browser, request }) => {
+  const linkId = await fixtureLinkId(request, 'Adult Link');
+  const cases: [string, string, string[]][] = [
+    [CUSTOM, '/111', [`localhost:${PORT}`, `${SPARE}:${PORT}`]],
+    [SPARE, '/fixture/111', [`localhost:${PORT}`, `${CUSTOM}:${PORT}`]],
+  ];
+  for (const [host, path, others] of cases) {
+    const origin = at(host);
+    const where = `Link ${linkId} on ${host}${path}`;
+    const context = await phoneContext(browser, { origin });
+    const sent: Request[] = [];
+    context.on('request', (req) => sent.push(req));
+    const visitor = await context.newPage();
+    await visitor.goto(origin + path);
+    await showsFixture(visitor, where);
+    await visitor.waitForLoadState('networkidle'); // the Page View Ping, sent once the Links render, is among the requests
+    const reveal = revealAnswer(visitor);
+    const destination = await onward(visitor, origin, () => tapThroughAgeGate(visitor, where));
+    expect((await reveal).status(), `the Reveal for ${where}`).toBe(200);
+    await context.close();
+    // The Destination the Reveal handed out is the Creator's, not one of ofl.ink's hosts, and is left out so no message prints it.
+    const urls = sent.filter((req) => req !== destination).map((req) => new URL(req.url()));
+    const ownPaths = urls.filter((url) => url.origin === origin).map((url) => url.pathname);
+    expect(urls.filter((url) => others.includes(url.host)).map(String), `requests to another of ofl.ink's hosts for ${where}`).toEqual([]);
+    expect(urls.filter((url) => url.href.includes('ofl.ink')).map(String), `request URLs naming ofl.ink for ${where}`).toEqual([]);
+    // The page's own calls are all there, so the two checks above looked at a page that did its work.
+    expect(ownPaths, `the page's own requests for ${where}`).toEqual(expect.arrayContaining([path, '/script.js', '/api/profiles/fixture.json', '/v/fixture', REVEAL]));
+  }
+});
+
+// The page's `fetch` of Reveal on spare.test, once in its default CORS mode and once as `no-cors`: the first is refused (Reveal
+// sends no CORS header, and answers the call's foreign Origin 403 besides, checked below with that Origin sent at the baseURL under
+// spare.test's Host, since Playwright's own requests cannot resolve `.test` names), the second comes back opaque, and that opaque
+// answer is what shows the call reached spare.test: a no-cors fetch that gets no response rejects with TypeError instead.
+// Observed: spare.test answers that no-cors call 200, so over plain HTTP Chromium sent it with neither a foreign Origin nor a
+// cross-site Sec-Fetch-Site, the Click guard's "neither header: true" (app/src/click-guard.js, ticket 22) let it through and
+// Reveal recorded a Click; the page still reads nothing. Over HTTPS, Fetch Metadata has the browser send `Sec-Fetch-Site:
+// cross-site`, which the guard answers 403 (not observable here: the local loop has no TLS).
+// ASSUMPTION: "cannot be read by the page" is the bar, met by both modes, and the header-less no-cors call is ticket 22's guard as
+// it stands on every host, not this ticket's to close (rung 2: box 8's wording; rung 4: no change to the shared guard). Overturned
+// if Reveal must refuse a header-less cross-origin call; the guard then needs another signal, such as Referer.
+// ASSUMPTION: the refusal of spare.test's Reveal to creator.test's Origin is checked through `request` at the baseURL with a
+// `.test` Host header, and overlayShows fetches its variant Profile JSON the same way; both depart from Testing Decisions' "host-
+// routing checks go through page" (rung 1: the page cannot see the status of a CORS-refused call, observed as Playwright's
+// requestfailed `net::ERR_FAILED` with no response and no response event; route.fetch cannot resolve `.test`). Overturned if
+// Playwright starts reporting a CORS-refused response to the page; the 403 is then asserted on the page's own call.
+test('a fetch from a page on creator.test to Reveal on spare.test cannot be read by the page', async ({ browser, request }) => {
+  const linkId = await fixtureLinkId(request, 'Adult Link');
+  // No fence: the page must reach spare.test. The network guard still keeps every other host off the machine.
+  const context = await phoneContext(browser);
+  const visitor = await context.newPage();
+  await visitor.goto(`${at(CUSTOM)}/`);
+  await showsFixture(visitor, `${CUSTOM}/`);
+  const target = `${at(SPARE)}${REVEAL}?id=${linkId}&user=fixture&trackingId=111`;
+  // Only what the page could read comes back: the error's name, or the answer's type, status and body length, never a body,
+  // which could hold a Destination.
+  const pageReads = (mode: 'cors' | 'no-cors') => visitor.evaluate(async ([url, m]) => {
+    try {
+      const res = await fetch(url, { mode: m });
+      return `${res.type} ${res.status} ${(await res.text()).length}`;
+    } catch (error) {
+      return `refused: ${(error as Error).name}`;
+    }
+  }, [target, mode] as const);
+  const where = `the page on ${CUSTOM} reading Reveal on ${SPARE} for Link ${linkId}`;
+  expect(await pageReads('cors'), `${where}, in CORS mode`).toBe('refused: TypeError');
+  expect(await pageReads('no-cors'), `${where}, as no-cors`).toBe('opaque 0 0');
+  const foreign = await request.get(`${REVEAL}?id=${linkId}&user=fixture`, { headers: { host: `${SPARE}:${PORT}`, origin: at(CUSTOM) } });
+  expect(foreign.status(), `${SPARE}'s answer to Reveal for Link ${linkId} with Origin ${at(CUSTOM)}`).toBe(403);
+  await context.close();
 });

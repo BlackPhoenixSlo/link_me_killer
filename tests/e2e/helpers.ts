@@ -1,15 +1,16 @@
-import { expect, type APIRequestContext, type APIResponse, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
+import { devices, expect, type APIRequestContext, type APIResponse, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 
-// Plumbing for tests/e2e/03-auth-and-editor.spec.ts (and, from ticket 33, the Operator and log-in steps tests/e2e/04-stats.spec.ts imports) that is not itself a test: the Operator steps, an in-memory PNG and (moved
-// here by ticket 29) the Creator, Visitor and proxy drivers the spec's tests share; from ticket 36 also 02-reveal-guard's flood,
-// callsTo429, which 04-stats floods the Page View Ping with. Not a
-// spec file (Playwright's default testMatch skips it), so the Phase 3 suite stays one spec (docs/spec/phase-03-auth-and-editor.md,
-// Testing Decisions).
-// ASSUMPTION: a helper module beside the spec rather than more lines in it; 04-stats and 02-reveal-guard import from it too
+// Plumbing that is not itself a test: Phase 3's plumbing for tests/e2e/03-auth-and-editor.spec.ts (the Operator steps, an
+// in-memory PNG and, moved here by ticket 29, the Creator, Visitor and proxy drivers its tests share), plus the drivers that more
+// than one spec of Phases 1-4 shares: 02-reveal-guard's flood callsTo429 (ticket 36), 04-stats's eventCount and Phase 1's
+// In-App Browser User-Agents and navigation recorder (ticket 40). 01, 02-reveal-guard, 03, 04 and 05-domains import it; Phase 5's
+// own plumbing lives in domains-helpers.ts. Not a spec file (Playwright's default testMatch skips it), so the Phase 3 suite stays
+// one spec (docs/spec/phase-03-auth-and-editor.md, Testing Decisions).
+// ASSUMPTION: a helper module beside the spec rather than more lines in it; the specs named above import from it too
 // (rung 5: the one spec file stays under 1000 lines without dropping a test). Overturned if helpers must live in the spec.
 const ROOT = join(__dirname, '..', '..');
 
@@ -405,6 +406,15 @@ export async function recordIds(username: string) {
   return { profileId: profile.id as string, linkIds: links.items.map((l: { id: string }) => l.id) as string[] };
 }
 
+// How many Events `filter` finds, as the Operator reads them in PocketBase's admin UI (moved here from 04-stats by ticket 40, which
+// counts Events on a Custom Domain with it). An Event holds no Destination (Phase 4 spec, Schema).
+// ASSUMPTION: the first Phase 4 driver here: a driver two specs share lives in helpers.ts, as ticket 36's callsTo429 does
+// (rung 3). Overturned if Phase 4 drivers must stay in 04-stats.
+export async function eventCount(filter: string): Promise<number> {
+  const query = `perPage=1&filter=${encodeURIComponent(filter)}`;
+  return (await (await asSuperuser(await superuserToken(), `/api/collections/events/records?${query}`)).json()).totalItems;
+}
+
 // ---- Ticket 22's flood, shared with ticket 36's Page View Ping ---------------------------------------------------------------
 
 // Sends up to the Reveal limit (tests/e2e.env) + 1 calls and answers how many it took to meet the first 429, or 0 if none came;
@@ -425,3 +435,61 @@ export async function callsTo429(send: (i: number) => Promise<APIResponse>, answ
   }
   return 0;
 }
+
+// ---- Phase 1's In-App Browsers, shared by 01 and 05-domains (moved here from 01 by ticket 40) ----------------------------------
+// Playwright refuses a spec that imports another spec ("test file ... should not import test file ...", observed), so 05-domains
+// captures an Escape the way Phase 1 does through this module.
+
+// In-App Browsers and System Browsers (Phase 1 spec, plan section 7): User-Agents per describe.
+export const UA = {
+  iosInstagram:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+    'Mobile/15E148 Instagram 300.0.0.0.0 (iPhone14,2; iOS 17_0; en_US; en-US; scale=3.00; 1170x2532; 0)',
+  androidInstagram:
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 ' +
+    'Chrome/120.0.0.0 Mobile Safari/537.36 Instagram 300.0.0.0.0 Android (34/14; 420dpi; 1080x2400; Google; Pixel 8)',
+  fban:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+    'Mobile/15E148 [FBAN/FBIOS;FBAV/440.0.0.0;FBBV/1;FBDV/iPhone14,2;FBMD/iPhone;FBSN/iOS;FBSV/17.0;FBSS/3;FBCR/;FBID/phone;FBLC/en_US;FBOP/5]',
+  tiktok:
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 ' +
+    'Chrome/120.0.0.0 Mobile Safari/537.36 TikTok 33.0.0 BytedanceWebview/d8a21c6',
+  iosSafari:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+    'Version/17.0 Mobile/15E148 Safari/604.1',
+  desktopInstagram: devices['Desktop Chrome'].userAgent + ' Instagram 300.0.0.0.0',
+  androidChrome:
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+    'Chrome/120.0.0.0 Mobile Safari/537.36',
+};
+
+// Navigation recorder: the destination of every Navigation API navigate event on `page`, x-safari- and other app schemes
+// included. The page stays put on those schemes, so nothing leaves the machine.
+// Same-task mark: a capture-phase click listener sets a flag that a zero-delay timer clears, so a navigation started after any
+// request or other wait following the tap is not marked (Phase 1, story 15).
+export type Navigation = { url: string; inTapTask: boolean };
+type Recording = Window & { navigation: EventTarget; __recordNavigation: (url: string, inTapTask: boolean) => void };
+type NavigateEvent = Event & { destination: { url: string } };
+export async function recordNavigations(page: Page) {
+  const destinations: Navigation[] = [];
+  await page.exposeFunction('__recordNavigation', (url: string, inTapTask: boolean) => {
+    destinations.push({ url, inTapTask });
+  });
+  await page.addInitScript(() => {
+    const w = window as Recording;
+    let inTapTask = false;
+    w.addEventListener('click', () => {
+      inTapTask = true;
+      setTimeout(() => { inTapTask = false; }, 0);
+    }, true);
+    w.navigation.addEventListener('navigate', (event) => {
+      w.__recordNavigation((event as NavigateEvent).destination.url, inTapTask);
+    });
+  });
+  return destinations;
+}
+export const xSafari = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('x-safari-'));
+export const intents = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('intent:'));
+
+// The Escape Overlay.
+export const escapeOverlay = (page: Page) => page.locator('#igOverlay');

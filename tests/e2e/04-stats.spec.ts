@@ -2,7 +2,7 @@ import { devices, expect, request as playwrightRequest, test, type APIRequestCon
 import { join } from 'node:path';
 import { CREATORS } from '../stats-seed';
 import {
-  asSuperuser, callsTo429, createOwnerlessProfile, ENV, heading, INSTAGRAM_UA, logIn, only, onLocalStack, operator, phoneContext, proxy, recordIds, refused, superuserToken,
+  asSuperuser, callsTo429, createOwnerlessProfile, ENV, eventCount, heading, INSTAGRAM_UA, logIn, only, onLocalStack, operator, phoneContext, proxy, recordIds, refused, superuserToken,
 } from './helpers';
 import { withoutBootstrap } from './domains-helpers';
 
@@ -171,19 +171,14 @@ const rise = (was: Record<string, number>, now: Record<string, number>) => Objec
 // CTR as the spec defines it: Clicks ÷ Page Views as a percentage with one decimal, or "—" with no Page Views.
 const ctr = (clicks: number, views: number) => (views ? `${((clicks / views) * 100).toFixed(1)}%` : '—');
 
-// The Operator in PocketBase's admin UI: the newest Event of the Profile at `username`, a count of Events, and the events
-// collection's field names.
+// The Operator in PocketBase's admin UI: the newest Event of the Profile at `username` and the events collection's field names;
+// a count of Events is helpers.ts's eventCount, which 05-domains shares.
 // An Event holds no Destination (spec, Schema), so its record may reach the test.
 async function newestEvent(username: string) {
   const token = await superuserToken();
   const profile = await only(token, 'profiles', `username='${username}'`);
   const query = `perPage=1&sort=-created&filter=${encodeURIComponent(`profile='${profile.id}'`)}`;
   return (await (await asSuperuser(token, `/api/collections/events/records?${query}`)).json()).items[0];
-}
-// How many Events `filter` finds, as the Operator reads them.
-async function eventCount(filter: string): Promise<number> {
-  const query = `perPage=1&filter=${encodeURIComponent(filter)}`;
-  return (await (await asSuperuser(await superuserToken(), `/api/collections/events/records?${query}`)).json()).totalItems;
 }
 // The events collection's fields as the admin UI holds them, and their names.
 type EventField = { name: string };

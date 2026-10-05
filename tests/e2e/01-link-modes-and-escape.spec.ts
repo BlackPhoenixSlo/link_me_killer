@@ -1,5 +1,6 @@
 import { test, expect, devices, type Browser, type Page, type Response } from '@playwright/test';
 import { join } from 'node:path';
+import { escapeOverlay, intents, recordNavigations, UA, xSafari } from './helpers';
 
 // Phase 1: every Link travels by its own Mode (docs/spec/phase-01-link-modes-and-escape.md, Testing Decisions).
 // Link Ids, Modes and the Username come from the Fixture Profile the stand-in serves, never from a literal.
@@ -98,35 +99,10 @@ async function realUrlOf(reveal: Response): Promise<string> {
   return realUrl;
 }
 
-// Navigation recorder: the destination of every Navigation API navigate event, x-safari- and other app
-// schemes included. The page stays put on those schemes, so nothing leaves the machine.
+// Navigation recorder (helpers.ts, recordNavigations), shared with 05-domains: every Navigation API navigate event.
 // On v2 a Link's url is `/r/{Link Id}`, which redirects to the Destination, so "lands on its url" reads the address the
 // page navigated to from this recorder, not the final address (ticket 16, second ASSUMPTION).
-// Same-task mark: a capture-phase click listener sets a flag that a zero-delay timer clears, so a navigation
-// started after any request or other wait following the tap is not marked (story 15).
-type Navigation = { url: string; inTapTask: boolean };
-async function recordNavigations(page: Page) {
-  const destinations: Navigation[] = [];
-  await page.exposeFunction('__recordNavigation', (url: string, inTapTask: boolean) => {
-    destinations.push({ url, inTapTask });
-  });
-  await page.addInitScript(() => {
-    const w = window as unknown as { navigation: EventTarget; __recordNavigation: (url: string, inTapTask: boolean) => void };
-    let inTapTask = false;
-    w.addEventListener('click', () => {
-      inTapTask = true;
-      setTimeout(() => { inTapTask = false; }, 0);
-    }, true);
-    w.navigation.addEventListener('navigate', (event) => {
-      w.__recordNavigation((event as unknown as { destination: { url: string } }).destination.url, inTapTask);
-    });
-  });
-  return destinations;
-}
-const xSafari = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('x-safari-'));
-const intents = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('intent:'));
 
-const escapeOverlay = (page: Page) => page.locator('#igOverlay');
 const closeButton = (page: Page) => escapeOverlay(page).getByRole('button', { name: 'Close' });
 
 async function openProfile(page: Page, path = `/${username}`) {
@@ -334,28 +310,7 @@ test.describe('System Browser (desktop Chrome)', () => {
   });
 });
 
-// In-App Browsers (plan section 7): User-Agents per describe.
-const UA = {
-  iosInstagram:
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
-    'Mobile/15E148 Instagram 300.0.0.0.0 (iPhone14,2; iOS 17_0; en_US; en-US; scale=3.00; 1170x2532; 0)',
-  androidInstagram:
-    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 ' +
-    'Chrome/120.0.0.0 Mobile Safari/537.36 Instagram 300.0.0.0.0 Android (34/14; 420dpi; 1080x2400; Google; Pixel 8)',
-  fban:
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
-    'Mobile/15E148 [FBAN/FBIOS;FBAV/440.0.0.0;FBBV/1;FBDV/iPhone14,2;FBMD/iPhone;FBSN/iOS;FBSV/17.0;FBSS/3;FBCR/;FBID/phone;FBLC/en_US;FBOP/5]',
-  tiktok:
-    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 ' +
-    'Chrome/120.0.0.0 Mobile Safari/537.36 TikTok 33.0.0 BytedanceWebview/d8a21c6',
-  iosSafari:
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
-    'Version/17.0 Mobile/15E148 Safari/604.1',
-  desktopInstagram: devices['Desktop Chrome'].userAgent + ' Instagram 300.0.0.0.0',
-  androidChrome:
-    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) ' +
-    'Chrome/120.0.0.0 Mobile Safari/537.36',
-};
+// In-App Browsers (plan section 7): User-Agents per describe, from helpers.ts (UA), which 05-domains shares.
 
 for (const [app, userAgent] of [
   ['Instagram', UA.androidInstagram],
