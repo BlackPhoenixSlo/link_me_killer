@@ -4,7 +4,7 @@ Spec: docs/spec/phase-03-auth-and-editor.md
 Covers: user stories 1, 2, 3, 4, 5, 7, 10, 16, 41
 Seams: the running v2 stack at Playwright's baseURL, the public origin: Creator journeys in the browser at 390×844, the Visitor side in a fresh context with no Editor session; rule and proxy checks with the `request` fixture at the same origin, calling the proxy exactly as the Editor does
 Blocked by: 20: A PocketBase admin edit shows on the next page load while PocketBase's API stays closed
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-05T02:07:48Z
 
 **What to build:** A stranger opens v2's sign-up screen with no invitation and enters an email, a password and the Username they want. They land, signed in, on "verify your email". This is the Phase's first path through every layer: the Editor route, the same-origin API, the auth-and-ownership rules and the Editor's first screens.
 
