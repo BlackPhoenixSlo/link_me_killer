@@ -23,10 +23,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentProfile = null;
     let currentLinkId = null;
 
-    // In-App Browser: the plan's pattern, verbatim and case-insensitive
+    // In-App Browser: the plan's pattern, verbatim and case-insensitive. Escape Mode, Link Shortcuts and the address bar go
+    // by it alone, exactly as on the phones where they work today
     const IN_APP_BROWSER = /Instagram|FBAN|FBAV|Threads|musical_ly|Bytedance|TikTok/i;
-    const isInAppBrowser = IN_APP_BROWSER.test(navigator.userAgent || '');
-    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent || '');
+    const ua = navigator.userAgent || '';
+    const isInAppBrowser = IN_APP_BROWSER.test(ua);
+    const isIOS = /iPhone|iPad|iPod/.test(ua);
+    // Any app's In-App Browser, for Deeplink Mode only (taps, the Age Gate's Continue, Deeplink at open): the plan's pattern,
+    // more apps' tokens, or a webview by its shape: on iOS a WKWebView says Mobile/ but not Safari/ (Safari, Chrome and Firefox
+    // for iOS all say Safari/); on Android a WebView says `; wv)`
+    const MORE_APP_TOKENS = /FB_IAB|Snapchat|Twitter|Line\/|MicroMessenger|Pinterest|LinkedInApp|Reddit/i;
+    const isIOSWebView = isIOS && /Mobile\//.test(ua) && !/Safari\//.test(ua);
+    const isAndroidWebView = /Android/.test(ua) && /; wv\)/.test(ua);
+    const isAnyInAppBrowser = isInAppBrowser || MORE_APP_TOKENS.test(ua) || isIOSWebView || isAndroidWebView;
     const isIOSInstagram = isIOS && /Instagram/i.test(navigator.userAgent || '');
     // v1's own Instagram check (linkme_clone3/index.html): the Escape Overlay then reads exactly as v1's, icon and "Instagram" included
     const isInstagram = (navigator.userAgent || '').indexOf('Instagram') > -1;
@@ -88,8 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (isInAppBrowser && shortcutMode === 'escape_ig') {
                 // In an In-App Browser an Escape Mode Link Shortcut is v1's `?link=`: Reveal, then bounce straight to the
-                // Destination, on every load as v1 did, whatever the Pop out timing. The Escape Overlay, aimed at that Link's
-                // escape target and with Close, is the fallback
+                // Destination, on every load as v1 did. The Escape Overlay, aimed at that Link's escape target and with Close,
+                // is the fallback
                 const target = escapeTarget(shortcutLink.id);
                 pointAddressAt(target);
                 openEscapeOverlay(target, true);
@@ -97,22 +106,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Escape Overlay on open: In-App Browser and a Profile default of Escape Mode, as v1 shows it to Instagram. With
-            // Pop out "At open" (popOutTiming `open`) an Escape or Deeplink default also pops out on open, once per tab;
-            // with "On tap" (the default) the pop-out waits for the Visitor's tap: "Open in browser", or a Link
+            // Escape Overlay on open: In-App Browser and a Profile default of Escape Mode, as v1 shows it to Instagram; the
+            // pop-out waits for the Visitor's tap, "Open in browser" or a Link
             if (isInAppBrowser && defaultMode() === 'escape_ig') {
                 const target = escapeTarget(null);
                 pointAddressAt(target);
                 openEscapeOverlay(target, !linksData.every(link => effectiveMode(link) === 'escape_ig'));
-                if (!shortcutLink && popOutAtOpen()) popOutOnLoad(() => popOut(target.url));
-            } else if (isInAppBrowser && defaultMode() === 'deeplink' && !shortcutLink && popOutAtOpen()) {
+            }
+
+            // Deeplink at open: a Profile default of `deeplink_open` pops out to this Profile once the Profile JSON has
+            // answered (the default Mode is known no sooner), in any app's In-App Browser, once per tab. If it does not take,
+            // the page stays usable and taps pop out as Deeplink on tap
+            if (isAnyInAppBrowser && canPopOut && !shortcutLink && defaultMode() === 'deeplink_open') {
                 popOutOnLoad(() => popOut(escapeTarget(null).url));
             }
 
             // Link Shortcut, with no Age Gate (v1's Link Shortcut has none). A Deeplink Mode one in an In-App Browser is v1's
             // `?link=`: Reveal, then bounce straight to the Destination, on every load. Any other gets the Destination as a tap
             // gets it, then travels by Mode
-            if (shortcutLink && isInAppBrowser && canPopOut && shortcutMode === 'deeplink') {
+            if (shortcutLink && isInAppBrowser && canPopOut && isDeeplink(shortcutMode)) {
                 revealAndGo(shortcutLink, popOut);
             } else if (shortcutLink) {
                 goToDestination(shortcutLink);
@@ -204,6 +216,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     openOverlay(link.id);
                 } else if (isInAppBrowser && effectiveMode(link) === 'escape_ig') {
                     escapeOnTap(link);
+                } else if (isAnyInAppBrowser && canPopOut && isDeeplink(effectiveMode(link))) {
+                    deeplinkOnTap(link);
                 } else {
                     goToDestination(link);
                 }
@@ -213,8 +227,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Mode: the Link's own if recognised, else the Profile's default if recognised, else Escape Mode
-    const MODES = ['direct', 'escape_ig', 'deeplink'];
+    // Mode: the Link's own if recognised, else the Profile's default if recognised, else Escape Mode. `deeplink_open` is a
+    // Profile default only; a Link inheriting it travels as Deeplink on tap
+    const MODES = ['direct', 'escape_ig', 'deeplink', 'deeplink_open'];
     function defaultMode() {
         if (currentProfile && MODES.includes(currentProfile.mode)) return currentProfile.mode;
         return 'escape_ig';
@@ -224,9 +239,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return MODES.includes(link.mode) ? link.mode : defaultMode();
     }
 
-    // Pop out timing: `open` pops an Escape or Deeplink default out on open; anything else, absent included, is `tap`
-    function popOutAtOpen() {
-        return Boolean(currentProfile) && currentProfile.popOutTiming === 'open';
+    // Deeplink on tap and Deeplink at open: a tap travels the same way under either
+    function isDeeplink(mode) {
+        return mode === 'deeplink' || mode === 'deeplink_open';
     }
 
     // Tracking Code key (Phase 4): one per Profile, by the record id the Profile JSON carries, so a code that arrived on one
@@ -265,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Destination: an Adult Link, Deeplink Mode always, and any Link without a url get it from Reveal; otherwise the url
     function goToDestination(link) {
-        if (link.isAdult || effectiveMode(link) === 'deeplink' || !link.url) {
+        if (link.isAdult || isDeeplink(effectiveMode(link)) || !link.url) {
             revealAndGo(link);
         } else {
             window.location.href = link.url;
@@ -318,12 +333,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (href) window.location.href = href;
     }
 
-    // The load-time pop-out to this Profile ("At open") runs at most once per tab: if an In-App Browser loads the target in
-    // place instead of leaving, the reloaded page does not pop out again. Taps and `?link=` are never held back
+    // Deeplink at open runs at most once per tab and Profile: if an In-App Browser loads the target in place instead of
+    // leaving, the reloaded page does not pop out again. Taps and `?link=` are never held back
     function popOutOnLoad(fire) {
+        const key = 'popOut:' + profilePath;
         try {
-            if (sessionStorage.getItem('popOut')) return;
-            sessionStorage.setItem('popOut', '1');
+            if (sessionStorage.getItem(key)) return;
+            sessionStorage.setItem(key, '1');
         } catch (err) {
             return; // no storage, no guard: no load-time pop-out
         }
@@ -338,15 +354,42 @@ document.addEventListener('DOMContentLoaded', () => {
         openEscapeOverlay(target, true);
     }
 
-    // After a Reveal, a Deeplink Mode Link pops out: in an In-App Browser straight to the Destination in Safari or Chrome, as
-    // v1's performBounce did after its Reveal; on Android outside one, an https Destination by a package-less app-link intent,
-    // so Android picks the app that owns it. Everything else navigates plainly (Escape Mode outside an In-App Browser behaves
-    // as Direct Mode)
+    // A Deeplink tap in an In-App Browser: pops out to that Link's escape target from the tap itself, with no request before it
+    // (an In-App Browser drops a pop-out that waits on one) and no Escape Overlay; Safari or Chrome loads the Link Shortcut and
+    // Reveals there. A dead tap falls back to a Reveal and plain navigation in the app: the page neither blurred, hid nor
+    // went away during the wait, and the wait was not stretched by the page being suspended
+    const POP_OUT_WAIT_MS = 2500;
+    let popOutFallback = null;
+    let leftPage = false;
+    function deeplinkOnTap(link) {
+        leftPage = false;
+        popOut(escapeTarget(link.id).url);
+        clearTimeout(popOutFallback);
+        const start = Date.now();
+        popOutFallback = setTimeout(() => {
+            if (leftPage || Date.now() - start > POP_OUT_WAIT_MS + 500) return;
+            revealAndGo(link, url => { window.location.href = url; });
+        }, POP_OUT_WAIT_MS);
+    }
+    const markLeft = () => {
+        leftPage = true;
+        clearTimeout(popOutFallback);
+    };
+    window.addEventListener('blur', markLeft);
+    window.addEventListener('pagehide', markLeft);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') markLeft();
+    });
+
+    // After a Reveal, a Deeplink Mode Link pops out: in an In-App Browser (a Link Shortcut, or a platform with no escape link
+    // for a tap) straight to the Destination in Safari or Chrome, as v1's performBounce did; on Android outside one, an https
+    // Destination by a package-less app-link intent, so Android picks the app that owns it. Everything else navigates plainly
+    // (Escape Mode outside an In-App Browser behaves as Direct Mode)
     function travel(link, url) {
-        if (effectiveMode(link) === 'deeplink') {
+        if (isDeeplink(effectiveMode(link))) {
             let href = null;
-            if (isInAppBrowser && /^https?:\/\//i.test(url)) href = escapeLink(url);
-            else if (!isInAppBrowser && isAndroid && /^https:\/\//i.test(url)) href = httpsIntent(url, fallbackTo(url));
+            if (isAnyInAppBrowser && /^https?:\/\//i.test(url)) href = escapeLink(url);
+            else if (!isAnyInAppBrowser && isAndroid && /^https:\/\//i.test(url)) href = httpsIntent(url, fallbackTo(url));
             if (href) {
                 window.location.href = href;
                 return;
@@ -412,9 +455,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Found at click time, as v1 did: closing the Age Gate mid-Reveal still travels
         const link = linksData.find(l => l.id === currentLinkId);
 
-        // An Adult Escape Mode Link in an In-App Browser: this tap is the Escape, with no Reveal in the app
+        // An Adult Escape or Deeplink Mode Link in an In-App Browser: this tap is the pop-out, with no Reveal in the app first
         if (isInAppBrowser && effectiveMode(link) === 'escape_ig') {
             escapeOnTap(link);
+            closeOverlay();
+            return;
+        }
+        if (isAnyInAppBrowser && canPopOut && isDeeplink(effectiveMode(link))) {
+            deeplinkOnTap(link);
             closeOverlay();
             return;
         }

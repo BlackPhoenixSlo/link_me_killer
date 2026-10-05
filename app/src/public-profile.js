@@ -1,12 +1,14 @@
 'use strict';
 // Public Profile: records to the Profile JSON (docs/spec/phase-02-vps-foundation.md, Contracts).
 // Never sent: destination, geo, owner, v1Key.
-const MODES = new Set(['direct', 'escape_ig', 'deeplink']);
+// `deeplink_open` (Deeplink at open) is a Profile default only; on a Link it is normalised like an unknown Mode.
+const LINK_MODES = new Set(['direct', 'escape_ig', 'deeplink']);
+const PROFILE_MODES = new Set([...LINK_MODES, 'deeplink_open']);
 
 const fileUrl = (collection, record, field) => (record[field] ? `/api/files/${collection}/${record.id}/${record[field]}` : '');
 
 function toPublicProfile(profile, links, origin) {
-  const profileMode = MODES.has(profile.mode) ? profile.mode : 'escape_ig';
+  const profileMode = PROFILE_MODES.has(profile.mode) ? profile.mode : 'escape_ig';
   return {
     profile: {
       // The record id: the per-Profile Tracking Code key (docs/spec/phase-04-stats.md, Contracts, Tracking Code storage).
@@ -17,11 +19,9 @@ function toPublicProfile(profile, links, origin) {
       avatarUrl: fileUrl('profiles', profile, 'avatar'),
       verified: profile.verified,
       mode: profileMode,
-      // Pop out timing for an Escape or Deeplink default: `open` pops out as soon as the page opens; anything else is `tap`.
-      popOutTiming: profile.popOutTiming === 'open' ? 'open' : 'tap',
     },
     links: links.map((link) => {
-      const mode = MODES.has(link.mode) ? link.mode : profileMode;
+      const mode = LINK_MODES.has(link.mode) ? link.mode : profileMode;
       return {
         id: link.linkId,
         title: link.title,
@@ -31,7 +31,7 @@ function toPublicProfile(profile, links, origin) {
         mode,
         icon: fileUrl('links', link, 'icon'),
         backgroundImage: fileUrl('links', link, 'backgroundImage'),
-        url: !link.isAdult && mode !== 'deeplink' ? `${origin}/r/${link.linkId}` : '',
+        url: !link.isAdult && mode !== 'deeplink' && mode !== 'deeplink_open' ? `${origin}/r/${link.linkId}` : '',
       };
     }),
   };

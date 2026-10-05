@@ -477,7 +477,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     await expect(page.getByRole('heading', { name: 'Quick Settings' })).toBeVisible();
     const mode = page.getByLabel('Default Mode');
     await expect(mode).toHaveValue('escape_ig');
-    await expect(mode.locator('option')).toHaveText(['Direct', 'Escape', 'Deeplink']);
+    await expect(mode.locator('option')).toHaveText(['Direct', 'Escape', 'Deeplink on tap', 'Deeplink at open']);
     await mode.selectOption({ label: 'Direct' });
     await page.getByRole('button', { name: 'Save default Mode' }).click();
     await expect(page.getByText('Default Mode saved.', { exact: true })).toBeVisible();
@@ -502,37 +502,49 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     expect(served.links.map((l) => [l.title, l.mode])).toEqual([['Default card', 'direct'], ['Escape card', 'escape_ig']]);
   });
 
-  test('"Pop out" in Quick Settings starts "On tap" and, set to "At open", pops an Instagram Visitor out on open', async ({ page, browser, request, baseURL }) => {
+  test('the default Mode offers "Deeplink on tap" and "Deeplink at open", a Link\'s Mode only "Deeplink on tap"; saved, deeplink_open is served and pops an Instagram Visitor out on open', async ({ page, browser, request, baseURL }) => {
     test.setTimeout(120_000);
     const origin = new URL(baseURL!).origin;
-    const { creator } = await verifiedCreator(request, [['Escape card', 'escape_ig']]);
-    // An Instagram Visitor's pop-outs on open: the Escape Overlay shows either way, once the Profile has rendered.
+    const { creator, token, linkIds } = await verifiedCreator(request, [['Default card', ''], ['Own card', 'direct']]);
+    // An Instagram Visitor's pop-outs on open, once the Profile has rendered.
     const popsOnOpen = async () => {
       const context = await phoneContext(browser, { origin, userAgent: INSTAGRAM_UA });
       const visitor = await context.newPage();
       const navigations = await recordNavigations(visitor);
       await visitor.goto(`/${creator.username}`);
-      await expect(visitor.locator('#igOverlay')).toBeVisible();
+      await expect(visitor.locator('.link-card .link-title')).toHaveText(['Default card', 'Own card']);
       await visitor.waitForLoadState('networkidle');
       const popped = xSafari(navigations);
       await context.close();
       return popped;
     };
-    expect((await servedProfile(request, creator.username)).profile.popOutTiming).toBe('tap');
     expect(await popsOnOpen()).toEqual([]);
 
     await logIn(page, creator);
     await expect(heading(page, 'Edit Profile')).toBeVisible();
-    const popOut = page.getByLabel('Pop out');
-    await expect(popOut).toHaveValue('tap');
-    await expect(popOut.locator('option')).toHaveText(['At open', 'On tap']);
-    await popOut.selectOption({ label: 'At open' });
-    await expect(page.locator('#pop-out-help')).toContainText('as soon as the page opens');
+    const mode = page.getByLabel('Default Mode');
+    await expect(page.getByLabel('Pop out')).toHaveCount(0);
+    await mode.selectOption({ label: 'Deeplink on tap' });
+    await expect(page.locator('#default-mode-help')).toHaveText(/^Deeplink on tap /);
+    await mode.selectOption({ label: 'Deeplink at open' });
+    await expect(page.locator('#default-mode-help')).toHaveText(/^Deeplink at open /);
     await page.getByRole('button', { name: 'Save default Mode' }).click();
     await expect(page.getByText('Default Mode saved.', { exact: true })).toBeVisible();
 
+    // Deeplink at open is a Profile default only: a Link refuses it, as it refuses any unknown Mode, and the Link form never
+    // offers it; a Link on "Profile default" inherits it.
+    const as = proxy(request, token);
+    refused(await as.patch(`links/records/${linkIds[1]}`, { mode: 'sideways' }));
+    refused(await as.patch(`links/records/${linkIds[1]}`, { mode: 'deeplink_open' }));
     const served = await servedProfile(request, creator.username);
-    expect([served.profile.mode, served.profile.popOutTiming]).toEqual(['escape_ig', 'open']);
+    expect([served.profile.mode, ...served.links.map((l) => l.mode)]).toEqual(['deeplink_open', 'deeplink_open', 'direct']);
+    expect(served.links[0].url, 'a Deeplink Link carries no url: its Destination comes by Reveal').toBe('');
+    expect(served.profile).not.toHaveProperty('popOutTiming');
+    await page.reload();
+    await expect(page.getByLabel('Default Mode')).toHaveValue('deeplink_open');
+    await page.getByRole('button', { name: 'Add link' }).click();
+    await expect(page.getByLabel('Mode').locator('option'))
+      .toHaveText(['Profile default (currently Deeplink at open)', 'Direct', 'Escape', 'Deeplink on tap']);
     expect(await popsOnOpen()).toEqual([`x-safari-https://${new URL(origin).host}/${creator.username}`]);
   });
 });
@@ -770,7 +782,7 @@ test.describe('the Editor\'s Links', () => {
       await page.getByLabel('Destination').fill(typed.destination);
       await page.getByLabel('Icon').selectOption({ label: 'Twitch' });
       await page.getByLabel('18+ Age Gate').check();
-      await page.getByLabel('Mode').selectOption({ label: 'Deeplink' });
+      await page.getByLabel('Mode').selectOption({ label: 'Deeplink on tap' });
       await openTracking(page);
       await page.getByLabel('OnlyFans tracking').check();
       await page.getByLabel('Default Tracking Code').fill(typed.code);
@@ -784,7 +796,7 @@ test.describe('the Editor\'s Links', () => {
       await expect(page.getByLabel('Destination')).toHaveValue(typed.destination);
       await expect(page.getByLabel('Icon').locator('option:checked')).toHaveText('Twitch');
       await expect(page.getByLabel('18+ Age Gate')).toBeChecked();
-      await expect(page.getByLabel('Mode').locator('option:checked')).toHaveText('Deeplink');
+      await expect(page.getByLabel('Mode').locator('option:checked')).toHaveText('Deeplink on tap');
       await expect(page.getByLabel('OnlyFans tracking')).toBeChecked();
       await expect(page.getByLabel('Default Tracking Code')).toHaveValue(typed.code);
       await expect(page.getByLabel('Geo Rule')).toHaveValue(typed.geo);

@@ -387,7 +387,7 @@ export function submitting(form, busy) {
 }
 
 const IMAGE_TYPES = 'image/jpeg,image/png,image/heic,image/heif,image/gif,image/webp,.heic,.heif';
-export const MODE_NAMES = { direct: 'Direct', escape_ig: 'Escape', deeplink: 'Deeplink' };
+export const MODE_NAMES = { direct: 'Direct', escape_ig: 'Escape', deeplink: 'Deeplink on tap', deeplink_open: 'Deeplink at open' };
 // v1's stock icons, the n8n Form's options. A chosen one is stored as the Page Copy's own WebP file in the Link's icon field,
 // byte for byte, the way the v1 Import stores an imported stock icon (app/bin/import-v1 copies a WebP image unchanged).
 // ASSUMPTION: the Editor fetches the stock WebP from `/images/` and sends it in the Link's own multipart write through the

@@ -6,3 +6,7 @@ The original request was a "deeplink" checkbox, a "move out of IG" checkbox, and
 
 - **Two booleans, as first asked.** Rejected: that gives four states for three behaviours, and "both on" has no meaning.
 - **Making 18+ a fourth Mode.** Rejected by D3: an Adult Link can still be Direct, Escape or Deeplink.
+
+## Amended 2026-10-06
+
+Deeplink splits in two: `deeplink` (Deeplink on tap), a Mode for Links and Profiles, and `deeplink_open` (Deeplink at open), a Profile default only, so each Link still stores one of the three Modes above. The Profile's Pop Out Timing setting goes; its "At open" on a Deeplink default becomes `deeplink_open`. A Deeplink tap, or "Continue (18+)", pops out synchronously in the click handler to the Profile with the Link's Link Shortcut, with no Reveal before it, and the System Browser reveals: a real phone showed In-App Browsers drop a custom-scheme pop-out made after an async Reveal, as not the Visitor's own. Deeplink at open fires once the Profile JSON has answered, the first moment its default Mode is known, so a request does precede it. Link Shortcuts keep v1's Reveal-then-pop-out.

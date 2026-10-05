@@ -366,8 +366,8 @@ test('with an iOS Instagram User-Agent, creator.test/ shows the Escape Overlay e
 });
 
 // The Escapes fired at `origin` + `path` with `userAgent`, each an `x-safari-` or `intent://` URL as Phase 1 captures it. The
-// Fixture's Pop out timing is "On tap" (none stored), so nothing pops out on open; after closing the Escape Overlay its Escape
-// Mode default shows, a tap on the Escape Link fires the one Escape.
+// Fixture's Escape Mode default pops nothing out on open; after closing the Escape Overlay it shows, a tap on the Escape Link
+// fires the one Escape.
 async function escapesFired(browser: Browser, origin: string, path: string, userAgent: string) {
   const context = await phoneContext(browser, { origin, userAgent });
   const visitor = await context.newPage();

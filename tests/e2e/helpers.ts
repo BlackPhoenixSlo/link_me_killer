@@ -274,8 +274,8 @@ export async function verifiedCreator(request: APIRequestContext, links: [string
 }
 
 export type Served = {
-  profile: { displayName: string; bio: string; avatarUrl: string; mode: string; popOutTiming: string };
-  links: { title: string; mode: string; icon: string; backgroundImage: string; isAdult: boolean; tracking: boolean; default_tracknumber?: string }[];
+  profile: { displayName: string; bio: string; avatarUrl: string; mode: string };
+  links: { title: string; mode: string; url: string; icon: string; backgroundImage: string; isAdult: boolean; tracking: boolean; default_tracknumber?: string }[];
 };
 export const servedProfile = async (request: APIRequestContext, username: string): Promise<Served> => {
   const res = await request.get(`/api/profiles/${username}.json`);
@@ -490,6 +490,20 @@ export const UA = {
   desktopInstagram: devices['Desktop Chrome'].userAgent + ' Instagram 300.0.0.0.0',
   androidChrome:
     'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+    'Chrome/120.0.0.0 Mobile Safari/537.36',
+  // Chrome for iOS: a System Browser, though it is no Safari.
+  iosChrome:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+    'CriOS/120.0.6099.119 Mobile/15E148 Safari/604.1',
+  // Any other app's webview is an In-App Browser too: Snapchat by its token, and a bare iOS WKWebView (Mobile/ but no Safari/)
+  // or Android WebView (`; wv)`) by its shape, with no app token at all. Synthetic, assembled from the published UA shapes.
+  iosSnapchat:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+    'Mobile/15E148 Snapchat/12.80.0.40 (like Safari/8617.1.17.10.9, panda)',
+  iosWebView:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+  androidWebView:
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) ' +
     'Chrome/120.0.0.0 Mobile Safari/537.36',
 };
 

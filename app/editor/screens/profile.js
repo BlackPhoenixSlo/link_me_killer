@@ -105,13 +105,8 @@ export function drawProfileStep(profile) {
 const MODE_HELP = {
   direct: 'Direct opens the Destination straight away.',
   escape_ig: 'Escape moves Visitors out of the Instagram or TikTok browser into Safari or Chrome. If the phone won\'t switch by itself, your page shows how.',
-  deeplink: 'Deeplink sends a tap in Instagram or TikTok straight to Safari or Chrome, with no how-to screen. On Android it can open the Link\'s own app.',
-};
-// Pop out timing (popOutTiming, docs/spec/phase-01-link-modes-and-escape.md): when an Escape or Deeplink default leaves the
-// Instagram or TikTok browser. Empty reads as "On tap", as the page reads it.
-const POP_OUT_HELP = {
-  open: 'At open moves Visitors in Instagram or TikTok to Safari or Chrome as soon as the page opens, when the default Mode is Escape or Deeplink.',
-  tap: 'On tap waits for the Visitor\'s tap. With Escape, your page shows the "Open in System Browser" screen first.',
+  deeplink: 'Deeplink on tap sends the Visitor to Safari or Chrome the moment they tap the Link, from Instagram, TikTok and other apps\' in-app browsers on iPhone and Android, with no how-to screen. Safari or Chrome then opens the Destination.',
+  deeplink_open: 'Deeplink at open sends the Visitor to Safari or Chrome as soon as your page opens in Instagram, TikTok and other apps\' in-app browsers on iPhone and Android, once per tab, with no how-to screen. Taps there behave like Deeplink on tap.',
 };
 
 // A select field whose hint (`{id}-help`) explains the option chosen and changes with it (aria-live); a change saves nothing.
@@ -125,8 +120,8 @@ function explained(id, label, control, help) {
   return node;
 }
 
-// "Quick Settings" on the Editor's home: the Profile's default Mode and Pop out timing, saved on one button (saveProfile). The
-// helper under each select explains the option now selected and changes with it; nothing is saved until "Save default Mode".
+// "Quick Settings" on the Editor's home: the Profile's default Mode, saved on one button (saveProfile). The
+// helper under the select explains the option now selected and changes with it; nothing is saved until "Save default Mode".
 // Under the Mode's helper, a line that does not change says what the default Mode applies to.
 // ASSUMPTION: the default Mode has its own form and Save button in "Quick Settings" rather than saving when the select
 // changes (rung 2: the spec's Contracts, "Each form saves on its own Save button, with no autosave"). Overturned if the
@@ -138,7 +133,6 @@ export function quickSettings(profile) {
   modeField.querySelector('#default-mode-help').setAttribute('data-test', 'default-mode-help');
   modeField.append(el('p', { className: 'e-field__hint', id: 'default-mode-note' }, 'Every Link left on “Profile default” follows this Mode.'));
   mode.setAttribute('aria-describedby', 'default-mode-help default-mode-note');
-  const popOut = select('popOutTiming', [['open', 'At open'], ['tap', 'On tap']], profile.popOutTiming || 'tap');
   const modeSaved = message();
   const settings = el('form', {
     className: 'e-form',
@@ -148,11 +142,10 @@ export function quickSettings(profile) {
     },
     onsubmit: async (event) => {
       event.preventDefault();
-      if (await saveProfile(profile, settings, modeSaved, { mode: mode.value, popOutTiming: popOut.value })) say(modeSaved, 'Default Mode saved.', 'ok');
+      if (await saveProfile(profile, settings, modeSaved, { mode: mode.value })) say(modeSaved, 'Default Mode saved.', 'ok');
     },
   },
   modeField,
-  explained('pop-out', 'Pop out', popOut, POP_OUT_HELP),
   el('button', { type: 'submit', className: 'e-btn e-btn--primary e-btn--block' }, 'Save default Mode'),
   modeSaved);
   return settings;

@@ -10,10 +10,12 @@ import { escapeOverlay, intents, recordNavigations, UA, xSafari, type Navigation
 
 type Mode = 'direct' | 'escape_ig' | 'deeplink';
 type Link = { id: string; title: string; url?: string; isAdult?: boolean; tracking?: boolean; mode?: string };
-type ProfileJson = { profile: { username: string; displayName: string; mode?: string; popOutTiming?: string }; links: Link[] };
+type ProfileJson = { profile: { username: string; displayName: string; mode?: string }; links: Link[] };
 
 const PROFILE_JSON = '/api/profiles/fixture.json'; // where the stand-in serves the Fixture Profile
 const MODES: Mode[] = ['direct', 'escape_ig', 'deeplink'];
+// Every Mode a Profile or Link may hold: the Fixture's three, and Deeplink at open, which no Fixture Link holds.
+const ALL_MODES = [...MODES, 'deeplink_open'];
 const REVEAL_PATH = '/.netlify/functions/reveal';
 const FENCE_HEADER = 'x-network-fence';
 const TC = '4242'; // a numeric Tracking Code in the path
@@ -124,8 +126,13 @@ const popOuts = (navigations: Navigation[]) => [...xSafari(navigations), ...inte
 const poppedTo = (recorded: string) => (recorded.startsWith('x-safari-')
   ? recorded.slice('x-safari-'.length)
   : `https://${recorded.slice('intent://'.length, recorded.indexOf('#Intent;'))}`);
-// Pop out timing (popOutTiming): "At open" pops an Escape or Deeplink default out on open; absent, "tap" or anything else waits.
-const atOpen = (json: ProfileJson) => { json.profile.popOutTiming = 'open'; };
+// Deeplink at open as the Profile's default Mode: pops out on open, once per tab.
+const deeplinkAtOpen = (json: ProfileJson) => { json.profile.mode = 'deeplink_open'; };
+// This tab has popped out on open before: the page's once-per-tab guard for the Profile (app/public/script.js, popOutOnLoad)
+// is already set.
+const alreadyPoppedOut = (page: Page) => page.addInitScript((key) => sessionStorage.setItem(key, '1'), `popOut:/${username}`);
+// How long a Deeplink tap waits before its fallback (app/public/script.js, POP_OUT_WAIT_MS).
+const FALLBACK_WAIT_MS = 2500;
 
 async function openProfile(page: Page, path = `/${username}`) {
   await page.goto(path);
@@ -211,7 +218,7 @@ test.describe('System Browser (desktop Chrome)', () => {
     expect(destination.endsWith(`/c${TC}`)).toBe(true); // Reveal appends /c{code}
   });
 
-  for (const mode of MODES) {
+  for (const mode of ALL_MODES) {
     test(`a Profile default of ${mode} shows no Escape Overlay`, async ({ page }) => {
       await serveVariant(page, (json) => { json.profile.mode = mode; });
       await openProfile(page);
@@ -391,7 +398,22 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     expect(xSafari(navigations)).toEqual([]);
   });
 
-  test('a tap on the Deeplink Link makes a Reveal request, then pops out to the answer through x-safari-, as v1 did', async ({ page }) => {
+  test('a tap on the Deeplink Link pops out through x-safari- to its Link Shortcut in the tap\'s own task, with no Reveal before it and no Escape Overlay', async ({ page }) => {
+    const link = byMode.deeplink;
+    await serveVariant(page, directDefault);
+    const navigations = await recordNavigations(page);
+    const reveals = watchReveals(page);
+    await openProfile(page);
+    const href = `x-safari-https://${new URL(page.url()).host}/${username}?link=${link.id}`;
+
+    await card(page, link).click();
+    await expect.poll(() => xSafari(navigations)).toEqual([href]);
+    expect(reveals).toHaveLength(0); // before the fallback's wait is up
+    expect(navigations).toContainEqual({ url: href, inTapTask: true });
+    await expect(escapeOverlay(page)).toBeHidden();
+  });
+
+  test('a Deeplink tap whose pop-out does not take (the page still showing after the wait) reveals and lands on the answer in the app', async ({ page }) => {
     const link = byMode.deeplink;
     await serveVariant(page, directDefault);
     const navigations = await recordNavigations(page);
@@ -400,11 +422,35 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
     const reveal = nextReveal(page);
     await card(page, link).click();
+    await expect.poll(() => xSafari(navigations)).toHaveLength(1);
     const destination = await realUrlOf(await reveal);
-    expect(destination.startsWith('https://')).toBe(true);
-    await expect.poll(() => xSafari(navigations)).toEqual([`x-safari-${destination}`]);
+    await expect(page).toHaveURL(destination);
     expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
+    expect(xSafari(navigations)).toHaveLength(1); // the fallback navigates plainly, with no second pop-out
   });
+
+  for (const [left, leave] of [
+    ['goes hidden', () => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }],
+    ['loses focus', () => { window.dispatchEvent(new Event('blur')); }],
+  ] as const) {
+    test(`a Deeplink tap whose page ${left} before the wait is up (Safari took over) makes no Reveal`, async ({ page }) => {
+      const link = byMode.deeplink;
+      await serveVariant(page, directDefault);
+      const navigations = await recordNavigations(page);
+      const reveals = watchReveals(page);
+      await openProfile(page);
+
+      await card(page, link).click();
+      await expect.poll(() => xSafari(navigations)).toHaveLength(1);
+      await page.evaluate(leave);
+      await page.waitForTimeout(FALLBACK_WAIT_MS + 1000);
+      expect(reveals).toHaveLength(0);
+      await expect(page).toHaveURL(`/${username}`);
+    });
+  }
 
   test('the Adult Link set to Direct shows the Age Gate, then Continue (18+) reveals and navigates plainly', async ({ page }) => {
     await serveVariant(page, (json) => { directDefault(json); linkIn(json, adult.id).mode = 'direct'; });
@@ -426,14 +472,12 @@ test.describe('In-App Browser (iOS Instagram)', () => {
   });
 
   for (const profileMode of ['escape_ig', 'sideways']) {
-    test(`a default of ${profileMode} with Pop out "At open", on a Profile that holds the Direct and Deeplink Links, pops out and shows the Escape Overlay on open, with Close`, async ({ page }) => {
+    test(`a default of ${profileMode}, on a Profile that holds the Direct and Deeplink Links, shows the Escape Overlay on open, with Close, and pops nothing out`, async ({ page }) => {
       const link = byMode.direct;
-      await serveVariant(page, (json) => { json.profile.mode = profileMode; atOpen(json); });
+      await serveVariant(page, (json) => { json.profile.mode = profileMode; });
       const navigations = await recordNavigations(page);
       await openProfile(page);
       await expect(escapeOverlay(page)).toBeVisible();
-      const onOpen = `x-safari-https://${new URL(page.url()).host}/${username}`; // the pop-out on open
-      await expect.poll(() => xSafari(navigations)).toEqual([onOpen]);
       expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden'); // blocks scrolling
 
       await closeButton(page).click();
@@ -442,7 +486,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
       await card(page, link).click();
       await expect.poll(() => navigations.at(-1)?.url).toBe(link.url);
-      expect(xSafari(navigations)).toEqual([onOpen]);
+      expect(xSafari(navigations)).toEqual([]);
     });
   }
 
@@ -456,8 +500,8 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await expect(closeButton(page)).toHaveCount(0);
   });
 
-  test('a default of deeplink with Pop out "At open" pops out on open to the Profile, with no Escape Overlay', async ({ page }) => {
-    await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; atOpen(json); });
+  test('a default of deeplink_open pops out on open to the Profile, with no Escape Overlay', async ({ page }) => {
+    await serveVariant(page, deeplinkAtOpen);
     const navigations = await recordNavigations(page);
     await openProfile(page);
     await expect.poll(() => xSafari(navigations)).toEqual([`x-safari-https://${new URL(page.url()).host}/${username}`]);
@@ -667,17 +711,17 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await fresh.page.context().close();
   });
 
-  test('Deeplink default: a Link with its mode removed makes a Reveal request, then pops out to the answer', async ({ page }) => {
+  test('Deeplink default: a Link with its mode removed pops out to its Link Shortcut from the tap, with no Reveal before it', async ({ page }) => {
     const link = byMode.escape_ig;
     await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; delete linkIn(json, link.id).mode; });
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
-    const reveal = nextReveal(page);
+    const href = `x-safari-https://${new URL(page.url()).host}/${username}?link=${link.id}`;
     await card(page, link).click();
-    const destination = await realUrlOf(await reveal);
-    await expect.poll(() => xSafari(navigations).at(-1)).toBe(`x-safari-${destination}`);
-    expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
+    await expect.poll(() => xSafari(navigations)).toEqual([href]);
+    expect(navigations).toContainEqual({ url: href, inTapTask: true });
+    expect(reveals).toHaveLength(0);
   });
 });
 
@@ -702,47 +746,52 @@ test.describe('In-App Browser (Android Instagram)', () => {
     await expect.poll(() => intents(navigations)).toEqual([intent, intent]);
   });
 
-  // The Chrome intent for a Reveal answer after a tap in an In-App Browser: v1's performBounce intent.
-  const deeplinkIntent = (destination: string) => popTo('android', destination);
+  // The Chrome intent for a Link's Link Shortcut on the page's host: v1's performBounce intent.
+  const deeplinkIntent = (page: Page, link: Link) => popTo('android', `https://${new URL(page.url()).host}/${username}?link=${link.id}`);
 
-  test('a tap on the Deeplink Link makes a Reveal request, then fires v1\'s Chrome intent for the answer', async ({ page }) => {
+  test('a tap on the Deeplink Link fires v1\'s Chrome intent for its Link Shortcut in the tap\'s own task, with no Reveal before it', async ({ page }) => {
     const link = byMode.deeplink;
     await serveVariant(page, directDefault);
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
 
-    const reveal = nextReveal(page);
     await card(page, link).click();
-    const destination = await realUrlOf(await reveal);
-    expect(destination.startsWith('https://')).toBe(true);
-    await expect.poll(() => intents(navigations)).toEqual([deeplinkIntent(destination)]);
-    expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
-  });
-
-  test('the Adult Link set to Deeplink shows the Age Gate, then Continue (18+) reveals and fires v1\'s Chrome intent for the answer', async ({ page }) => {
-    await serveVariant(page, (json) => { directDefault(json); linkIn(json, adult.id).mode = 'deeplink'; });
-    const navigations = await recordNavigations(page);
-    const reveals = watchReveals(page);
-    await openProfile(page);
-
-    await card(page, adult).click();
-    await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
+    const intent = deeplinkIntent(page, link);
+    await expect.poll(() => intents(navigations)).toEqual([intent]);
+    expect(navigations).toContainEqual({ url: intent, inTapTask: true });
     expect(reveals).toHaveLength(0);
-
-    const reveal = nextReveal(page);
-    await page.getByRole('button', { name: 'Continue (18+)' }).click();
-    const destination = await realUrlOf(await reveal);
-    expect(destination.startsWith('https://')).toBe(true);
-    await expect.poll(() => intents(navigations)).toEqual([deeplinkIntent(destination)]);
-    expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([adult.id]);
   });
+
+  for (const [variant, edit] of [
+    ['set to deeplink', (json: ProfileJson) => { directDefault(json); linkIn(json, adult.id).mode = 'deeplink'; }],
+    ['on a deeplink_open default', (json: ProfileJson) => { deeplinkAtOpen(json); delete linkIn(json, adult.id).mode; }],
+  ] as const) {
+    test(`the Adult Link ${variant} shows the Age Gate, then Continue (18+) fires v1's Chrome intent for its Link Shortcut in its own task, with no Reveal before it`, async ({ page }) => {
+      await serveVariant(page, edit);
+      const navigations = await recordNavigations(page);
+      const reveals = watchReveals(page);
+      await alreadyPoppedOut(page); // so a deeplink_open default's pop-out on open is not in the way of the tap's
+      await openProfile(page);
+
+      await card(page, adult).click();
+      await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
+      expect(reveals).toHaveLength(0);
+
+      await page.getByRole('button', { name: 'Continue (18+)' }).click();
+      const intent = deeplinkIntent(page, adult);
+      await expect.poll(() => intents(navigations)).toEqual([intent]);
+      expect(navigations).toContainEqual({ url: intent, inTapTask: true });
+      expect(reveals).toHaveLength(0);
+    });
+  }
 });
 
-// Pop-out to Safari/Chrome (real-device report, 2026-10): Escape and Deeplink Modes leave the In-App Browser with v1's links
-// (linkme_clone3/script.js, performBounce): on open, once per tab, for an Escape or Deeplink default with Pop out "At open";
-// on every load for a Link Shortcut (v1's `?link=`); and on a tap. v1 bounced only Instagram; TikTok is v2's extension of it,
-// labelled as such. iOS Instagram is covered above, Android Instagram's taps too, so only what is left is run for Instagram here.
+// Pop-out to Safari/Chrome (real-device report, 2026-10-06): an In-App Browser drops a pop-out that follows a request, so
+// Escape and Deeplink Modes leave it with v1's links (linkme_clone3/script.js, performBounce) only from the Visitor's own tap or
+// at load, never after a Reveal: on open, once per tab, for Deeplink at open; at load, once per tab, for a Link Shortcut (to
+// the page's own address, where Safari or Chrome Reveals); and on a tap. v1 bounced only Instagram; TikTok is v2's extension
+// of it. iOS Instagram is covered above, Android Instagram's taps too, so only what is left is run for Instagram here.
 for (const [app, platform, userAgent, withTaps] of [
   ['Instagram', 'android', UA.androidInstagram, false],
   ['TikTok', 'ios', UA.iosTiktok, true],
@@ -751,59 +800,60 @@ for (const [app, platform, userAgent, withTaps] of [
   test.describe(`Pop-out to Safari/Chrome (${platform} ${app})`, () => {
     test.use({ userAgent });
 
-    test('Escape default, Pop out "At open": the page pops out on open to the Profile with its code, and shows the Escape Overlay', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; atOpen(json); });
+    test('Escape default: the Escape Overlay shows on open, and nothing pops out', async ({ page }) => {
+      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+      const navigations = await recordNavigations(page);
+      await openProfile(page, `/${username}/${TC}`);
+      await expect(escapeOverlay(page)).toBeVisible();
+      await page.waitForLoadState('networkidle');
+      expect(popOuts(navigations)).toEqual([]);
+    });
+
+    test('Deeplink at open: the page pops out on open to the Profile with its code, with no Escape Overlay', async ({ page }) => {
+      await serveVariant(page, deeplinkAtOpen);
       const navigations = await recordNavigations(page);
       await openProfile(page, `/${username}/${TC}`);
       const host = new URL(page.url()).host;
       await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, `https://${host}/${username}/${TC}`)]);
-      await expect(escapeOverlay(page)).toBeVisible();
+      await expect(escapeOverlay(page)).toBeHidden();
     });
 
-    test('Pop out "At open": a second load in the same tab does not pop out again', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; atOpen(json); });
+    test('Deeplink at open: a second load in the same tab does not pop out again', async ({ page }) => {
+      await serveVariant(page, deeplinkAtOpen);
       const navigations = await recordNavigations(page);
       await openProfile(page);
       await expect.poll(() => popOuts(navigations)).toHaveLength(1);
       await page.reload();
       await expect(page.locator('#displayName')).toHaveText(served.profile.displayName);
-      await expect(escapeOverlay(page)).toBeVisible(); // the fallback still shows
       await page.waitForLoadState('networkidle');
       expect(popOuts(navigations)).toHaveLength(1);
     });
 
-    test('?link={Escape Link Id} reveals on open, then bounces straight to the Destination', async ({ page }) => {
-      const link = byMode.escape_ig;
-      await serveVariant(page, directDefault);
-      const navigations = await recordNavigations(page);
-      const reveal = nextReveal(page);
-      await openProfile(page, `/${username}/${TC}?link=${link.id}`);
-      const destination = await realUrlOf(await reveal);
-      await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
-    });
+    for (const mode of ['escape_ig', 'deeplink'] as const) {
+      test(`?link={${mode} Link Id} reveals on open, then bounces straight to the Destination, as v1's \`?link=\` did`, async ({ page }) => {
+        const link = byMode[mode];
+        await serveVariant(page, directDefault);
+        const navigations = await recordNavigations(page);
+        const reveal = nextReveal(page);
+        await openProfile(page, `/${username}/${TC}?link=${link.id}`);
+        const destination = await realUrlOf(await reveal);
+        await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
+      });
 
-    test('?link={Escape Link Id} bounces again on a second load in the same tab, as v1\'s `?link=` did', async ({ page }) => {
-      const link = byMode.escape_ig;
-      await serveVariant(page, (json) => { directDefault(json); atOpen(json); });
-      const navigations = await recordNavigations(page);
-      const first = nextReveal(page);
-      await openProfile(page, `/${username}?link=${link.id}`);
-      const destination = await realUrlOf(await first);
-      await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
-      const second = nextReveal(page);
-      await page.reload();
-      await realUrlOf(await second);
-      await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination), popTo(platform, destination)]);
-    });
-
-    test('Deeplink default, Pop out "At open": the page pops out on open to the Profile, with no Escape Overlay', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; atOpen(json); });
-      const navigations = await recordNavigations(page);
-      await openProfile(page);
-      const host = new URL(page.url()).host;
-      await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, `https://${host}/${username}`)]);
-      await expect(escapeOverlay(page)).toBeHidden();
-    });
+      test(`?link={${mode} Link Id} bounces again on a second load in the same tab, as v1's \`?link=\` did`, async ({ page }) => {
+        const link = byMode[mode];
+        await serveVariant(page, directDefault);
+        const navigations = await recordNavigations(page);
+        const first = nextReveal(page);
+        await openProfile(page, `/${username}?link=${link.id}`);
+        const destination = await realUrlOf(await first);
+        await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
+        const second = nextReveal(page);
+        await page.reload();
+        await realUrlOf(await second);
+        await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination), popTo(platform, destination)]);
+      });
+    }
 
     if (withTaps) {
       test('Direct default: a tap on the Escape Link pops out to that Link from the tap itself, with no Reveal', async ({ page }) => {
@@ -814,36 +864,113 @@ for (const [app, platform, userAgent, withTaps] of [
         expect(reveals).toHaveLength(0);
       });
 
-      test('Direct default: a tap on the Deeplink Link reveals, then pops out to the Destination', async ({ page }) => {
-        const link = byMode.deeplink;
-        await serveVariant(page, directDefault);
-        const navigations = await recordNavigations(page);
-        await openProfile(page);
-        const reveal = nextReveal(page);
-        await card(page, link).click();
-        const destination = await realUrlOf(await reveal);
-        await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
+      test('Direct default: a tap on the Deeplink Link pops out to that Link from the tap itself, with no Reveal before it', async ({ page }) => {
+        const { navigations, reveals, target } = await tapEscapeFromCode(page, byMode.deeplink);
+        const href = popTo(platform, target);
+        await expect.poll(() => popOuts(navigations)).toEqual([href]);
+        expect(navigations).toContainEqual({ url: href, inTapTask: true });
+        expect(reveals).toHaveLength(0);
       });
     }
   });
 }
 
-// The load-time pop-out is the In-App Browser's alone: a System Browser under either popping default and either Pop out timing
-// records none.
+// Any app's webview is an In-App Browser: by an app token beyond Instagram, Facebook and TikTok (Snapchat), or by its shape
+// alone (a bare iOS WKWebView, an Android `; wv)` WebView). A Deeplink tap there pops out from the tap.
+for (const [name, platform, userAgent] of [
+  ['iOS Snapchat', 'ios', UA.iosSnapchat],
+  ['bare iOS WKWebView', 'ios', UA.iosWebView],
+  ['Android WebView', 'android', UA.androidWebView],
+] as const) {
+  test(`In-App Browser (${name}): a tap on the Deeplink Link pops out from the tap, with no Reveal before it`, async ({ browser }) => {
+    const context = await browser.newContext({ userAgent, baseURL: test.info().project.use.baseURL });
+    const page = await context.newPage();
+    await fenceNetwork(page);
+    const { navigations, reveals, target } = await tapEscapeFromCode(page, byMode.deeplink);
+    const href = popTo(platform, target);
+    await expect.poll(() => popOuts(navigations)).toEqual([href]);
+    expect(navigations).toContainEqual({ url: href, inTapTask: true });
+    expect(reveals).toHaveLength(0);
+    await context.close();
+  });
+}
+
+// Escape Mode keeps the plan's narrower pattern, unchanged: in a Snapchat or bare webview there is no Escape Overlay on open,
+// and the Escape Link navigates plainly.
+for (const [name, userAgent] of [
+  ['iOS Snapchat', UA.iosSnapchat],
+  ['bare iOS WKWebView', UA.iosWebView],
+  ['Android WebView', UA.androidWebView],
+] as const) {
+  test(`${name}: an Escape default shows no Escape Overlay, and the Escape Link navigates plainly`, async ({ browser }) => {
+    const context = await browser.newContext({ userAgent, baseURL: test.info().project.use.baseURL });
+    const page = await context.newPage();
+    await fenceNetwork(page);
+    await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+    const navigations = await recordNavigations(page);
+    await openProfile(page);
+    await expect(escapeOverlay(page)).toBeHidden();
+    await card(page, byMode.escape_ig).click();
+    await expect.poll(() => navigations.at(-1)?.url).toBe(byMode.escape_ig.url);
+    expect(popOuts(navigations)).toEqual([]);
+    await context.close();
+  });
+}
+
+// The System Browsers never pop out: not on open under any default, not on a tap, not on a Link Shortcut. A Deeplink Link
+// there reveals and lands on the answer, as on a desktop.
 for (const [browser, userAgent] of [
+  ['desktop Chrome', devices['Desktop Chrome'].userAgent],
   ['iOS Safari', UA.iosSafari],
+  ['iOS Chrome', UA.iosChrome],
   ['Android Chrome', UA.androidChrome],
 ] as const) {
-  for (const [profileMode, popOutTiming] of [['escape_ig', 'open'], ['escape_ig', 'tap'], ['deeplink', 'open'], ['deeplink', 'tap']]) {
-    test(`System Browser (${browser}), ${profileMode} default, Pop out ${popOutTiming}: nothing pops out on open`, async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = profileMode; json.profile.popOutTiming = popOutTiming; });
+  test.describe(`System Browser (${browser}), never popping out`, () => {
+    test.use({ userAgent });
+
+    for (const profileMode of ['escape_ig', 'deeplink', 'deeplink_open']) {
+      test(`${profileMode} default: nothing pops out on open and no Escape Overlay shows`, async ({ page }) => {
+        await serveVariant(page, (json) => { json.profile.mode = profileMode; });
+        const navigations = await recordNavigations(page);
+        await openProfile(page, `/${username}/${TC}`);
+        await page.waitForLoadState('networkidle');
+        expect(popOuts(navigations)).toEqual([]);
+        await expect(escapeOverlay(page)).toBeHidden();
+      });
+    }
+
+    // On Android, a Deeplink Destination is handed to the app that owns it by the package-less app-link intent, with the web
+    // page as its fallback; elsewhere the page lands on it.
+    const landsOn = async (page: Page, navigations: Navigation[], destination: string) => {
+      if (browser === 'Android Chrome') {
+        await expect.poll(() => intents(navigations))
+          .toEqual([`intent://${strip(destination)}#Intent;scheme=https;S.browser_fallback_url=${encodeURIComponent(destination)};end`]);
+      } else {
+        await expect(page).toHaveURL(destination);
+        expect(intents(navigations)).toEqual([]);
+      }
+      expect(xSafari(navigations)).toEqual([]);
+      expect(intents(navigations).filter((url) => url.includes('package=com.android.chrome'))).toEqual([]);
+    };
+
+    test('deeplink_open default: a tap on the Deeplink Link reveals, then lands on the answer, with no pop-out to Safari or Chrome', async ({ page }) => {
+      await serveVariant(page, deeplinkAtOpen);
       const navigations = await recordNavigations(page);
-      await openProfile(page, `/${username}/${TC}`);
-      await page.waitForLoadState('networkidle');
-      expect(popOuts(navigations)).toEqual([]);
-      await expect(escapeOverlay(page)).toBeHidden();
+      await openProfile(page);
+      const reveal = nextReveal(page);
+      await card(page, byMode.deeplink).click();
+      await landsOn(page, navigations, await realUrlOf(await reveal));
     });
-  }
+
+    test('?link={Deeplink Link Id} reveals on load, then lands on the answer, with no pop-out to Safari or Chrome', async ({ page }) => {
+      const navigations = await recordNavigations(page);
+      const reveals = watchReveals(page);
+      const reveal = nextReveal(page);
+      await page.goto(`/${username}/${TC}?link=${byMode.deeplink.id}`);
+      await landsOn(page, navigations, await realUrlOf(await reveal));
+      expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([byMode.deeplink.id]);
+    });
+  });
 }
 
 test.describe('In-App Browser on neither iOS nor Android (desktop UA carrying "Instagram")', () => {
@@ -862,39 +989,33 @@ test.describe('In-App Browser on neither iOS nor Android (desktop UA carrying "I
   });
 });
 
-// Pop out timing (popOutTiming), on Instagram, where v1 shows the Escape Overlay on open: "On tap" (absent, "tap" or anything
-// unrecognised, so every existing and v1-imported Profile) shows the overlay on open and pops out only from the Visitor's tap,
-// as v1's overlay waits for the Visitor; "At open" pops out on open, once per tab. A Link Shortcut bounces on load either way.
+// Deeplink on tap and Deeplink at open, on Instagram, where v1 shows the Escape Overlay on open: an Escape default shows the
+// overlay on open and pops out only from the Visitor's tap, as v1's overlay waits for the Visitor; a Deeplink on tap default
+// pops out only from a tap; Deeplink at open, as the default or any Link's Mode, pops out on open, once per tab.
 for (const [platform, userAgent] of [
   ['ios', UA.iosInstagram],
   ['android', UA.androidInstagram],
 ] as const) {
-  test.describe(`Pop out timing (${platform} Instagram)`, () => {
+  test.describe(`Deeplink on tap and at open (${platform} Instagram)`, () => {
     test.use({ userAgent });
 
-    for (const popOutTiming of [undefined, 'tap', 'sideways']) {
-      test(`Escape default, Pop out ${popOutTiming ?? 'absent'}: the Escape Overlay shows on open with nothing popped out, and "Open in browser" pops out to the Profile from the tap`, async ({ page }) => {
-        await serveVariant(page, (json) => {
-          json.profile.mode = 'escape_ig';
-          if (popOutTiming === undefined) delete json.profile.popOutTiming;
-          else json.profile.popOutTiming = popOutTiming;
-        });
-        const navigations = await recordNavigations(page);
-        await openProfile(page, `/${username}/${TC}`);
-        await expect(escapeOverlay(page)).toBeVisible();
-        await page.waitForLoadState('networkidle');
-        expect(popOuts(navigations)).toEqual([]);
+    test('Escape default: the Escape Overlay shows on open with nothing popped out, and "Open in browser" pops out to the Profile from the tap', async ({ page }) => {
+      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+      const navigations = await recordNavigations(page);
+      await openProfile(page, `/${username}/${TC}`);
+      await expect(escapeOverlay(page)).toBeVisible();
+      await page.waitForLoadState('networkidle');
+      expect(popOuts(navigations)).toEqual([]);
 
-        const href = popTo(platform, `https://${new URL(page.url()).host}/${username}/${TC}`);
-        await escapeOverlay(page).getByRole('link', { name: 'Open in browser' }).click();
-        await expect.poll(() => popOuts(navigations)).toEqual([href]);
-        expect(navigations).toContainEqual({ url: href, inTapTask: true });
-      });
-    }
+      const href = popTo(platform, `https://${new URL(page.url()).host}/${username}/${TC}`);
+      await escapeOverlay(page).getByRole('link', { name: 'Open in browser' }).click();
+      await expect.poll(() => popOuts(navigations)).toEqual([href]);
+      expect(navigations).toContainEqual({ url: href, inTapTask: true });
+    });
 
-    test('Escape default, Pop out "On tap": a tap on the Escape Link, once the overlay is closed, pops out to that Link', async ({ page }) => {
+    test('Escape default: a tap on the Escape Link, once the overlay is closed, pops out to that Link', async ({ page }) => {
       const link = byMode.escape_ig;
-      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; json.profile.popOutTiming = 'tap'; });
+      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
       const navigations = await recordNavigations(page);
       await openProfile(page, `/${username}/${TC}`);
       await closeButton(page).click();
@@ -904,16 +1025,8 @@ for (const [platform, userAgent] of [
       expect(navigations).toContainEqual({ url: href, inTapTask: true });
     });
 
-    test('Escape default, Pop out "At open": the page pops out on open to the Profile, and the Escape Overlay shows as the fallback', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; atOpen(json); });
-      const navigations = await recordNavigations(page);
-      await openProfile(page, `/${username}/${TC}`);
-      await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, `https://${new URL(page.url()).host}/${username}/${TC}`)]);
-      await expect(escapeOverlay(page)).toBeVisible();
-    });
-
-    test('Deeplink default, Pop out "On tap": nothing pops out on open and no Escape Overlay shows', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; json.profile.popOutTiming = 'tap'; });
+    test('Deeplink on tap default: nothing pops out on open and no Escape Overlay shows', async ({ page }) => {
+      await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; });
       const navigations = await recordNavigations(page);
       await openProfile(page);
       await page.waitForLoadState('networkidle');
@@ -921,16 +1034,40 @@ for (const [platform, userAgent] of [
       await expect(escapeOverlay(page)).toBeHidden();
     });
 
-    test('Deeplink default, Pop out "At open": the page pops out on open to the Profile, with no Escape Overlay', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; atOpen(json); });
+    test('Deeplink at open default: the page pops out on open to the Profile, with no Escape Overlay', async ({ page }) => {
+      await serveVariant(page, deeplinkAtOpen);
       const navigations = await recordNavigations(page);
       await openProfile(page);
       await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, `https://${new URL(page.url()).host}/${username}`)]);
       await expect(escapeOverlay(page)).toBeHidden();
     });
 
-    test('Direct default, Pop out "At open": nothing pops out on open', async ({ page }) => {
-      await serveVariant(page, (json) => { directDefault(json); atOpen(json); });
+    test('Direct default with a Link carrying deeplink_open (a Profile default only): nothing pops out on open', async ({ page }) => {
+      await serveVariant(page, (json) => { directDefault(json); linkIn(json, byMode.deeplink.id).mode = 'deeplink_open'; });
+      const navigations = await recordNavigations(page);
+      await openProfile(page);
+      await page.waitForLoadState('networkidle');
+      expect(popOuts(navigations)).toEqual([]);
+    });
+
+    test('Deeplink at open default, once the tab has popped out: a tap on a Link pops out to that Link from the tap, as Deeplink on tap does', async ({ page }) => {
+      const link = byMode.direct;
+      await serveVariant(page, (json) => { deeplinkAtOpen(json); delete linkIn(json, link.id).mode; });
+      await alreadyPoppedOut(page);
+      const navigations = await recordNavigations(page);
+      const reveals = watchReveals(page);
+      await openProfile(page);
+      await page.waitForLoadState('networkidle');
+      expect(popOuts(navigations)).toEqual([]);
+      await card(page, link).click();
+      const href = popTo(platform, `https://${new URL(page.url()).host}/${username}?link=${link.id}`);
+      await expect.poll(() => popOuts(navigations)).toEqual([href]);
+      expect(navigations).toContainEqual({ url: href, inTapTask: true });
+      expect(reveals).toHaveLength(0);
+    });
+
+    test('Direct default: nothing pops out on open', async ({ page }) => {
+      await serveVariant(page, directDefault);
       const navigations = await recordNavigations(page);
       await openProfile(page);
       await page.waitForLoadState('networkidle');
@@ -938,11 +1075,11 @@ for (const [platform, userAgent] of [
       await expect(escapeOverlay(page)).toBeHidden();
     });
 
-    for (const popOutTiming of ['tap', 'open']) {
+    for (const profileMode of ['escape_ig', 'deeplink_open']) {
       for (const mode of ['escape_ig', 'deeplink'] as const) {
-        test(`Pop out "${popOutTiming}": ?link={${mode} Link Id} still reveals on load and bounces straight to the Destination`, async ({ page }) => {
+        test(`${profileMode} default: ?link={${mode} Link Id} still reveals on load and bounces straight to the Destination, with no pop-out to the Profile`, async ({ page }) => {
           const link = byMode[mode];
-          await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; json.profile.popOutTiming = popOutTiming; });
+          await serveVariant(page, (json) => { json.profile.mode = profileMode; });
           const navigations = await recordNavigations(page);
           const reveal = nextReveal(page);
           await openProfile(page, `/${username}/${TC}?link=${link.id}`);
@@ -1001,20 +1138,27 @@ for (const [platform, inAppUA, systemUA] of [
     };
     const redirectHop = (page: Page, link: Link) => page.waitForEvent('requestfailed', (req) => req.redirectedFrom()?.url() === link.url);
 
-    test('(a) a Deeplink tap in the app reveals, then pops out to exactly the Destination, which the System Browser lands on', async ({ page, browser }) => {
+    test('(a) a Deeplink tap in the app pops out to its Link Shortcut, where the System Browser reveals and lands on the Destination', async ({ page, browser }) => {
       const link = byMode.deeplink;
       await serveVariant(page, directDefault);
       const navigations = await recordNavigations(page);
       await openProfile(page);
-      const reveal = nextReveal(page);
       await card(page, link).click();
-      const destination = await realUrlOf(await reveal);
-      expect(new URL(destination).hostname).not.toBe('localhost');
-      await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
+      await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, `https://${new URL(page.url()).host}/${username}?link=${link.id}`)]);
 
       const system = await systemBrowser(browser, directDefault);
-      await system.goto(poppedTo(popOuts(navigations)[0]));
-      await expect(system).toHaveURL(destination);
+      const systemNavigations = await recordNavigations(system);
+      const reveal = nextReveal(system);
+      await system.goto(onStack(page, poppedTo(popOuts(navigations)[0])));
+      const destination = await realUrlOf(await reveal);
+      expect(destination).toBe(destinationOf(link));
+      // Chrome on Android hands a Deeplink Destination to the app that owns it, the web page as the fallback; Safari lands on it
+      if (platform === 'android') {
+        await expect.poll(() => intents(systemNavigations))
+          .toEqual([`intent://${strip(destination)}#Intent;scheme=https;S.browser_fallback_url=${encodeURIComponent(destination)};end`]);
+      } else {
+        await expect(system).toHaveURL(destination);
+      }
       await system.context().close();
     });
 
@@ -1036,15 +1180,14 @@ for (const [platform, inAppUA, systemUA] of [
       });
     }
 
-    test('(c) Escape default, Pop out "At open": the app pops out to the Profile, where a tap on the Escape Link goes through /r to its Destination', async ({ page, browser }) => {
+    test('(c) Deeplink at open: the app pops out to the Profile, where a tap on the Escape Link goes through /r to its Destination', async ({ page, browser }) => {
       const link = byMode.escape_ig;
-      const edit = (json: ProfileJson) => { json.profile.mode = 'escape_ig'; atOpen(json); };
-      await serveVariant(page, edit);
+      await serveVariant(page, deeplinkAtOpen);
       const navigations = await recordNavigations(page);
       await openProfile(page, `/${username}/${TC}`);
       await expect.poll(() => popOuts(navigations)).toHaveLength(1);
 
-      const system = await systemBrowser(browser, edit);
+      const system = await systemBrowser(browser, deeplinkAtOpen);
       const reveals = watchReveals(system);
       const systemPops = await recordNavigations(system);
       await openProfile(system, onStack(page, poppedTo(popOuts(navigations)[0])));
@@ -1059,28 +1202,25 @@ for (const [platform, inAppUA, systemUA] of [
 
     test('(d) a Direct Link navigates plainly in the app, through /r to its Destination, with nothing popped out', async ({ page }) => {
       const link = byMode.direct;
-      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; atOpen(json); });
+      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
       const navigations = await recordNavigations(page);
       await openProfile(page);
-      await expect.poll(() => popOuts(navigations)).toHaveLength(1); // the pop-out on open
       await closeButton(page).click();
       const hop = redirectHop(page, link);
       await card(page, link).click();
       expect((await hop).url()).toBe(destinationOf(link));
-      expect(popOuts(navigations)).toHaveLength(1);
+      expect(popOuts(navigations)).toEqual([]);
     });
 
     test('(e) the Adult Link hits the Age Gate in the app, and again in the System Browser after the pop-out, where Continue (18+) reveals and lands', async ({ page, browser }) => {
-      const edit = (json: ProfileJson) => { json.profile.mode = 'escape_ig'; atOpen(json); };
-      await serveVariant(page, edit);
+      await serveVariant(page, deeplinkAtOpen);
       const navigations = await recordNavigations(page);
       await openProfile(page, `/${username}/${TC}`);
       await expect.poll(() => popOuts(navigations)).toHaveLength(1);
-      await closeButton(page).click();
       await card(page, adult).click();
       await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
 
-      const system = await systemBrowser(browser, edit);
+      const system = await systemBrowser(browser, deeplinkAtOpen);
       await openProfile(system, onStack(page, poppedTo(popOuts(navigations)[0])));
       await card(system, adult).click();
       await expect(system.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();

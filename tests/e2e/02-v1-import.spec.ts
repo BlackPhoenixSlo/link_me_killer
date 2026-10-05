@@ -461,7 +461,7 @@ test.describe('on the test stack', () => {
     type Field = { name: string; type: string; system?: boolean; [k: string]: unknown };
     const field = (c: { fields: Field[] }, name: string) => c.fields.find((f) => f.name === name) || ({} as Field);
     const shape = (c: { fields: Field[] }) => c.fields.filter((f) => !f.system).map((f) => `${f.name}:${f.type}`).join(' ');
-    expect(shape(profiles)).toBe('username:text displayName:text bio:text verified:bool avatar:file mode:select owner:relation v1Key:text customDomain:text popOutTiming:select');
+    expect(shape(profiles)).toBe('username:text displayName:text bio:text verified:bool avatar:file mode:select owner:relation v1Key:text customDomain:text');
     expect(shape(links)).toBe(
       'profile:relation linkId:text title:text order:number isAdult:bool mode:select destination:text tracking:bool defaultTrackingCode:text geo:json icon:file backgroundImage:file v1Key:text',
     );
@@ -484,14 +484,12 @@ test.describe('on the test stack', () => {
     expect(field(events, 'kind').values).toEqual(['page_view', 'click']);
     expect(field(events, 'kind').maxSelect).toBe(1);
     expect(field(events, 'created').onCreate === true && field(events, 'created').onUpdate === false).toBe(true);
-    for (const c of [profiles, links]) {
-      expect(field(c, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink']);
-      expect(field(c, 'mode').required).toBe(false);
-    }
-    // Pop out timing: empty reads as `tap`; the owner may update it, the claim may not set it.
-    expect(field(profiles, 'popOutTiming').values).toEqual(['open', 'tap']);
-    expect(field(profiles, 'popOutTiming').required === false && field(profiles, 'popOutTiming').maxSelect === 1).toBe(true);
-    expect(profiles.createRule.endsWith(' && @request.body.popOutTiming:isset = false'), 'the claim does not set the Pop out timing').toBe(true);
+    for (const c of [profiles, links]) expect(field(c, 'mode').required).toBe(false);
+    // Deeplink at open (`deeplink_open`) is a Profile default only (1791140010_deeplink_open.js).
+    expect(field(profiles, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink', 'deeplink_open']);
+    expect(field(links, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink']);
+    // Pop out timing is gone (1791140010_deeplink_open.js), its create rule clause with it.
+    expect(profiles.createRule.includes('popOutTiming'), 'no Pop out timing clause in the claim rule').toBe(false);
     const files = [users, profiles, links].flatMap((c) => c.fields.filter((f: Field) => f.type === 'file'));
     expect(files.length).toBe(4);
     for (const f of files) {
