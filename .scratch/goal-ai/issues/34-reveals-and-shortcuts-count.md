@@ -4,7 +4,7 @@ Spec: docs/spec/phase-04-stats.md
 Covers: user stories 3, 4, 5, 7, 12, 14, 18, 21
 Seams: the running v2 stack at Playwright's baseURL through `./check.sh`. Visitors in fresh browser contexts with the country set by 33's helper: `/r/*` intercepted as in 33, Reveal answers awaited with `waitForResponse`, and every navigation to a host other than baseURL fulfilled with the stub page. The `request` fixture for unknown-Id `/r` and Reveal calls and for a foreign-`Origin` Reveal. The Stats Creator in the browser, with `dailyStats` requests watched and the browser clock moved through `page.clock`. A `dailyStats` read with the Stats Creator's token
 Blocked by: 33: A Page View and a Click through /r reach the Creator's Stats page, 22: Reveal and /r answer only v2's own origin within a per-client limit
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T12:47:00Z
 
 **What to build:** Every Destination a Visitor is handed counts once, whichever endpoint hands it out, and the Creator narrows Stats until it reads "Clicks on this Link, per day, from this country" (the plan's Phase 4 DONE).
 
