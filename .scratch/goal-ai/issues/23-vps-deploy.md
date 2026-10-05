@@ -40,14 +40,14 @@ The v2 host name, its DNS record, the SSH login and the copy to the VPS are the 
 
 The production country source stays out of this ticket. Phase 2's Visitor location reads request headers, and the parity run injects them. Production countries come from Cloudflare (plan §11, 2026-10-04), owned by Phases 4 and 5 (tickets 37 and 42); nothing here changes for it.
 
-- [ ] Traefik's two routers to Caddy, with the PROXY protocol header, are in place and recorded here, and n8n still answers at its own host. (The ports question itself is answered by plan §11: Traefik fronts Caddy.)
+- [x] Traefik's two routers to Caddy, with the PROXY protocol header, are in place and recorded here, and n8n still answers at its own host. 2026-10-05: n8n-traefik-1 is Traefik v3.6.12 with the Docker provider only (no file provider), so the routers are labels on the caddy service in compose.vps.yaml (loaded through COMPOSE_FILE in the VPS .env): one TCP router HostSNI(`*`), TLS passthrough, PROXY protocol v2, to Caddy :443 on n8n_default; one HTTP router for `/.well-known/acme-challenge/` (priority 2000) to Caddy :80, because Traefik answers TLS-ALPN itself and redirects port 80. For that the Operator added `--entrypoints.web.http.redirections.entryPoint.priority=1000` to Traefik's command (/docker/n8n/docker-compose.yml, backup .bak-20261005) and recreated Traefik; n8n answered 200 before and after, n8n-n8n-1 not restarted (up 6 weeks). Caddy reaches the app as `oflink-app` (APP_UPSTREAM) because fastt-app on n8n_default also carries the alias `app`. v2 host: v2.ofl.ink (A 72.62.92.114 at Namecheap). Mac half of the limit check: 61 requests to /r/tkqs82oqoxqz gave 60×302 then 1×429. Phone half: pending. (The ports question itself is answered by plan §11: Traefik fronts Caddy.)
 - [ ] Every `# manual:` VPS line of the spec's Acceptance has run, with its output recorded here:
-  - the stack is up;
-  - the import exits 0, and its lines hold no Destination;
-  - no `stale in v2:` record is left;
-  - the HTTPS redirect line;
-  - the parity spec's summary, all passing;
+  - the stack is up; (2026-10-05 `docker compose up -d --build --wait`: pocketbase healthy, app and caddy up; ports 8080/9443 published, 8090 on 127.0.0.1 only)
+  - the import exits 0, and its lines hold no Destination; (`imported: 27 Profiles, 38 Links, 56 images, 30 warnings`, exit 0; warnings are `dropped: secrets entry … has no Link` / `unused` and one `repaired: trailing comma`, no Destination printed)
+  - no `stale in v2:` record is left; (0 lines)
+  - the HTTPS redirect line; (`curl -sI http://v2.ofl.ink/weiwei` → 301 https://v2.ofl.ink/weiwei, Traefik's redirect; Caddy's own :80 answers 308 on the ACME router's path)
+  - the parity spec's summary, all passing; (`PLAYWRIGHT_BASE_URL=https://v2.ofl.ink … --grep-invert 'Geo Rule'`: 154 passed, 18 skipped (the Fixture-only blocks, not served on the VPS), 1 failed, which was the leak check asking for the Fixture; fixed in 51b86eb and passing alone; a clean full rerun: pending)
   - the admin edit seen on the next load.
-- [ ] PocketBase's admin UI answers only through the SSH tunnel. The v2 host does not route to it, and its port is not reachable from outside.
+- [x] PocketBase's admin UI answers only through the SSH tunnel. The v2 host does not route to it, and its port is not reachable from outside. (2026-10-05: `ss -ltn` shows 127.0.0.1:8090 only; from the Mac http://72.62.92.114:8090/_/ and https://v2.ofl.ink:8090/_/ both fail to connect)
 - [ ] `docker compose restart` on the VPS brings the stack back with its data and certificate. A full reboot is the Operator's call, because n8n shares the VPS.
-- [ ] n8n's containers are the same before and after (`docker ps` ids), and v1 still serves ofl.ink, untouched.
+- [~] n8n's containers are the same before and after (`docker ps` ids), and v1 still serves ofl.ink, untouched. (n8n-n8n-1 c4827ee2ed2f unchanged, up 6 weeks; n8n-traefik-1 was recreated once for the redirect-priority flag, by the Operator, recorded above; `curl -sI https://ofl.ink/weiwei` → `server: Netlify`)
