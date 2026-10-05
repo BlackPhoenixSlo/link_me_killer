@@ -4,7 +4,7 @@ Spec: docs/spec/phase-05-cutover-and-domains.md
 Covers: user stories 1, 8, 10, 14, 17, 30, 31, 35, 45
 Seams: offline, the local Caddy image adapting the production configuration, and the running local stack called from inside Caddy's container; the Playwright loop through `./check.sh` for the hand-over order, its Operator steps arranged as a superuser at PocketBase's loopback port as Phase 3 arranges them; the spec's local Acceptance block under `set -e`
 Blocked by: 40: On a Custom Domain or Spare Domain every Mode and Escape and Reveal works and counts as on ofl.ink, 29: Log-in lands a Creator where they left off and a handed-over Profile opens in the Editor
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T16:02:04Z
 
 **What to build:** Everything about the Cutover that can be made and checked on this machine, so that on the day only DNS moves.
 - **Production Caddy site.** The production site address becomes one `https://` catch-all with on-demand TLS, carrying the same routes as Phase 2's public site. A global on-demand policy points its ask at the app's TLS Ask over the Compose network, so Caddy obtains a certificate only for a hostname the app admits: ofl.ink after the switch, Phase 2's v2 host, every Spare Domain and every Custom Domain. The original Host header reaches the app. The local plain-HTTP listener on the baseURL port keeps what Phase 2 gave it and accepts any Host. The primary-hosts setting is `localhost` locally; its production value is set at the runbook's step 1. Nothing in Caddy or the app changes on the day of the switch.
