@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { withoutBootstrap } from './domains-helpers';
 import {
   account, CLAIM, createOwnerlessProfile, expectServedWebp, expectVerifyScreen, featured, forgotPassword, fresh, furnishedCreator, heading,
   holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN, logIn, mailedLink, mailedLinks, markVerified, onLocalStack, openProfile, operator, ownerOf,
@@ -196,9 +197,8 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
       expect(res.status(), `${method} ${path}`).toBe(404);
       expect(await res.json(), `${method} ${path}`).toEqual({ error: 'Not found' });
     }
-    // PocketBase's admin UI keeps Phase 2's answer: the Page Copy's index page, not the dashboard.
-    const admin = await request.get('/_/');
-    expect((await admin.body()).equals(readFileSync(join(ROOT, 'app', 'public', 'index.html')))).toBe(true);
+    // PocketBase's admin UI keeps Phase 2's answer: the Page Copy's index page (with ticket 39's bootstrap block), not the dashboard.
+    expect(withoutBootstrap(await (await request.get('/_/')).text())).toBe(readFileSync(join(ROOT, 'app', 'public', 'index.html'), 'utf8'));
   });
 });
 

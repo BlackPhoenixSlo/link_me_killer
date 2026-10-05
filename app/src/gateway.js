@@ -14,16 +14,21 @@
 // From ticket 26 on the links list rule is open to the owner of a Link's Profile (1791140005_content_rules.js), and a token
 // PocketBase no longer accepts lists links as a guest's empty list (200) too (observed on the test stack, 2026-10-05: a garbage
 // token lists links 200 empty and events 403), so an empty links list is confirmed the same way.
-// ASSUMPTION: only an unknown Username or Link Id, and a Profile with no Link, costs one extra call (the refresh or the second
-// list), with no time bound, because a bound would serve a real Profile or Link as missing for up to that long after the token
-// is invalidated (rung 5: a refresh is a token check, not a password hash; the Click guard already limits `/r` and Reveal per
-// client). Overturned if a scan of unknown Usernames or Link Ids must cost one call each; the gateway then tracks the token's
-// expiry and invalidation another way.
+// ASSUMPTION: every empty list read on a token this call did not just sign in for costs one extra call (the refresh or the
+// second list), with no time bound, because a bound would serve a real Profile, Link or domain as missing for up to that long
+// after the token is invalidated (rung 5: a refresh is a token check, not a password hash; the Click guard already limits `/r`
+// and Reveal per client). That is an unknown Username or Link Id and a Profile with no Link, and from ticket 39 on Host
+// Resolution's lookups (app/src/host-resolver.js): every non-primary page load or TLS Ask for a Custom Domain pays one
+// auth-refresh on its success path, since its Spare Domain lookup comes back empty, and an unknown host pays two. Overturned
+// if a scan of unknown Usernames, Link Ids or hosts must cost one call each, or if Custom Domain and unknown-host traffic
+// makes the refreshes a load; the gateway then tracks the token's expiry and invalidation another way.
 const USERNAME = /^[a-z0-9_]+$/;
 const LINK_ID = /^[a-z0-9]{12}$/;
 // Hono decodes %2F in a path parameter, so an unchecked record id such as `../../collections/links/records` would turn a file
 // read into a superuser record view (observed with Hono's router for this ticket).
 const RECORD_ID = /^[a-z0-9]{15}$/;
+// A hostname as the Domains schema stores one (1791140008_domains.js): lower-case labels, no port, no trailing dot.
+const HOSTNAME = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
 
 function createGateway({ url, email, password }) {
   let token = null;
@@ -101,6 +106,17 @@ function createGateway({ url, email, password }) {
     },
     // The Profile alone, or null, for a caller that needs no Link (the Page View Ping).
     findProfile: profileAt,
+    // Is `host` a listed Spare Domain? (Phase 5, Host Resolution.)
+    async isSpareDomain(host) {
+      if (!HOSTNAME.test(host)) return false;
+      return (await records('spareDomains', `domain='${host}'`)).length > 0;
+    },
+    // The Profile whose Custom Domain is `host`, or null.
+    async profileWithDomain(host) {
+      if (!HOSTNAME.test(host)) return null;
+      const [profile] = await records('profiles', `customDomain='${host}'`);
+      return profile || null;
+    },
     async getLink(linkId) {
       if (!LINK_ID.test(linkId || '')) return null;
       const [link] = await records('links', `linkId='${linkId}'`);
@@ -153,4 +169,4 @@ function createGateway({ url, email, password }) {
   };
 }
 
-module.exports = { createGateway };
+module.exports = { createGateway, HOSTNAME };

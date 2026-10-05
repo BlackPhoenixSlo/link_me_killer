@@ -4,6 +4,7 @@ import { CREATORS } from '../stats-seed';
 import {
   asSuperuser, callsTo429, createOwnerlessProfile, ENV, heading, INSTAGRAM_UA, logIn, only, onLocalStack, operator, phoneContext, proxy, recordIds, refused, superuserToken,
 } from './helpers';
+import { withoutBootstrap } from './domains-helpers';
 
 // Phase 4 (docs/spec/phase-04-stats.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL. Every Visitor
 // is a fresh browser context with its country sent as `CF-IPCountry`; `/r` is sent on for real without following its redirect
@@ -711,5 +712,6 @@ test('the Page View Ping: an unknown Username is 404 and records nothing, and a 
   const profile = await request.get(`/${stats.username}`);
   expect(viaV.status()).toBe(200);
   expect(viaV.headers()['content-type']).toBe(profile.headers()['content-type']);
-  expect(await viaV.text(), 'the Profile route\'s page').toBe(await profile.text());
+  // From ticket 39 each answer's bootstrap block names its own path's Profile (Phase 5); the page around it is the same.
+  expect(withoutBootstrap(await viaV.text()), 'the Profile route\'s page').toBe(withoutBootstrap(await profile.text()));
 });

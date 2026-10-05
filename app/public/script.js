@@ -28,15 +28,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const isIOSInstagram = isIOS && /Instagram/i.test(navigator.userAgent || '');
     const isAndroid = /Android/.test(navigator.userAgent || '');
 
-    // Routing Logic: Get username and optional ID from URL path
-    // Format: /username/id or /username
-    const pathSegments = window.location.pathname.replace(/^\/|\/$/g, '').split('/');
-    let username = pathSegments[0];
-    const trackingId = pathSegments[1]; // The number after the username
+    // The Profile this page is for, as the app resolved it from the host and the path (Phase 5): its Username, the Tracking Code
+    // the path carried, and the Profile path every URL the page builds for itself starts from (`/{username}`, or `/` on a
+    // Custom Domain). Null when no Profile answers the path, which lands on the landing page as an unknown Username does.
+    const bootstrap = JSON.parse(document.getElementById('profile-bootstrap').textContent);
+    if (!bootstrap) {
+        window.location.href = '/landing.html';
+        return;
+    }
+    let { username, profilePath } = bootstrap;
+    const trackingId = bootstrap.trackingCode;
     // Link Shortcut: read on page load, before the address bar is touched, so ?link= survives beside the code
     const linkShortcut = new URLSearchParams(window.location.search).get('link');
 
-    if (!username || username === 'index.html') username = 'juliafilippo_'; // Default
+    if (!username || username === 'index.html') { // Default
+        username = 'juliafilippo_';
+        profilePath = `/${username}`;
+    }
 
     // A Tracking Code in the path is stored once the Profile JSON names its Profile (below)
     if (trackingId) {
@@ -44,10 +52,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Clean URL: Remove the tracking ID from the address bar, outside In-App Browsers only,
         // so the app's own "Open in browser" menu item carries the Tracking Code
-        // Changes /username/123 -> /username
+        // Changes /username/123 -> /username, and on a Custom Domain /123 -> /
         if (!isInAppBrowser) {
-            const cleanUrl = `/${username}`;
-            window.history.replaceState({}, '', cleanUrl);
+            window.history.replaceState({}, '', profilePath);
         }
     }
 
@@ -254,10 +261,10 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(err => console.error('Error revealing link:', err));
     }
 
-    // Escape target: https on the host that served the page, with the stored Tracking Code
+    // Escape target: https on the host that served the page, at the Profile path with the stored Tracking Code
     function escapeTarget(linkId) {
         const code = storedTrackingCode();
-        let path = `/${username}` + (code ? `/${code}` : '');
+        let path = code ? `${profilePath.replace(/\/$/, '')}/${code}` : profilePath;
         if (linkId) path += `?link=${linkId}`;
         return { path, url: `https://${window.location.host}${path}` };
     }

@@ -429,6 +429,8 @@ test.describe('on the test stack', () => {
   // claim and owner reads (1791140004_sign_up_and_claim.js); the Username's length and the one-Profile-per-owner index.
   // Amended by ticket 26, only where it opens a rule: the profiles update and every links rule, for the signed-in owner of the
   // Link's Profile (1791140005_content_rules.js). The file fields were already webp-only and stay as they were.
+  // Amended by ticket 39 (Phase 5), only where it adds: the hidden Custom Domain on profiles and the update rule's clause that
+  // refuses a Creator setting one (1791140008_domains.js); 05-domains proves both.
   test('the schema: fields, patterns, relations, file fields, and every rule superuser-only but the ones Phase 3 opens', async () => {
     const collection = async (name: string) => (await pb(`/api/collections/${name}`, { token })).json();
     const [users, profiles, links, events] = await Promise.all(['users', 'profiles', 'links', 'events'].map(collection));
@@ -440,7 +442,7 @@ test.describe('on the test stack', () => {
     expect(users.createRule.includes('@request.body.verified:isset = false'), 'users sign-up sets nothing but email and password').toBe(true);
     expect(rulesClosed(profiles, ['deleteRule']), 'profiles delete closed').toBe(true);
     expect(profiles.updateRule, 'profiles updated by their verified owner, not Username, owner, badge or v1Key').toBe(
-      `${OWNER} && @request.auth.verified = true && @request.body.username:isset = false && @request.body.owner:isset = false && @request.body.verified:isset = false && @request.body.v1Key:isset = false`,
+      `${OWNER} && @request.auth.verified = true && @request.body.username:isset = false && @request.body.owner:isset = false && @request.body.verified:isset = false && @request.body.v1Key:isset = false && @request.body.customDomain:isset = false`,
     );
     expect(profiles.listRule === OWNER && profiles.viewRule === OWNER, 'profiles read by their owner only').toBe(true);
     expect(profiles.createRule.startsWith('@request.auth.id != "" && @request.body.owner = @request.auth.id && '), 'profiles claimed by a signed-in Creator for itself').toBe(true);
@@ -459,7 +461,7 @@ test.describe('on the test stack', () => {
     type Field = { name: string; type: string; system?: boolean; [k: string]: unknown };
     const field = (c: { fields: Field[] }, name: string) => c.fields.find((f) => f.name === name) || ({} as Field);
     const shape = (c: { fields: Field[] }) => c.fields.filter((f) => !f.system).map((f) => `${f.name}:${f.type}`).join(' ');
-    expect(shape(profiles)).toBe('username:text displayName:text bio:text verified:bool avatar:file mode:select owner:relation v1Key:text');
+    expect(shape(profiles)).toBe('username:text displayName:text bio:text verified:bool avatar:file mode:select owner:relation v1Key:text customDomain:text');
     expect(shape(links)).toBe(
       'profile:relation linkId:text title:text order:number isAdult:bool mode:select destination:text tracking:bool defaultTrackingCode:text geo:json icon:file backgroundImage:file v1Key:text',
     );

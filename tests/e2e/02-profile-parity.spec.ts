@@ -2,6 +2,7 @@ import { test, expect, devices, type APIRequestContext, type Page, type Request 
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { withoutBootstrap } from './domains-helpers';
 
 // Phase 2 parity (docs/spec/phase-02-vps-foundation.md, Testing Decisions, 02-profile-parity): the Fixture Profile half, and
 // the v1 Snapshot half below (ticket 17: pages, Profile JSON, paths, leaks; ticket 18: /r, Reveal, journeys, old ids). Every id is read from the served Profile JSON. A Link's Test Secrets
@@ -313,11 +314,13 @@ test.describe('Other paths', () => {
     await expect(page).toHaveURL(`${origin}/landing.html`);
   });
 
+  // From ticket 39 on the index page carries the Profile page bootstrap block (Phase 5), which 05-domains checks; the rest of
+  // the answer is still the Page Copy's index.html byte for byte.
   for (const path of ['/no/such/path', '/secrets.json', '/fixture', ...NOT_SERVED]) {
     test(`${path} gives the index page with 200`, async ({ request }) => {
       const res = await request.get(path);
       expect(res.status()).toBe(200);
-      expect((await res.body()).equals(pageCopy('index.html'))).toBe(true);
+      expect(withoutBootstrap(await res.text())).toBe(pageCopy('index.html').toString('utf8'));
     });
   }
 });

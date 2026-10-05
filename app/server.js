@@ -1,7 +1,8 @@
 'use strict';
 // The app behind Caddy (docs/spec/phase-02-vps-foundation.md, Contracts): Profile JSON, /r, Reveal, PocketBase files and the
 // Page Copy; from Phase 3 on also the Editor at /edit and the same-origin API proxy (docs/spec/phase-03-auth-and-editor.md);
-// from Phase 4 on the Page View Ping, and `/r` and Reveal record a Click (docs/spec/phase-04-stats.md).
+// from Phase 4 on the Page View Ping, and `/r` and Reveal record a Click (docs/spec/phase-04-stats.md); from Phase 5 on
+// Host Resolution picks each page's Profile by host and the TLS Ask answers Caddy (docs/spec/phase-05-cutover-and-domains.md).
 // It reads PocketBase as the superuser named in the environment and never logs a Destination: nothing below logs
 // a request, a record or an error's details.
 // ASSUMPTION: Page Copy answers carry v1's `/*` header, `Cache-Control: public, max-age=0, must-revalidate` (rung 3:
@@ -17,6 +18,7 @@ const { visitorLocation } = require('./src/visitor-location');
 const { toWebp, TARGETS } = require('./src/image');
 const { allow, allowPing, clientIp, originOf, sameOrigin } = require('./src/click-guard');
 const { createEventRecorder } = require('./src/event-recorder');
+const { createHostResolver } = require('./src/host-resolver');
 
 const PUBLIC = path.join(__dirname, 'public');
 const EDITOR = path.join(__dirname, 'editor');
@@ -35,25 +37,32 @@ const gateway = createGateway({
   password: process.env.PB_SUPERUSER_PASSWORD,
 });
 const events = createEventRecorder(gateway);
+const hosts = createHostResolver({ primaryHosts: process.env.PRIMARY_HOSTS, gateway });
 const app = new Hono();
 
 const pageCopy = (file) => fs.readFileSync(path.join(PUBLIC, file));
 
-// The file at `rel` under `root`, else `root`'s index.html, with the Page Copy's cache header.
-function staticFile(c, root, rel) {
-  let file = null;
+// The file at `rel` under `root`, or null.
+function fileUnder(root, rel) {
   try {
     const candidate = path.resolve(root, '.' + decodeURIComponent(rel));
-    if (candidate.startsWith(root + path.sep) && fs.statSync(candidate).isFile()) file = candidate;
+    if (candidate.startsWith(root + path.sep) && fs.statSync(candidate).isFile()) return candidate;
   } catch {
-    // a malformed escape or a missing file falls through to the index page
+    // a malformed escape or a missing file is no file
   }
-  file ||= path.join(root, 'index.html');
+  return null;
+}
+
+// The file at `file`, with the Page Copy's cache header.
+function serveFile(c, file) {
   return c.body(fs.readFileSync(file), 200, {
     'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
     'Cache-Control': MUST_REVALIDATE,
   });
 }
+
+// The file at `rel` under `root`, else `root`'s index.html.
+const staticFile = (c, root, rel) => serveFile(c, fileUnder(root, rel) || path.join(root, 'index.html'));
 
 app.get('/api/profiles/:file', async (c, next) => {
   const file = c.req.param('file');
@@ -222,11 +231,42 @@ const editor = (c) => staticFile(c, EDITOR, c.req.path.slice('/edit'.length));
 app.get('/edit', editor);
 app.get('/edit/*', editor);
 
+// The TLS Ask (Phase 5 spec, Interfaces): Caddy's question before it issues a certificate for `domain`. An empty 200 for a
+// primary host, a Spare Domain or a Custom Domain, 404 for anything else, 400 when `domain` is missing or not a hostname, and
+// 503 when PocketBase cannot be read for a non-primary host, which Caddy also takes as no. It confirms one hostname the caller
+// already has and never lists any. Matched before the Profile catch-all on every host; `internal` is a reserved Username.
+app.get('/internal/tls-ask', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const domain = c.req.query('domain');
+  if (!domain || !hosts.isAskable(domain)) return c.body(null, 400);
+  let resolved;
+  try {
+    resolved = await hosts.resolveHost(domain);
+  } catch {
+    return c.body(null, 503);
+  }
+  return c.body(null, resolved.kind === 'unknown' ? 404 : 200);
+});
+
 // v1's leak path stays dead: 404, with the landing page as its body.
 app.get('/netlify/*', (c) => c.body(pageCopy('landing.html'), 404, { 'Content-Type': TYPES['.html'], 'Cache-Control': MUST_REVALIDATE }));
 
-// Any other GET: the Page Copy file at that path, else index.html (v1's `/* -> /index.html` rule).
-app.get('*', (c) => staticFile(c, PUBLIC, c.req.path));
+// Any other GET: the Page Copy file at that path, else index.html (v1's `/* -> /index.html` rule) as the Profile page, which
+// from Phase 5 on carries the Profile Host Resolution found for this host and path (Phase 5 spec, Profile page bootstrap) as a
+// JSON block the page reads instead of parsing its own address: { username, trackingCode, profilePath }, or null.
+// `<`, `>` and `&` are escaped, and the block goes in by a replacer function, so no `$` pattern in the path is expanded:
+// nothing from the path can end the block.
+const INDEX = path.join(PUBLIC, 'index.html');
+const BOOTSTRAP_BEFORE = '<script src="/script.js"></script>';
+const asScriptJson = (value) => JSON.stringify(value).replace(/[<>&]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+app.get('*', async (c) => {
+  const file = fileUnder(PUBLIC, c.req.path);
+  if (file && file !== INDEX) return serveFile(c, file);
+  const request = await hosts.resolveProfileRequest(c.req.header('host'), new URL(c.req.url).pathname);
+  const block = `<script type="application/json" id="profile-bootstrap">${asScriptJson(request)}</script>\n    `;
+  const page = pageCopy('index.html').toString('utf8').replace(BOOTSTRAP_BEFORE, () => block + BOOTSTRAP_BEFORE);
+  return c.body(page, 200, { 'Content-Type': TYPES['.html'], 'Cache-Control': MUST_REVALIDATE });
+});
 
 // A fixed line only: an error can carry a PocketBase answer, and a record can hold a Destination.
 app.onError((err, c) => {

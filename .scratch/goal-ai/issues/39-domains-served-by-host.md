@@ -4,7 +4,7 @@ Spec: docs/spec/phase-05-cutover-and-domains.md
 Covers: user stories 22, 23, 24, 29, 31, 32, 33, 34, 36, 40, 41, 43, 45
 Seams: the Playwright spec `05-domains` against the local stack at the existing baseURL through `./check.sh`. Chromium maps `*.test` to loopback, so host-routing checks go through `page` with real `creator.test:4173` and `spare.test:4173` Host headers over plain HTTP; TLS Ask checks go through `request` at the baseURL with `?domain=`. Set-up and tear-down as a superuser through PocketBase's REST API (set-up, not a second seam); the Creator's writes through the API the Editor uses
 Blocked by: 22: Reveal and /r answer only v2's own origin within a per-client limit, 30: Only a Profile's owner and the Operator can read or change it through PocketBase's API
-Status: claimed 20261005T084628Z 2026-10-05T14:40:50Z
+Status: done
 
 **What to build:** The Operator types a domain into a Profile, or lists a Spare Domain, in the PocketBase admin UI, and on the next page load that hostname works with no deploy and no Caddy edit.
 - **Host Resolution.** The app turns the request's Host header into one of four kinds, checked in this order: ofl.ink's own hosts (the primary-hosts setting, no database), a listed Spare Domain, a Profile's Custom Domain, anything else. Hostnames are lower-cased and lose any port and trailing dot, and matching is exact. Every non-primary request asks PocketBase; there is no cache.
@@ -16,13 +16,17 @@ Status: claimed 20261005T084628Z 2026-10-05T14:40:50Z
 ASSUMPTION (the spec's, rung 5): a Custom Domain that equals ofl.ink's host or a Spare Domain is never reached, because the order above settles it; nothing is validated on save. Overturned if the Operator wants such a typo refused when it is saved.
 ASSUMPTION (the spec's, evidence blocked): the Operator-only clause uses PocketBase 0.23+ request-body syntax. Overturned by the rule syntax of the release Phase 2 pins.
 
-- [ ] The TLS Ask answers 200 for `creator.test`, `spare.test` and `localhost`, 404 for `unknown.test`, and 400 when `domain` is missing.
-- [ ] `creator.test/` shows the Fixture Profile's display name and Link cards, `creator.test/{code}` shows the same Profile, and `creator.test/?link={Link Id}` reveals that Link on load exactly as `localhost/{username}?link={Link Id}` does.
-- [ ] `spare.test/{username}` shows the Fixture Profile, and `spare.test/{username}?link={Link Id}` reveals that Link on load.
-- [ ] Changing the Fixture Profile's Custom Domain to `creator2.test` makes `creator2.test/` show it on the next load with no restart, and the TLS Ask then answers 200 for `creator2.test` and 404 for `creator.test`.
-- [ ] Giving a second, test-made Profile the same Custom Domain is refused. With that Profile's Custom Domain set to `spare.test`, `spare.test/{username}` still shows the Fixture Profile.
-- [ ] Signed in as a verified Creator through the Editor's API, creating a Profile with a Custom Domain and setting one on their own Profile are both refused, and the stored value is unchanged.
-- [ ] Loading `localhost/{username}`, no response body the page receives contains `creator.test`. Without a token at the baseURL, no response from the Profiles or Spare Domains records API contains `creator.test` or `spare.test`.
-- [ ] Set-up gives the Fixture Profile `creator.test` and lists `spare.test`; tear-down removes both, and a test that changes a domain restores it. `unknown.test` is never added, and the seed is unchanged.
-- [ ] A screenshot of `creator.test/` is saved with the run's other shots. A failing assertion names the Link Id and never prints a Destination.
-- [ ] Every existing spec still passes on `localhost`, and `./check.sh` passes.
+- [x] The TLS Ask answers 200 for `creator.test`, `spare.test` and `localhost`, 404 for `unknown.test`, and 400 when `domain` is missing.
+- [x] `creator.test/` shows the Fixture Profile's display name and Link cards, `creator.test/{code}` shows the same Profile, and `creator.test/?link={Link Id}` reveals that Link on load exactly as `localhost/{username}?link={Link Id}` does.
+- [x] `spare.test/{username}` shows the Fixture Profile, and `spare.test/{username}?link={Link Id}` reveals that Link on load.
+- [x] Changing the Fixture Profile's Custom Domain to `creator2.test` makes `creator2.test/` show it on the next load with no restart, and the TLS Ask then answers 200 for `creator2.test` and 404 for `creator.test`.
+- [x] Giving a second, test-made Profile the same Custom Domain is refused. With that Profile's Custom Domain set to `spare.test`, `spare.test/{username}` still shows the Fixture Profile.
+- [x] Signed in as a verified Creator through the Editor's API, creating a Profile with a Custom Domain and setting one on their own Profile are both refused, and the stored value is unchanged.
+- [x] Loading `localhost/{username}`, no response body the page receives contains `creator.test`. Without a token at the baseURL, no response from the Profiles or Spare Domains records API contains `creator.test` or `spare.test`.
+- [x] Set-up gives the Fixture Profile `creator.test` and lists `spare.test`; tear-down removes both, and a test that changes a domain restores it. `unknown.test` is never added, and the seed is unchanged.
+- [x] A screenshot of `creator.test/` is saved with the run's other shots. A failing assertion names the Link Id and never prints a Destination.
+- [x] Every existing spec still passes on `localhost`, and `./check.sh` passes.
+
+## Landed
+
+Run 20261005T084628Z. Reviewer APPROVE (round 2 of 3; round 1 blocker: the bootstrap block was inserted with String.replace so $' and $$ in a path corrupted the JSON; fixed with a replacer function and a test on both hosts). Cold ./check.sh --reporter=line: 349 passed, 1 skipped, exit 0. New app/src/host-resolver.js (primary → Spare → Custom → unknown, no cache), GET /internal/tls-ask (200/404/400/503), a #profile-bootstrap JSON block read by script.js instead of parsing its address, migration 1791140008 (hidden unique-when-set profiles.customDomain, superuser-only spareDomains, customDomain:isset = false on Profiles create/update), PRIMARY_HOSTS required by compose (tests/e2e.env: localhost). ASSUMPTION: PocketBase 0.40.4 drops hidden fields from non-superuser bodies, so a Creator's write naming a Custom Domain answers 200 and stores nothing rather than a refusing status (test asserts 200 + nothing stored; a later migration dropping hidden would make the clause refuse). ASSUMPTION: every Custom Domain page load or TLS Ask pays one auth-refresh (two for an unknown host). 503 path coded, untested. Proven with *.test names on the local stack (no real domain).
