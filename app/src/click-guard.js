@@ -29,9 +29,11 @@ function allow(clientIp) {
 // The client IP is the last X-Forwarded-For entry, the one Caddy writes; any entry before it is a claim Caddy passed on.
 // ASSUMPTION: the last-entry rule is proven only by inspection: Caddy trusting no proxy replaces a client-set header with
 // the peer address, so every local call carries one entry and a first-entry rule would pass the same tests (rung 1, observed
-// with a temporary entry-count log in ticket 22). Once Caddy trusts a proxy (Phase 5 Cloudflare, or Traefik's PROXY
-// protocol in ticket 23), the entry Caddy appends is that proxy's peer, and this key must move to the entry before it.
-// Overturned if a stack test can put a trusted proxy in front of Caddy; the guard spec then proves the rule.
+// with a temporary entry-count log in ticket 22). Behind Traefik, Caddy's PROXY protocol flag (PROXY_PROTOCOL_FROM, ticket
+// 45) makes the header's source Caddy's peer, so the entry Caddy writes is still the Visitor's: tests/proxy-protocol.sh shows
+// Visitor A reaching 429 while Visitor B, behind the same allowed proxy, is still answered, which proves separate windows.
+// Phase 5's Cloudflare lines keep it so by replacing the header with Caddy's client address. Overturned if Caddy ever
+// appends a trusted proxy's address instead; the key then moves to the entry before it.
 // ASSUMPTION: a request without X-Forwarded-For throws, so it gets the 500 Hono answers to any thrown error, with no
 // Destination (rung 4: a loud 500 shows a changed proxy at once, where one key shared by every header-less call would hide
 // it until load turned it into 429s for every Visitor). Every request reaches the app through Caddy, which always writes

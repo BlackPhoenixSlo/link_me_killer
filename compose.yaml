@@ -11,6 +11,12 @@ services:
       - "${HTTPS_PORT:-443}:443"
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS (see .env.example)}
+      # The addresses Caddy accepts a PROXY protocol header from (see .env.example), handed to the Caddyfile as `off` when
+      # empty or `on <CIDRs>`, which selects its snippet: Caddy has no conditional of its own.
+      # ASSUMPTION: the one variable keeps the Operator's name and carries the selector word in the container (rung 2: the
+      # ticket asks for one variable in this service; rung 3: every variable here passes under its own name). Overturned if a
+      # second, derived variable reads better; it would be the selector alone.
+      PROXY_PROTOCOL_FROM: ${PROXY_PROTOCOL_FROM:+on }${PROXY_PROTOCOL_FROM:-off}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

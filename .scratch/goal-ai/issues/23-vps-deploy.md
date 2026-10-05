@@ -28,6 +28,11 @@ The exact commands are the spec's `# manual:` Acceptance lines, also quoted in p
 
 Which file holds Traefik's dynamic config, and how Traefik reloads it, are the Operator's to find on the server: this repo cannot see the live VPS.
 
+**Caddy side (ticket 45).** Caddy's half of the PROXY protocol is in the repo, off by default. In step 2 the Operator adds one line to the VPS `.env`: `PROXY_PROTOCOL_FROM=<the subnet of Traefik's Docker network>`, e.g. `PROXY_PROTOCOL_FROM=172.18.0.0/16` (`.env.example` holds the command that reads it, and the ASSUMPTION about which address Caddy sees). Caddy then reads the header from that range only, ahead of TLS. The check it enables, run within one minute once Traefik sends the header (the production limit is 60 per minute; status codes only, never a Location):
+- from client 1: `for i in $(seq 61); do curl -s -o /dev/null -w '%{http_code}\n' "https://<v2 host>/r/<Link Id>"; done | tail -n 1` prints 429;
+- right after, from client 2 on another network (e.g. a phone hotspot): `curl -s -o /dev/null -w '%{http_code}\n' "https://<v2 host>/r/<Link Id>"` prints 302, not 429.
+If client 2 also gets 429, Caddy sees Traefik from outside that range: correct the value in `.env` and `docker compose up -d caddy`.
+
 ASSUMPTION (plan §11's, flagged there): overturned if Traefik's config is not file-editable on the VPS or SNI passthrough breaks n8n.
 ASSUMPTION: Traefik reaches Caddy on the free host ports that the VPS `.env` gives `HTTP_PORT` and `HTTPS_PORT`, and its TCP service can send PROXY protocol; neither could be observed (the live VPS is out of bounds, floor 2). Rung 4: v2's Compose file stays off n8n's Docker network (story 24). Overturned if Traefik's container cannot reach those ports, in which case Caddy joins Traefik's network through a VPS-only Compose override, or if Traefik cannot send PROXY protocol, in which case the human chooses how the client address reaches Caddy.
 

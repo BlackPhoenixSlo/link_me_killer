@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md (Reveal hardening (D8); Further Notes
 Covers: prefactoring for 23, 41 and 42; RUN.md (run 20261004T191309Z) assumptions 1 and 2
 Seams: offline, the local `caddy:2-alpine` image adapting and validating the Caddyfile under both flag values (rung 1, as 41 plans); the running local stack brought up once with the flag on, called over TCP from inside the Compose network with a hand-written PROXY protocol v1 header, outside `./check.sh`; the Playwright loop through `./check.sh` with the flag off
 Blocked by: 22: Reveal and /r answer only v2's own origin within a per-client limit
-Status: claimed 20261005T084628Z 2026-10-05T11:41:35Z
+Status: done
 
 **What to build:** Added by the coordinator at the Operator's instruction (invocation of 2026-10-05, run 20261005T084628Z): a prefactoring ticket before Phase 4, so the VPS deploy (23) has the Caddy side of plan §11 ready and the Reveal limit keys on each Visitor, not on Traefik.
 
@@ -15,8 +15,22 @@ Status: claimed 20261005T084628Z 2026-10-05T11:41:35Z
 
 ASSUMPTION: PROXY protocol on Caddy's listener rather than `trusted_proxies` plus a header rewrite (rung 2: plan §11 says Traefik fronts Caddy by TLS passthrough with PROXY protocol, and a TLS-passthrough proxy cannot add HTTP headers). Overturned if the Operator's Traefik cannot send PROXY protocol; then 23's step chooses the client-address path and this flag stays off.
 
-- [ ] With the flag empty (tests/e2e.env), `caddy adapt` of the Caddyfile shows no PROXY protocol listener wrapper, and `./check.sh` passes unchanged.
-- [ ] With the flag set to a CIDR, `caddy adapt` shows the PROXY protocol wrapper allowing exactly that CIDR ahead of TLS, and `caddy validate` passes. Both run offline on the local image.
-- [ ] The tests/ script passes on the local stack with the flag on: source A's second `/r` is 429, source B's first is not, and a header-less connection from a non-allowed address is answered normally. It leaves no container or volume behind.
-- [ ] compose.yaml's Phase 2 contract lines still pass; `.env.example` documents the flag and its VPS-side value; ticket 23 records the Operator's line.
-- [ ] `./check.sh` passes.
+- [x] With the flag empty (tests/e2e.env), `caddy adapt` of the Caddyfile shows no PROXY protocol listener wrapper, and `./check.sh` passes unchanged.
+- [x] With the flag set to a CIDR, `caddy adapt` shows the PROXY protocol wrapper allowing exactly that CIDR ahead of TLS, and `caddy validate` passes. Both run offline on the local image.
+- [x] The tests/ script passes on the local stack with the flag on: source A's second `/r` is 429, source B's first is not, and a header-less connection from a non-allowed address is answered normally. It leaves no container or volume behind.
+- [x] compose.yaml's Phase 2 contract lines still pass; `.env.example` documents the flag and its VPS-side value; ticket 23 records the Operator's line.
+- [x] `./check.sh` passes.
+
+## Notes
+
+- RUN.md assumption 1, "**The Reveal and `/r` limit keys on the last `X-Forwarded-For` entry** ... Falls: every Visitor shares one window": narrowed. With `PROXY_PROTOCOL_FROM` set, Caddy takes the PROXY header's source as its peer and writes it as the last entry, so two Visitors behind one allowed proxy reach their own 429s with no change to app/src/click-guard.js (tests/proxy-protocol.sh, rung 1); what is left open is only the VPS value of the range (ticket 23's check) and Phase 5's Cloudflare lines (42).
+- RUN.md assumption 2, "**Traefik fronts Caddy by TCP passthrough with PROXY protocol** ... no committed file does that yet": resolved for Caddy's side. The Caddyfile and compose.yaml now carry the listener, off by default, and the VPS `.env` line plus its two-client check are in ticket 23; Traefik's own router and whether it can send the header stay the Operator's to set and observe on the VPS.
+- Mechanism (rung 1, local `caddy:2-alpine` v2.11.4): compose.yaml hands the Caddyfile `off` or `on <CIDRs>`, which imports an empty snippet or one adding `listener_wrappers { proxy_protocol { allow <CIDRs> } tls }` to every server. An empty `allow` was not used: it still adapts to a wrapper, which reads and drops a header from any address. Off, `caddy adapt` gives the same JSON as the previous Caddyfile. No `trusted_proxies` was added (42's).
+- Offline checks: `v="$(docker compose --env-file tests/e2e.env config --format json | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).services.caddy.environment.PROXY_PROTOCOL_FROM')"; docker run --rm --network none -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -e SITE_ADDRESS=:80 -e PROXY_PROTOCOL_FROM="$v" caddy:2-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile` (and `caddy validate ...`), once as is (`off`: no `listener_wrappers`) and once with `PROXY_PROTOCOL_FROM=172.18.0.0/16` before `docker compose` (`"listener_wrappers":[{"allow":["172.18.0.0/16"],"wrapper":"proxy_protocol"},{"wrapper":"tls"}]`, `Valid configuration`).
+- Proof: `tests/proxy-protocol.sh` exited 1 against the previous Caddyfile (every PROXY-prefixed request got 400) and exits 0 now: from 127.0.0.1 (allowed), source A 302 then 429, source B 302; from a container on the Compose network (not allowed), no header 302, then a forged header naming a fresh source 429. It leaves no container or volume of `oflinkv2-pp`.
+- Phase 2's Compose contract lines (spec Acceptance, `config --quiet` through `reuseExistingServer: false`) exit 0 under `bash -e`; `./check.sh --reporter=line` gave 327 passed, 1 skipped, with the flag off.
+- Reviewer round 1: APPROVE with should-fix 1 and nits 3–5 applied after the verdict; the coordinator observed the script and the cold suite after the edits.
+
+## Landed
+
+Run 20261005T084628Z. Reviewer: APPROVE round 1 (should-fix 1 and nits 3–5 applied after the verdict). Flag `PROXY_PROTOCOL_FROM` (empty = off; CIDRs = Caddy's listener_wrappers proxy_protocol allow-list ahead of tls, selected by an env-driven Caddyfile import); off in tests/e2e.env. Coordinator observed `bash tests/proxy-protocol.sh`: exit 0, A 302/A 429/B 302/none 302 from the allowed address, none 302 and forged 429 from a non-allowed address, torn down. Coordinator cold `./check.sh --reporter=line`: exit 0, `327 passed (3.5m)`, `1 skipped`.

@@ -1,4 +1,30 @@
 # One site, SITE_ADDRESS, proxied to the app. PocketBase is not routed through Caddy.
+
+# PROXY protocol (ticket 45): compose.yaml turns the Operator's PROXY_PROTOCOL_FROM into `off` (empty, as in tests) or
+# `on <CIDRs>`, which picks one of these snippets. On, every listener reads a PROXY protocol header from those addresses only,
+# ahead of TLS, and takes its source as the client address, so the X-Forwarded-For entry Caddy writes is the Visitor's
+# (app/src/click-guard.js). A header from any other address is read and dropped, never trusted. Off, there is no wrapper.
+# ASSUMPTION: an env-selected snippet rather than an always-present wrapper with an empty `allow` (rung 1: on the local
+# caddy:2-alpine v2.11.4 an empty `allow` still adapts to a proxy_protocol wrapper, which reads and drops a header from any
+# address, so Caddy would not behave exactly as without it). Overturned if Caddy gains a Caddyfile conditional.
+(proxy_protocol_off) {
+}
+
+(proxy_protocol_on) {
+	servers {
+		listener_wrappers {
+			proxy_protocol {
+				allow {args[:]}
+			}
+			tls
+		}
+	}
+}
+
+{
+	import proxy_protocol_{$PROXY_PROTOCOL_FROM:off}
+}
+
 {$SITE_ADDRESS} {
 	reverse_proxy app:3000
 }
