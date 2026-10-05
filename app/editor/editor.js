@@ -12,6 +12,9 @@
 // ASSUMPTION: screen paths `/edit/profile`, `/edit/first-link`, `/edit/live` and `/edit/add-link` (rung 6: the spec fixes only
 // `/edit`, `/edit/verify` and `/edit/reset`). Opening any of them anew goes through `/edit`'s routing, so a reload of the live
 // address or of "Add link" lands in the Editor. Overturned by a later ticket moving screens.
+// Ticket 27: the top of the Editor, laid out like the link.me Template's "Edit Profile" screen (link.me/profile/edit.html):
+// "Your Bio Link" with Copy, "Change Profile Picture", the Profile panel (display name, the @Username read-only, bio) and
+// "Quick Settings", whose "Deeplink Banner" row is the Profile's default Mode. No badge control, no Username change, no delete.
 
 const TOKEN = 'ofl.token';
 const screen = document.getElementById('screen');
@@ -43,7 +46,7 @@ async function api(path, { method = 'GET', body, keepalive = false } = {}) {
 }
 
 // The raw file, as picked, to Phase 2's upload endpoint with the Creator's token; the app stores the WebP. The browser never
-// converts an image.
+// converts an image. The answer is the refusal's reason, or null and the stored file's URL.
 async function upload(collection, recordId, field, file) {
   const form = new FormData();
   form.append('file', file);
@@ -52,10 +55,10 @@ async function upload(collection, recordId, field, file) {
     headers: { Authorization: localStorage.getItem(TOKEN) || '' },
     body: form,
   });
-  if (res.ok) return null;
-  if (res.status === 413) return 'That image is over 20 MB.';
-  if (res.status === 415) return 'That file is not an image we can read (jpg, png, heic, gif or webp).';
-  return `The image was refused (${res.status}). Try again.`;
+  if (res.ok) return { error: null, url: (await res.json()).url };
+  if (res.status === 413) return { error: 'That image is over 20 MB.' };
+  if (res.status === 415) return { error: 'That file is not an image we can read (jpg, png, heic, gif or webp).' };
+  return { error: `The image was refused (${res.status}). Try again.` };
 }
 
 function signedIn({ token, record }) {
@@ -388,38 +391,78 @@ function check(name, text, checked = false) {
   return { box, row: el('label', { className: 'check' }, box, text) };
 }
 
-// The Profile step: display name (required) and bio are saved first, then the avatar goes to the upload endpoint.
+// Writes `fields` to the Profile with the form disabled, saying PocketBase's refusal in `status`. On success PocketBase's answer
+// is kept in `profile`, the one place the Editor's in-memory Profile is updated, and the answer is true.
+async function saveProfile(profile, form, status, fields) {
+  submitting(form, true);
+  const res = await api(`profiles/records/${profile.id}`, { method: 'PATCH', body: fields });
+  submitting(form, false);
+  if (!res.ok) {
+    say(status, fieldReasons(res, `The save failed (${res.status}). Try again.`));
+    return false;
+  }
+  Object.assign(profile, res.data);
+  return true;
+}
+
+// The Profile's own form, the same for the Profile step and the Editor's Profile panel: display name (required), bio and
+// picture, saved on its one button. Name and bio are saved first, then a picked picture goes to the upload endpoint. The
+// Editor's panel adds the current picture beside "Change Profile Picture" and the @Username read-only; `done(status)` runs
+// after a full save.
 // ASSUMPTION: the Editor checks the display name itself (whitespace only counts as none) and shows its own message, and a
-// refused avatar keeps the Creator on the step with the reason, the name and bio already saved (rung 5: no rollback).
+// refused avatar keeps the Creator on the form with the reason, the name and bio already saved (rung 5: no rollback).
 // Overturned if PocketBase must refuse an empty display name, or a half-saved step must be undone.
-function drawProfileStep(profile) {
+function profileForm(profile, { editor = false, button, done }) {
   const displayName = el('input', { name: 'displayName', value: profile.displayName || '', autocomplete: 'name' });
   const bio = el('textarea', { name: 'bio', rows: 3, value: profile.bio || '' });
   const avatar = fileInput('avatar');
   const status = message();
+  const current = el('img', { className: 'avatar', alt: '' });
+  const showAvatar = (url) => {
+    current.hidden = !url;
+    if (url) current.src = url;
+  };
+  showAvatar(profile.avatar ? `/api/files/profiles/${profile.id}/${profile.avatar}` : '');
   const form = el('form', {
     noValidate: true,
     onsubmit: async (event) => {
       event.preventDefault();
       if (!displayName.value.trim()) return say(status, 'Enter a display name.');
-      submitting(form, true);
-      const res = await api(`profiles/records/${profile.id}`, { method: 'PATCH', body: { displayName: displayName.value.trim(), bio: bio.value } });
-      if (!res.ok) {
+      if (!(await saveProfile(profile, form, status, { displayName: displayName.value.trim(), bio: bio.value }))) return undefined;
+      displayName.value = profile.displayName;
+      const file = avatar.files[0];
+      if (file) {
+        submitting(form, true);
+        const res = await upload('profiles', profile.id, 'avatar', file);
         submitting(form, false);
-        return say(status, fieldReasons(res, `The save failed (${res.status}). Try again.`));
+        if (res.error) return say(status, res.error);
+        avatar.value = '';
+        showAvatar(res.url);
       }
-      const failed = avatar.files[0] ? await upload('profiles', profile.id, 'avatar', avatar.files[0]) : null;
-      submitting(form, false);
-      if (failed) return say(status, failed);
-      return onboard();
+      return done(status);
     },
-  },
-  el('label', {}, 'Display name', displayName),
-  el('label', {}, 'Bio', bio),
-  el('label', {}, 'Profile picture', avatar),
-  status,
-  el('button', { type: 'submit' }, 'Continue'));
-  render('Your Profile', el('h1', {}, 'Your Profile'), el('p', { className: 'hint' }, 'What Visitors see at the top of your page. A photo in jpg, png, heic, gif or webp.'), form);
+  });
+  const name = el('label', {}, 'Display name', displayName);
+  const about = el('label', {}, 'Bio', bio);
+  if (editor) {
+    const username = el('input', { name: 'username', value: profile.username, readOnly: true });
+    form.append(
+      el('div', { className: 'picture' }, current, el('label', {}, 'Change Profile Picture', avatar)),
+      name,
+      el('label', {}, 'Username', el('div', { className: 'address' }, el('span', { 'aria-hidden': 'true' }, '@'), username)),
+      about,
+    );
+  } else {
+    form.append(name, about, el('label', {}, 'Profile picture', avatar));
+  }
+  form.append(status, el('button', { type: 'submit' }, button));
+  return form;
+}
+
+// The Profile step: the Profile's own form, then on to the next Onboarding step.
+function drawProfileStep(profile) {
+  render('Your Profile', el('h1', {}, 'Your Profile'), el('p', { className: 'hint' }, 'What Visitors see at the top of your page. A photo in jpg, png, heic, gif or webp.'),
+    profileForm(profile, { button: 'Continue', done: () => onboard() }));
 }
 
 // The Link form, the same for the first-Link step and the Editor's "Add link". A new Link starts on Profile default, which
@@ -435,7 +478,7 @@ function drawLinkForm(profile, links) {
   const background = fileInput('backgroundImage');
   const adult = check('isAdult', '18+ Age Gate');
   const profileMode = MODE_NAMES[profile.mode] || MODE_NAMES.escape_ig;
-  const mode = select('mode', [['', `Profile default (currently ${profileMode})`], ['direct', 'Direct'], ['escape_ig', 'Escape'], ['deeplink', 'Deeplink']]);
+  const mode = select('mode', [['', `Profile default (currently ${profileMode})`], ...Object.entries(MODE_NAMES)]);
   const tracking = check('tracking', 'OnlyFans tracking');
   const code = el('input', { name: 'defaultTrackingCode', inputMode: 'numeric', autocomplete: 'off' });
   const status = message();
@@ -474,7 +517,7 @@ function drawLinkForm(profile, links) {
         return say(status, fieldReasons(res, `The save failed (${res.status}). Try again.`));
       }
       saved = res.data;
-      const failed = background.files[0] ? await upload('links', saved.id, 'backgroundImage', background.files[0]) : null;
+      const failed = background.files[0] ? (await upload('links', saved.id, 'backgroundImage', background.files[0])).error : null;
       submitting(form, false);
       if (failed) return say(status, `The Link is saved, but not its background: ${failed}`);
       if (onboarding) return show('/edit/live', () => drawLive(profile));
@@ -526,15 +569,51 @@ function drawLive(profile) {
       el('button', { type: 'button', className: 'secondary', onclick: route }, 'Go to the Editor')));
 }
 
-// ASSUMPTION: the Editor for now holds "Your Bio Link" with Copy, "Featured Links" (titles in Visitor order) and "Add link";
-// editing, reordering and deleting come with tickets 27 and 28 (rung 5). Overturned by those tickets.
+// The Editor's home, in the Template's order: "Your Bio Link", the Profile panel ("Change Profile Picture", display name, the
+// @Username read-only, bio), "Quick Settings", "Featured Links" (titles in Visitor order) and "Add link". Each form saves on its
+// own button, with no autosave, and the last save wins. A save keeps PocketBase's answer in `profile` (saveProfile), so "Add
+// link" names the default Mode just saved.
+// ASSUMPTION: "Your Bio Link" shows the full public address, scheme included, so what it shows is what Copy puts on the
+// clipboard (rung 5: one string; the Template shows "link.me/f_wei13" without one). Overturned if the Operator wants the
+// Template's scheme-less look; only the shown text changes.
+// "Change Profile Picture" is a field of the Profile panel and uploads on "Save profile", after display name and bio, as the
+// Profile step does (rung 2: the spec's Contracts, "Each form saves on its own Save button, with no autosave").
+// ASSUMPTION: the default Mode has its own form and Save button in "Quick Settings" rather than saving when the select
+// changes (rung 2: the spec's Contracts, "Each form saves on its own Save button, with no autosave"). Overturned if the
+// Operator wants the Template's toggle that acts at once.
+// ASSUMPTION: a save keeps PocketBase's answer in the in-memory Profile, so "Add link" names the default Mode just saved
+// without a re-read; a reload or Cancel re-reads it through route() (rung 5). Overturned if two tabs must see each other's saves.
+// ASSUMPTION: the Profile panel refuses an empty display name, as the Profile step does, because a Profile with none sends the
+// Creator back to that step at the next log-in (rung 3). Overturned if a Creator may clear their display name.
+// ASSUMPTION: the @Username is a readonly field labelled "Username" with a decorative "@", not a disabled one (rung 5).
+// Overturned if it must be plain text.
+// An empty stored default Mode shows as Escape, as PocketBase's field reads it (pocketbase/pb_migrations/1791140001_profiles.js:22).
+// Editing, reordering and deleting Links come with ticket 28.
 function drawHome(profile, links) {
-  const status = message();
+  const copied = message();
+  const panel = profileForm(profile, { editor: true, button: 'Save profile', done: (status) => say(status, 'Profile saved.', 'ok') });
+
+  const mode = select('mode', Object.entries(MODE_NAMES), profile.mode || 'escape_ig');
+  const modeSaved = message();
+  const settings = el('form', {
+    onsubmit: async (event) => {
+      event.preventDefault();
+      if (await saveProfile(profile, settings, modeSaved, { mode: mode.value })) say(modeSaved, 'Default Mode saved.', 'ok');
+    },
+  },
+  el('label', {}, 'Default Mode', mode),
+  el('p', { className: 'hint' }, 'Escape helps visitors switch to Safari/Chrome from Instagram or TikTok. Every Link left on “Profile default” follows this Mode.'),
+  modeSaved,
+  el('button', { type: 'submit', className: 'secondary' }, 'Save default Mode'));
+
   const rows = links.map((link) => el('li', { className: 'link-row' }, el('span', { className: 'link-row-title' }, link.title)));
   render('Edit Profile', el('h1', {}, 'Edit Profile'),
-    el('div', { className: 'bio-link' }, el('span', { className: 'label' }, 'Your Bio Link'), el('span', { className: 'value' }, `${location.host}/${profile.username}`)),
-    el('div', { className: 'actions' }, copyButton(address(profile), status)),
-    status,
+    el('div', { className: 'bio-link' }, el('span', { className: 'label' }, 'Your Bio Link'), el('span', { className: 'value' }, address(profile))),
+    el('div', { className: 'actions' }, copyButton(address(profile), copied)),
+    copied,
+    panel,
+    el('h2', {}, 'Quick Settings'),
+    settings,
     el('h2', {}, 'Featured Links'),
     el('ul', { className: 'links', 'aria-label': 'Links' }, ...rows),
     el('div', { className: 'actions' }, el('button', {

@@ -51,7 +51,13 @@ async function logIn(page: Page, creator: Creator) {
   await page.getByRole('button', { name: 'Log in' }).click();
 }
 
-const phoneContext = (browser: Browser) => browser.newContext({ viewport: PHONE });
+// A fresh context at 390×844 with no Editor session, with an optional User-Agent. Given the stack's origin, it reaches only that
+// host: every request elsewhere is aborted, so nothing leaves the machine.
+async function phoneContext(browser: Browser, { origin, userAgent }: { origin?: string; userAgent?: string } = {}) {
+  const context = await browser.newContext({ viewport: PHONE, ...(userAgent ? { userAgent } : {}) });
+  if (origin) await context.route((url) => url.host !== new URL(origin).host, (route) => route.abort('blockedbyclient'));
+  return context;
+}
 
 async function expectVerifyScreen(page: Page) {
   await expect(heading(page, VERIFY)).toBeVisible();
@@ -66,6 +72,7 @@ const proxy = (request: APIRequestContext, token?: string) => {
   return {
     get: (path: string) => request.get(`/api/collections/${path}`, { headers }),
     post: (path: string, data: object = {}) => request.post(`/api/collections/${path}`, { headers, data }),
+    patch: (path: string, data: object = {}) => request.patch(`/api/collections/${path}`, { headers, data }),
   };
 };
 
@@ -397,7 +404,7 @@ test.describe('the verified-email gate', () => {
     expect(before.links).toEqual([]);
 
     // PocketBase answers an update its rule refuses as a record it cannot find (404), and a refused create with a bare 400.
-    const update = await request.patch(`/api/collections/profiles/records/${profileId}`, { headers: { Authorization: token }, data: { displayName: 'Not yet', bio: 'not yet' } });
+    const update = await as.patch(`profiles/records/${profileId}`, { displayName: 'Not yet', bio: 'not yet' });
     expect(update.status(), 'Profile update').toBe(404);
     const link = await as.post('links/records', { profile: profileId, title: 'Not yet', order: 0, destination: `https://example.com/${creator.username}` });
     expect(link.status(), 'Link create').toBe(400);
@@ -502,9 +509,8 @@ test.describe('Onboarding after verification', () => {
     for (const l of stored) expect(l.linkId).toMatch(/^[a-z0-9]{12}$/);
 
     // The Visitor, in a fresh context with no Editor session; nothing leaves the machine.
-    const context = await phoneContext(browser);
+    const context = await phoneContext(browser, { origin });
     const visitor = await context.newPage();
-    await visitor.route((url) => url.host !== new URL(origin).host, (route) => route.abort('blockedbyclient'));
     let pressed = false;
     const seen: Promise<{ url: string; type: string; body: Buffer }>[] = [];
     visitor.on('response', (res) => {
@@ -565,5 +571,181 @@ test.describe('Onboarding after verification', () => {
     expect(reveal.status).toBe(200);
     expect(reveal.realUrl === expected, 'Reveal answers the entered Destination followed by /c7').toBe(true);
     await context.close();
+  });
+});
+
+// ---- Ticket 27: the Editor's Profile panel, Bio Link, avatar and default Mode ------------------------------------------------
+
+// The 00-smoke In-App Browser User-Agent.
+const INSTAGRAM_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
+  'Mobile/15E148 Instagram 300.0.0.0.0 (iPhone14,2; iOS 17_0; en_US; en-US; scale=3.00; 1170x2532; 0)';
+
+// A verified Creator with a named Profile on Escape Mode and two Links, arranged through the proxy as the Creator would through
+// the Editor; only the verification is the Operator's step. Links are [title, Mode] with '' for "Profile default", and their
+// Destinations are test-only example.com addresses.
+// ASSUMPTION: arranged as the Creator through the proxy, with only the verification as the Operator's step, so the describe
+// skips off the local test stack (rung 3: ticket 26's markVerified and onLocalStack). Overturned when 31's mail catcher lands.
+async function verifiedCreator(request: APIRequestContext, links: [string, string][]) {
+  const { token, id, creator } = await account(request);
+  const as = proxy(request, token);
+  const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig' });
+  expect(claimed.status()).toBe(200);
+  const profileId = (await claimed.json()).id as string;
+  await markVerified(creator.email);
+  const named = await as.patch(`profiles/records/${profileId}`, { displayName: 'Before Name', bio: 'Before bio.' });
+  expect(named.status()).toBe(200);
+  for (const [order, [title, mode]] of links.entries()) {
+    const res = await as.post('links/records', { profile: profileId, title, order, mode, destination: `https://example.com/${creator.username}/${order}` });
+    expect(res.status(), title).toBe(200);
+  }
+  return { creator, token, profileId };
+}
+
+type Served = { profile: { displayName: string; bio: string; avatarUrl: string; mode: string }; links: { title: string; mode: string }[] };
+const servedProfile = async (request: APIRequestContext, username: string): Promise<Served> => {
+  const res = await request.get(`/api/profiles/${username}.json`);
+  expect(res.status()).toBe(200);
+  const body = await res.text();
+  expect(holdsDestination(body) || body.includes('https://example.com/'), 'a Destination in the Profile JSON').toBe(false);
+  return JSON.parse(body);
+};
+
+test.describe('the Editor\'s Profile and default Mode', () => {
+  test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
+
+  test('at 390×844 the Creator copies the Bio Link, edits display name and bio, replaces the avatar; Username read-only, no badge control', async ({ page, browser, request, baseURL }) => {
+    test.setTimeout(120_000);
+    const origin = new URL(baseURL!).origin;
+    const { creator, token, profileId } = await verifiedCreator(request, [['First card', '']]);
+    const address = `${origin}/${creator.username}`;
+    // An avatar already in place, uploaded with the Creator's own token, so the Editor's is a replacement.
+    const first = await request.post(`/api/upload/profiles/${profileId}/avatar`, { headers: { Authorization: token }, multipart: { file: pngFile('first.png', [200, 40, 40]) } });
+    expect(first.status()).toBe(200);
+    const before = (await servedProfile(request, creator.username)).profile.avatarUrl;
+    expect(before.startsWith('/api/files/')).toBe(true);
+
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+    await logIn(page, creator);
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    await expect(page).toHaveURL(/\/edit\/home$/);
+
+    // "Your Bio Link": the public address, and Copy puts it on the clipboard.
+    const bioLink = page.locator('.bio-link');
+    await expect(bioLink.locator('.label')).toHaveText('Your Bio Link');
+    await expect(bioLink.locator('.value')).toHaveText(address);
+    await page.getByRole('button', { name: 'Copy', exact: true }).click();
+    await expect(page.getByText('Copied.', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(address);
+
+    // The @Username is shown read-only; there is no badge control anywhere on the Editor's home.
+    const username = page.getByRole('textbox', { name: 'Username', exact: true });
+    await expect(username).toHaveValue(creator.username);
+    await expect(username).not.toBeEditable();
+    await expect(page.getByRole('main')).not.toContainText(/badge|verified/i);
+    const controls = await page.locator('main').locator('input, select, textarea, button').evaluateAll((nodes) =>
+      nodes.map((n) => [n.getAttribute('name'), n.id, n.getAttribute('aria-label'), n.textContent].join(' ')));
+    expect(controls.length).toBeGreaterThan(0);
+    expect(controls.filter((c) => /badge|verif/i.test(c)), 'a badge control').toEqual([]);
+
+    // The Profile panel saves on its own button and nothing else: an unsaved edit is gone after a reload.
+    const displayName = page.getByLabel('Display name', { exact: true });
+    const bio = page.getByLabel('Bio', { exact: true });
+    await expect(displayName).toHaveValue('Before Name');
+    await expect(bio).toHaveValue('Before bio.');
+    await displayName.fill('Not saved');
+    await page.reload();
+    await expect(displayName).toHaveValue('Before Name');
+    await displayName.fill('After Name');
+    await bio.fill('After bio, from the Editor.');
+    await page.getByRole('button', { name: 'Save profile' }).click();
+    await expect(page.getByText('Profile saved.', { exact: true })).toBeVisible();
+
+    // The next load of the public Profile shows both.
+    const context = await phoneContext(browser, { origin });
+    const visitor = await context.newPage();
+    await visitor.goto(`/${creator.username}`);
+    await expect(visitor.locator('#displayName')).toHaveText('After Name');
+    await expect(visitor.locator('#bio')).toHaveText('After bio, from the Editor.');
+    await context.close();
+
+    // "Change Profile Picture" is a field of the Profile panel: picking a file saves nothing until "Save profile", which
+    // replaces the avatar through the upload endpoint; the public Profile then serves a new WebP.
+    let uploads = 0;
+    const countUpload = (req: { url(): string }) => { if (new URL(req.url()).pathname.startsWith('/api/upload/')) uploads += 1; };
+    page.on('request', countUpload);
+    await page.getByLabel('Change Profile Picture').setInputFiles(pngFile('second.png', [40, 200, 40]));
+    expect((await servedProfile(request, creator.username)).profile.avatarUrl, 'no upload on pick').toBe(before);
+    expect(uploads, 'upload requests sent on pick').toBe(0);
+    await page.getByRole('button', { name: 'Save profile' }).click();
+    await expect.poll(() => uploads, 'one upload request after Save').toBe(1);
+    page.off('request', countUpload);
+    // "Profile saved." still shows from the first save, so the new avatar URL is what is waited for.
+    const avatarUrl = async () => (await servedProfile(request, creator.username)).profile.avatarUrl;
+    await expect.poll(avatarUrl, 'a new avatar URL').not.toBe(before);
+    const after = await avatarUrl();
+    expect(after.startsWith('/api/files/'), after).toBe(true);
+    await expect(page.getByText('Profile saved.', { exact: true })).toBeVisible();
+    await expect(page.locator('img.avatar')).toHaveAttribute('src', after);
+    const image = await request.get(after);
+    expect(image.status()).toBe(200);
+    expect(image.headers()['content-type']).toBe('image/webp');
+    expect(isWebp(await image.body())).toBe(true);
+    // Saving the picture saved the panel's display name and bio as they stood.
+    await expect(displayName).toHaveValue('After Name');
+    const saved = (await servedProfile(request, creator.username)).profile;
+    expect([saved.displayName, saved.bio]).toEqual(['After Name', 'After bio, from the Editor.']);
+  });
+
+  test('the default Mode set in Quick Settings decides the Escape Overlay on open and moves only the Links left on "Profile default"', async ({ page, browser, request, baseURL }) => {
+    test.setTimeout(120_000);
+    const origin = new URL(baseURL!).origin;
+    const { creator } = await verifiedCreator(request, [['Default card', ''], ['Escape card', 'escape_ig']]);
+    const openAsInstagram = async () => {
+      const context = await phoneContext(browser, { origin, userAgent: INSTAGRAM_UA });
+      const visitor = await context.newPage();
+      const served = visitor.waitForResponse((res) => new URL(res.url()).pathname === `/api/profiles/${creator.username}.json`);
+      await visitor.goto(`/${creator.username}`);
+      await served;
+      await expect(visitor.locator('.link-card .link-title')).toHaveText(['Default card', 'Escape card']);
+      return visitor;
+    };
+
+    // While the default is Escape Mode, the Escape Overlay shows when the page opens in Instagram.
+    let visitor = await openAsInstagram();
+    await expect(visitor.locator('#igOverlay')).toBeVisible();
+    await visitor.context().close();
+    let served = await servedProfile(request, creator.username);
+    expect([served.profile.mode, ...served.links.map((l) => l.mode)]).toEqual(['escape_ig', 'escape_ig', 'escape_ig']);
+
+    // The Creator switches the default to Direct Mode in Quick Settings.
+    await logIn(page, creator);
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Quick Settings' })).toBeVisible();
+    const mode = page.getByLabel('Default Mode');
+    await expect(mode).toHaveValue('escape_ig');
+    await expect(mode.locator('option')).toHaveText(['Direct', 'Escape', 'Deeplink']);
+    await mode.selectOption({ label: 'Direct' });
+    await page.getByRole('button', { name: 'Save default Mode' }).click();
+    await expect(page.getByText('Default Mode saved.', { exact: true })).toBeVisible();
+
+    // A new Link's form starts on "Profile default" and names the new Mode, before and after a reload.
+    await page.getByRole('button', { name: 'Add link' }).click();
+    await expect(heading(page, 'Add link')).toBeVisible();
+    await expect(page.getByLabel('Mode')).toHaveValue('');
+    await expect(page.getByLabel('Mode').locator('option:checked')).toHaveText('Profile default (currently Direct)');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    await expect(page.getByLabel('Default Mode')).toHaveValue('direct');
+    await page.getByRole('button', { name: 'Add link' }).click();
+    await expect(page.getByLabel('Mode').locator('option:checked')).toHaveText('Profile default (currently Direct)');
+
+    // The next load: no Escape Overlay in Instagram; the Link on "Profile default" is Direct, the Escape one keeps Escape.
+    visitor = await openAsInstagram();
+    await expect(visitor.locator('#igOverlay')).toBeHidden();
+    await visitor.context().close();
+    served = await servedProfile(request, creator.username);
+    expect(served.profile.mode).toBe('direct');
+    expect(served.links.map((l) => [l.title, l.mode])).toEqual([['Default card', 'direct'], ['Escape card', 'escape_ig']]);
   });
 });
