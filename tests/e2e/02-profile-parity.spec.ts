@@ -1,10 +1,10 @@
 import { test, expect, devices, type APIRequestContext, type Page, type Request } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 // Phase 2 parity (docs/spec/phase-02-vps-foundation.md, Testing Decisions, 02-profile-parity): the Fixture Profile half, and
-// the v1 Snapshot half below (ticket 17: pages, Profile JSON, paths, leaks; ticket 18 adds /r and Reveal). Every id is read from the served Profile JSON. A Link's Test Secrets
+// the v1 Snapshot half below (ticket 17: pages, Profile JSON, paths, leaks; ticket 18: /r, Reveal, journeys, old ids). Every id is read from the served Profile JSON. A Link's Test Secrets
 // Destination is found through the Fixture Profile file's card of the same title. Destinations are compared as booleans
 // and never printed. The Tracking Code oracle is v1's own Reveal handler (the Fixture site's verbatim copy), run in this
 // process with the Fixture's own v1 ids.
@@ -30,14 +30,51 @@ const fileCard = (link: { title: string }) => fixture.links.find((l) => l.title 
 const destinationOf = (link: { title: string }) => TEST_SECRETS[fileCard(link).id];
 const stockIcon = (v1Path: string) => readFileSync(join(PAGE_COPY, v1Path.replace(/^\//, '')));
 
-// v1's Reveal handler, loaded from the Fixture site in this process; it reads the Test Secrets beside it.
-async function v1Reveal(v1Id: string, trackingId?: string): Promise<{ statusCode: number; realUrl?: string }> {
-  const { handler } = require(join(FIXTURES, 'netlify', 'functions', 'reveal.js'));
-  const query: Record<string, string> = { id: v1Id, user: 'fixture' };
-  if (trackingId !== undefined) query.trackingId = trackingId;
-  const res = await handler({ queryStringParameters: query, headers: {} }, {});
-  return { statusCode: res.statusCode, realUrl: JSON.parse(res.body).realUrl };
+// v1's Reveal handler, loaded in this process from a v1-shaped site's netlify/functions/ (the Fixture site's verbatim copy, or
+// the v1 Snapshot's own); it reads the secrets file beside it, and its Geo Rule lookup reads that site's Profile files. Netlify
+// hands it lower-cased request headers. Its console lines (Geo lookups) are kept out of the run's output.
+type V1Answer = { statusCode: number; realUrl?: string };
+async function runV1Reveal(functionsDir: string, query: Record<string, string>, headers: Record<string, string> = {}): Promise<V1Answer> {
+  const { handler } = require(join(functionsDir, 'reveal.js'));
+  const { log, error } = console;
+  console.log = console.error = () => {};
+  try {
+    const res = await handler({ queryStringParameters: query, headers }, {});
+    return { statusCode: res.statusCode, realUrl: JSON.parse(res.body).realUrl };
+  } finally {
+    console.log = log;
+    console.error = error;
+  }
 }
+const queryWith = (query: Record<string, string>, trackingId?: string | null) =>
+  trackingId === undefined || trackingId === null ? query : { ...query, trackingId };
+const v1Reveal = (v1Id: string, trackingId?: string) =>
+  runV1Reveal(join(FIXTURES, 'netlify', 'functions'), queryWith({ id: v1Id, user: 'fixture' }, trackingId));
+
+// The paced helper (spec, Testing Decisions, Reveal pacing): every Reveal and `/r` call this spec makes takes a slot here first,
+// whether the request fixture sends it (clickCall) or a page does (clickSlot, taken just before the tap or load that sends it).
+// Against a remote host (PLAYWRIGHT_BASE_URL) slots are 1.25 s apart, so no 60 s window holds more than 49 calls, and the run
+// is one worker (playwright.config.ts); locally they are unpaced. A 429 fails the call, locally as remotely. With
+// PARITY_PACE_LOG naming a file, each slot's time (ms) is appended to it, to measure the rate.
+// ASSUMPTION: the slot clock lives in the worker's memory, so a worker restarted after a failure starts a fresh clock (rung 5).
+// Overturned if a VPS run meets 429s after a failure; the clock then moves to a file the restarted worker reads.
+const REMOTE = !!process.env.PLAYWRIGHT_BASE_URL;
+const PACE_GAP_MS = REMOTE ? 1250 : 0;
+let lastSlot = 0;
+async function clickSlot() {
+  const wait = lastSlot + PACE_GAP_MS - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastSlot = Date.now();
+  if (process.env.PARITY_PACE_LOG) appendFileSync(process.env.PARITY_PACE_LOG, `${lastSlot}\n`);
+}
+async function clickCall(request: APIRequestContext, path: string, options: { params?: Record<string, string>; headers?: Record<string, string> } = {}) {
+  await clickSlot();
+  const res = await request.get(path, { ...options, maxRedirects: 0 });
+  expect(res.status(), 'rate limited').not.toBe(429);
+  return res;
+}
+const reveal = (request: APIRequestContext, query: Record<string, string>, headers?: Record<string, string>) =>
+  clickCall(request, REVEAL_PATH, { params: query, headers });
 
 let served: Served;
 let origin: string;
@@ -89,6 +126,7 @@ test.describe('Fixture Profile journeys (desktop Chrome)', () => {
     await page.goto('/fixture');
     await expect(page.locator('.link-card .link-title')).toHaveCount(served.links.length);
     const hop = hopFrom(page, link.id);
+    await clickSlot();
     await page.locator('.link-card', { hasText: link.title }).click();
     const request = await hop;
     expect(request.url() === destinationOf(link)).toBe(true);
@@ -103,6 +141,7 @@ test.describe('Fixture Profile journeys (desktop Chrome)', () => {
     await expect(page.locator('.link-card .link-title')).toHaveCount(served.links.length);
     const reveal = page.waitForRequest((req) => new URL(req.url()).pathname === REVEAL_PATH);
     const landed = page.waitForRequest((req) => req.url() === destination);
+    await clickSlot();
     await page.locator('.link-card', { hasText: link.title }).click();
     expect(new URL((await reveal).url()).searchParams.get('id')).toBe(link.id);
     const request = await landed;
@@ -114,6 +153,7 @@ test.describe('Fixture Profile journeys (desktop Chrome)', () => {
   test('/fixture?link={Direct Link\'s id} ends at the Direct Link\'s Test Secrets Destination', async ({ page }) => {
     const link = direct();
     const hop = hopFrom(page, link.id);
+    await clickSlot();
     await page.goto(`/fixture?link=${link.id}`);
     const request = await hop;
     expect(request.url() === destinationOf(link)).toBe(true);
@@ -196,13 +236,11 @@ test.describe('Profile JSON', () => {
 
 test.describe('Reveal and /r', () => {
   const noCors = (headers: Record<string, string>) => !Object.keys(headers).some((h) => h.startsWith('access-control-'));
-  const reveal = (request: import('@playwright/test').APIRequestContext, id: string, trackingId?: string) =>
-    request.get(REVEAL_PATH, { params: { id, user: 'fixture', ...(trackingId === undefined ? {} : { trackingId }) } });
 
   for (const trackingId of [undefined, '4242', 'junk']) {
     test(`Reveal for the Adult Link with ${trackingId === undefined ? 'no Tracking Code' : `trackingId=${trackingId}`} answers what v1's handler answers`, async ({ request }) => {
       const link = adult();
-      const res = await reveal(request, link.id, trackingId);
+      const res = await reveal(request, queryWith({ id: link.id, user: 'fixture' }, trackingId));
       expect(res.status()).toBe(200);
       expect(res.headers()['cache-control']).toBe('no-store');
       expect(noCors(res.headers())).toBe(true);
@@ -214,7 +252,7 @@ test.describe('Reveal and /r', () => {
 
   test('Reveal answers for a non-Adult Link too: the Deeplink Link gets its Destination', async ({ request }) => {
     const link = deeplink();
-    const res = await reveal(request, link.id);
+    const res = await reveal(request, { id: link.id, user: 'fixture' });
     expect(res.status()).toBe(200);
     expect(noCors(res.headers())).toBe(true);
     expect((await res.json()).realUrl === destinationOf(link)).toBe(true);
@@ -222,7 +260,7 @@ test.describe('Reveal and /r', () => {
 
   test('Reveal for an unknown Link Id, or the Fixture file\'s v1 id, answers 404 with no-store and no CORS header', async ({ request }) => {
     for (const id of ['zzzzzzzzzzzz', fileCard(adult()).id]) {
-      const res = await reveal(request, id);
+      const res = await reveal(request, { id, user: 'fixture' });
       expect(res.status()).toBe(404);
       expect(res.headers()['cache-control']).toBe('no-store');
       expect(noCors(res.headers())).toBe(true);
@@ -233,7 +271,7 @@ test.describe('Reveal and /r', () => {
   for (const pick of ['Direct', 'Adult'] as const) {
     test(`/r/{${pick} Link Id} answers 302 to its Destination with no-store`, async ({ request }) => {
       const link = pick === 'Direct' ? direct() : adult();
-      const res = await request.get(`/r/${link.id}`, { maxRedirects: 0 });
+      const res = await clickCall(request, `/r/${link.id}`);
       expect(res.status()).toBe(302);
       expect(res.headers()['cache-control']).toBe('no-store');
       expect(res.headers()['location'] === destinationOf(link)).toBe(true); // /r appends no Tracking Code
@@ -241,7 +279,7 @@ test.describe('Reveal and /r', () => {
   }
 
   test('/r for an unknown Link Id answers 404 with no-store', async ({ request }) => {
-    const res = await request.get('/r/zzzzzzzzzzzz', { maxRedirects: 0 });
+    const res = await clickCall(request, '/r/zzzzzzzzzzzz');
     expect(res.status()).toBe(404);
     expect(res.headers()['cache-control']).toBe('no-store');
   });
@@ -310,7 +348,7 @@ const SNAPSHOT_PRESENT = SNAPSHOT !== '' && isDirectory(SNAPSHOT);
 const SCREENSHOT = join(ROOT, '.scratch', 'goal_ai', 'shots', '02-vps-foundation.png');
 
 type V1Link = {
-  id: string; title: string; url?: string; isAdult?: boolean; tracking?: boolean;
+  id: string; title: string; url?: string; isAdult?: boolean; tracking?: boolean; geo?: unknown;
   icon?: string | null; backgroundImage?: string | null; default_tracknumber?: string | null;
 };
 type V1File = { username: string; profile: { displayName?: string; bio?: string; avatarUrl?: string | null; verified?: boolean }; links: V1Link[] };
@@ -442,10 +480,13 @@ test.describe('v1 Snapshot', () => {
             const page = await context.newPage();
             await page.goto(`/${username}`);
             await expect(page.locator('.link-card')).toHaveCount(file.links.length);
-            const reveal = page.waitForRequest((req) => new URL(req.url()).pathname === REVEAL_PATH);
+            const answer = page.waitForResponse((res) => new URL(res.url()).pathname === REVEAL_PATH);
             await page.locator('.link-card').nth(i).click();
+            await clickSlot();
             await page.locator('#continueBtn').click();
-            const params = new URL((await reveal).url()).searchParams;
+            const res = await answer;
+            expect(res.status(), `${at} Reveal`).toBe(200);
+            const params = new URL(res.url()).searchParams;
             expect(params.get('id') === json.links[i].id, `${at} Reveal carries its Link Id`).toBe(true);
             expect(params.get('trackingId'), `${at} Reveal's Tracking Code`).toBe(file.links[i].default_tracknumber);
             await page.close();
@@ -486,8 +527,230 @@ test.describe('v1 Snapshot', () => {
     expect(leaking).toEqual([]);
   });
 
-  // Ticket 18: `/r` (302 to each non-Adult card's v1 url), Reveal against v1's own handler (Geo Rule cases included), the
-  // journeys and the old ids join this group, reading V1_FILES and v1.secrets above.
+  // ---- Clicks (ticket 18) ----
+  // Every Click on a v1 Link against v1's own Reveal handler, loaded from the Snapshot in this process (runV1Reveal), with the
+  // same Username and the card's v1 id; v2 is asked with the card's served Link Id. Over the files that parse as they are.
+  // Every Reveal and `/r` call takes a paced slot. Destinations are compared as booleans; messages name a Username and card.
+  test.describe('Clicks', () => {
+    const SNAPSHOT_FUNCTIONS = join(SNAPSHOT, 'netlify', 'functions');
+    const snapshotReveal = (file: V1File, link: V1Link, trackingId?: string | null, headers?: Record<string, string>) =>
+      runV1Reveal(SNAPSHOT_FUNCTIONS, queryWith({ id: link.id, user: file.username }, trackingId), headers);
+    const hasEntry = (link: V1Link) => Object.hasOwn(v1.secrets, link.id);
+    // A Geo Rule: a non-empty object under the card's `geo` (an empty one picks no Tracking Code in v1 or v2).
+    const hasGeoRule = (link: V1Link) => typeof link.geo === 'object' && link.geo !== null && Object.keys(link.geo).length > 0;
+    // The import's rule for a relative url (app/bin/import-v1, rootRelative): resolved against the site root.
+    const rootRelative = (url: string) => {
+      if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('/')) return url;
+      const u = new URL(url, 'http://v1.invalid/');
+      return u.pathname + u.search + u.hash;
+    };
+    const cards = (pick: (l: V1Link) => boolean) =>
+      v1.asIs.flatMap((file) => file.links.flatMap((link, i) => (pick(link) ? [{ file, link, i, at: `${file.username} card ${i + 1}` }] : [])));
+    const nonAdult = cards((l) => l.isAdult !== true);
+    const adultWithEntry = cards((l) => l.isAdult === true && hasEntry(l));
+    const adultWithoutEntry = cards((l) => l.isAdult === true && !hasEntry(l));
+    const withGeoRule = adultWithEntry.filter(({ link }) => hasGeoRule(link));
+
+    // Each Profile's served Link Ids, by card position (the Profile JSON test above proves the order).
+    const servedIds = new Map<string, string[]>();
+    test.beforeAll(async ({ playwright }) => {
+      const api = await playwright.request.newContext({ baseURL: test.info().project.use.baseURL! });
+      for (const file of v1.asIs) {
+        const res = await api.get(`/api/profiles/${file.username}.json`);
+        if (!res.ok()) throw new Error(`/${file.username} Profile JSON not served (status ${res.status()})`);
+        servedIds.set(file.username, (await res.json() as Served).links.map((l) => l.id));
+      }
+      await api.dispose();
+    });
+    const v2Id = (file: V1File, i: number) => servedIds.get(file.username)![i];
+
+    for (const { file, link, i, at } of nonAdult) {
+      test(`/r for ${at} (non-Adult) answers 302 to the card's v1 url`, async ({ request }) => {
+        const res = await clickCall(request, `/r/${v2Id(file, i)}`);
+        expect(res.status(), at).toBe(302);
+        expect(res.headers()['cache-control'], at).toBe('no-store');
+        expect(res.headers()['location'] === rootRelative(link.url!), `${at} Location is its v1 url`).toBe(true);
+      });
+    }
+
+    // No location header is sent here: `geo` takes v1's US fallback on both sides.
+    for (const { file, link, i, at } of adultWithEntry) {
+      test(`Reveal for ${at} (Adult) with no code, digits, geo and junk answers what v1's handler answers`, async ({ request }) => {
+        for (const trackingId of [undefined, '4242', 'geo', 'junk']) {
+          const label = `${at} trackingId=${trackingId ?? '(none)'}`;
+          const res = await reveal(request, queryWith({ id: v2Id(file, i), user: file.username }, trackingId));
+          const oracle = await snapshotReveal(file, link, trackingId);
+          expect(oracle.statusCode, `${label} v1`).toBe(200);
+          expect(res.status(), label).toBe(200);
+          expect(res.headers()['cache-control'], label).toBe('no-store');
+          expect((await res.json()).realUrl === oracle.realUrl, `${label} realUrl matches v1's`).toBe(true);
+        }
+      });
+    }
+
+    // Location headers, v1's names (what Netlify sends) and Cloudflare's (plan §11's country source). v1's handler reads only
+    // its own names, so a case that sends Cloudflare's is put to it as `v1`, the v1 headers the spec's Visitor location reads
+    // them as; otherwise v1 is sent what v2 is.
+    type Headers = Record<string, string>;
+    type Location = { label: string; sent: Headers; v1?: Headers };
+    type GuardedLocation = Location & { without: Headers };
+    const FIXED_LOCATIONS: Location[] = [
+      { label: 'x-country=US x-region=NJ', sent: { 'x-country': 'US', 'x-region': 'NJ' } },
+      { label: 'x-country=US x-region=CA', sent: { 'x-country': 'US', 'x-region': 'CA' } },
+      { label: 'x-country=US x-nf-subdivision-code=TX', sent: { 'x-country': 'US', 'x-nf-subdivision-code': 'TX' } },
+      { label: 'x-country=US x-region=ZZ (no such state)', sent: { 'x-country': 'US', 'x-region': 'ZZ' } },
+      { label: 'x-country=US and no region', sent: { 'x-country': 'US' } },
+      { label: 'x-country=SI', sent: { 'x-country': 'SI' } },
+      { label: 'x-region=NJ and no country (US fallback)', sent: { 'x-region': 'NJ' } },
+    ];
+    // The Cloudflare and precedence cases take their countries and US states from the Link's own Geo Rule keys, picked by v1's
+    // answers (choosing inputs, not re-implementing the rule), so that the header under test changes v1's answer. `without` is
+    // the same request to v1 with that header dropped, or the precedence swapped; the guard test below fails a case whose
+    // `without` answer equals its own on every Geo Rule Link, so no case can pass while its header goes unread.
+    async function derivedLocations(file: V1File, link: V1Link): Promise<GuardedLocation[]> {
+      const geo = link.geo as Record<string, unknown>;
+      const answer = async (headers: Headers) => (await snapshotReveal(file, link, 'geo', headers)).realUrl;
+      const first = async (keys: string[], differs: (key: string) => Promise<boolean>) => {
+        for (const key of keys) if (await differs(key)) return key;
+        return keys[0] ?? 'ZZ'; // none differs: the guard test fails the cases built on it
+      };
+      const us = (headers: Headers) => ({ 'x-country': 'US', ...headers });
+      const countries = Object.keys(geo).filter((k) => k !== 'US' && k !== 'default');
+      const states = typeof geo.US === 'object' && geo.US !== null ? Object.keys(geo.US).filter((k) => k !== 'default') : [];
+      const noRegion = await answer(us({}));
+      const state = await first(states, async (s) => (await answer(us({ 'x-region': s }))) !== noRegion);
+      const stateAnswer = await answer(us({ 'x-region': state }));
+      // Another region with another answer: a state, else ZZ, which no rule has (in the v1 Snapshot every state of a rule
+      // shares one code, so this is ZZ, answered with the US entry's `default`).
+      const otherRegion = await first([...states, 'ZZ'], async (s) => (await answer(us({ 'x-region': s }))) !== stateAnswer);
+      const fallback = await answer({});
+      const country = await first(countries, async (c) => ![fallback, stateAnswer].includes(await answer({ 'x-country': c })));
+      const countryAnswer = await answer({ 'x-country': country });
+      const otherCountry = await first(countries, async (c) => (await answer({ 'x-country': c })) !== countryAnswer);
+      const noEntry = ['JP', 'XX', 'ZZ'].find((c) => !Object.hasOwn(geo, c))!;
+      return [
+        { label: 'x-country={rule country} x-region={state}', sent: { 'x-country': country, 'x-region': state }, without: { 'x-region': state } },
+        { label: 'x-country={no entry} x-region={state}', sent: { 'x-country': noEntry, 'x-region': state }, without: { 'x-region': state } },
+        { label: 'x-nf-subdivision-code={state} over x-region={other region}', sent: us({ 'x-nf-subdivision-code': state, 'x-region': otherRegion }), without: us({ 'x-region': otherRegion }) },
+        { label: 'cf-ipcountry={rule country}', sent: { 'cf-ipcountry': country }, v1: { 'x-country': country }, without: {} },
+        { label: 'cf-ipcountry=US cf-region-code={state}', sent: { 'cf-ipcountry': 'US', 'cf-region-code': state }, v1: us({ 'x-region': state }), without: us({}) },
+        { label: 'x-country={rule country} over cf-ipcountry={other rule country}', sent: { 'x-country': country, 'cf-ipcountry': otherCountry }, v1: { 'x-country': country }, without: { 'x-country': otherCountry } },
+        { label: 'x-region={state} over cf-region-code={other region}', sent: us({ 'x-region': state, 'cf-region-code': otherRegion }), v1: us({ 'x-region': state }), without: us({ 'x-region': otherRegion }) },
+      ];
+    }
+    for (const { file, link, i, at } of withGeoRule) {
+      test(`Geo Rule: Reveal for ${at} with trackingId=geo answers what v1's handler answers for each location header pair`, async ({ request }) => {
+        for (const { label, sent, v1: v1Headers } of [...FIXED_LOCATIONS, ...(await derivedLocations(file, link))]) {
+          const res = await reveal(request, { id: v2Id(file, i), user: file.username, trackingId: 'geo' }, sent);
+          const oracle = await snapshotReveal(file, link, 'geo', v1Headers ?? sent);
+          expect(oracle.statusCode, `${at} ${label} v1`).toBe(200);
+          expect(res.status(), `${at} ${label}`).toBe(200);
+          expect((await res.json()).realUrl === oracle.realUrl, `${at} ${label} realUrl matches v1's`).toBe(true);
+        }
+      });
+    }
+    // Oracle only: no request reaches v2, so no location header is sent and the title carries no `Geo Rule`.
+    test('every derived location case changes v1\'s answer on some Link once its header is dropped or its precedence swapped', async () => {
+      const labels = new Set<string>();
+      const biting = new Set<string>();
+      for (const { file, link } of withGeoRule) {
+        for (const { label, sent, v1: v1Headers, without } of await derivedLocations(file, link)) {
+          labels.add(label);
+          const own = await snapshotReveal(file, link, 'geo', v1Headers ?? sent);
+          if (own.realUrl !== (await snapshotReveal(file, link, 'geo', without)).realUrl) biting.add(label);
+        }
+      }
+      expect(labels.size, 'derived location cases').toBeGreaterThan(0);
+      expect([...labels].filter((l) => !biting.has(l)), 'cases v1 answers the same without their header').toEqual([]);
+    });
+
+    for (const { file, link, i, at } of adultWithoutEntry) {
+      test(`${at}, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does, and from /r`, async ({ request }) => {
+        expect((await snapshotReveal(file, link)).statusCode, `${at} v1`).toBe(404);
+        const res = await reveal(request, { id: v2Id(file, i), user: file.username });
+        expect(res.status(), at).toBe(404);
+        expect((await res.json()).error === 'Link not found', `${at} Reveal's error`).toBe(true);
+        expect((await clickCall(request, `/r/${v2Id(file, i)}`)).status(), `${at} /r`).toBe(404);
+      });
+    }
+
+    test('every v1 Link Id and every secrets key answers 404 from Reveal and from /r', async ({ request }) => {
+      test.setTimeout(30_000 + V1_IDS.size * 2 * PACE_GAP_MS);
+      // Named by Username and card, or by the secrets key's position; never by the id itself.
+      const owners = new Map<string, string>();
+      for (const f of V1_FILES) f.links.forEach((l, i) => owners.has(l.id) || owners.set(l.id, `${f.username} card ${i + 1}'s v1 id`));
+      const keys = Object.keys(v1.secrets);
+      const failing: string[] = [];
+      for (const id of V1_IDS) {
+        const name = owners.get(id) ?? `secrets key ${keys.indexOf(id) + 1}`;
+        if ((await reveal(request, { id })).status() !== 404) failing.push(`${name}: Reveal`);
+        if ((await clickCall(request, `/r/${encodeURIComponent(id)}`)).status() !== 404) failing.push(`${name}: /r`);
+      }
+      expect(failing).toEqual([]);
+    });
+
+    test.describe('Journeys', () => {
+      // Every host but the one under test is answered with an empty page (the Destination's host on a page navigation);
+      // the hop after `/r`'s 302 is not routed by Playwright and is failed by the network guard (playwright.config.ts) when
+      // it leaves the host. Either way it is observed as the browser's request.
+      let host: string;
+      test.beforeEach(async ({ page }) => {
+        host = new URL(origin).host;
+        await page.route((url) => url.host !== host, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '' }));
+      });
+      const offHostNavigation = (page: Page) =>
+        page.waitForRequest((req) => req.isNavigationRequest() && new URL(req.url()).host !== host);
+      const revealAnswer = (page: Page) => page.waitForResponse((res) => new URL(res.url()).pathname === REVEAL_PATH);
+
+      for (const { file, link, i, at } of nonAdult) {
+        test(`${at} (non-Adult) goes through /r/{Link Id} to its v1 url`, async ({ page }) => {
+          const id = v2Id(file, i);
+          await page.goto(`/${file.username}`);
+          await expect(page.locator('.link-card')).toHaveCount(file.links.length);
+          const hop = page.waitForRequest((req) => req.redirectedFrom()?.url() === `${origin}/r/${id}`);
+          await clickSlot();
+          await page.locator('.link-card').nth(i).click();
+          const request = await hop;
+          expect((await request.redirectedFrom()!.response())?.status(), `${at} /r`).toBe(302);
+          expect(request.url() === new URL(rootRelative(link.url!), origin).href, `${at} lands on its v1 url`).toBe(true);
+        });
+      }
+
+      const DIGITS = '7319';
+      for (const { file, link, i, at } of adultWithEntry) {
+        test(`/${file.username}/{digits}, then the Age Gate on card ${i + 1}, sends Reveal with those digits and lands where v1 sends that code`, async ({ page }) => {
+          await page.goto(`/${file.username}/${DIGITS}`);
+          await expect(page.locator('.link-card')).toHaveCount(file.links.length);
+          await page.locator('.link-card').nth(i).click();
+          const answer = revealAnswer(page);
+          const landed = offHostNavigation(page);
+          await clickSlot();
+          await page.locator('#continueBtn').click();
+          const res = await answer;
+          expect(res.status(), `${at} Reveal`).toBe(200);
+          const params = new URL(res.url()).searchParams;
+          expect(params.get('id') === v2Id(file, i), `${at} Reveal carries its Link Id`).toBe(true);
+          expect(params.get('trackingId'), `${at} Reveal's Tracking Code`).toBe(link.tracking ? DIGITS : null);
+          const oracle = await snapshotReveal(file, link, params.get('trackingId'));
+          expect((await landed).url() === new URL(oracle.realUrl!).href, `${at} lands where v1 sends that code`).toBe(true);
+        });
+
+        test(`/${file.username}?link={card ${i + 1}'s Link Id} (Adult) reveals on load and lands where v1 sends it`, async ({ page }) => {
+          const id = v2Id(file, i);
+          const answer = revealAnswer(page);
+          const landed = offHostNavigation(page);
+          await clickSlot();
+          await page.goto(`/${file.username}?link=${id}`);
+          const res = await answer;
+          expect(res.status(), `${at} Reveal`).toBe(200);
+          const params = new URL(res.url()).searchParams;
+          expect(params.get('id') === id, `${at} Reveal carries its Link Id`).toBe(true);
+          const oracle = await snapshotReveal(file, link, params.get('trackingId'));
+          expect((await landed).url() === new URL(oracle.realUrl!).href, `${at} lands where v1 sends it`).toBe(true);
+        });
+      }
+    });
+  });
 });
 
 // Every run leaves a phone-sized shot of a v1 Profile page served by v2 for the human (ticket 17 ASSUMPTION): juliafilippo_,
@@ -505,13 +768,16 @@ test('a phone-sized screenshot of a Profile page served by v2 is saved', async (
 // 02-v1-import and 02-profile-parity.
 const onLocalStack = () => !process.env.PLAYWRIGHT_BASE_URL || new URL(process.env.PLAYWRIGHT_BASE_URL).origin === 'http://localhost:4173';
 
-// Runs after this file's Clicks: nothing the stack's running containers printed holds a Test Secrets value. The seed runs
-// through `docker compose run --rm`, whose output never reaches `docker compose logs`; the seed's lines are covered by
-// 02-v1-import's stackcheck run, which checks the printed lines of the same import on the same Fixture site.
-test('nothing the test stack has printed holds a Test Secrets value', () => {
+// Runs after this file's Clicks: nothing the stack's running containers printed holds a Test Secrets value or, with the v1
+// Snapshot, a v1 Destination. The seed runs through `docker compose run --rm`, whose output never reaches `docker compose
+// logs`; the seed's lines are covered by 02-v1-import's stackcheck run, which checks the printed lines of the same import on
+// the same Fixture site.
+test('nothing the test stack has printed holds a Test Secrets value or a v1 Destination', () => {
   test.skip(!onLocalStack(), 'the stack under test is not the local test stack');
   const logs = spawnSync('docker', ['compose', '--env-file', 'tests/e2e.env', 'logs', '--no-color'], { cwd: ROOT, encoding: 'utf8' });
   expect(logs.status).toBe(0);
-  expect(`${logs.stdout}${logs.stderr}`.length).toBeGreaterThan(0);
-  expect(Object.values(TEST_SECRETS).some((d) => `${logs.stdout}${logs.stderr}`.includes(d))).toBe(false);
+  const printed = `${logs.stdout}${logs.stderr}`;
+  expect(printed.length).toBeGreaterThan(0);
+  expect(Object.values(TEST_SECRETS).some((d) => printed.includes(d))).toBe(false);
+  expect(holdsV1Destination(printed), 'a v1 Destination in the stack\'s output').toBe(false);
 });

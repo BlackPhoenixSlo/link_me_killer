@@ -11,6 +11,7 @@ const { serve } = require('@hono/node-server');
 const { createGateway } = require('./src/gateway');
 const { toPublicProfile } = require('./src/public-profile');
 const { resolveDestination } = require('./src/destination');
+const { visitorLocation } = require('./src/visitor-location');
 
 const PUBLIC = path.join(__dirname, 'public');
 const MUST_REVALIDATE = 'public, max-age=0, must-revalidate';
@@ -56,7 +57,8 @@ app.get('/r/:linkId', async (c) => {
 // Reveal at v1's path. `user` is accepted and ignored: a v2 Link Id is unique across all Profiles. No CORS header.
 app.get('/.netlify/functions/reveal', async (c) => {
   c.header('Cache-Control', 'no-store');
-  const realUrl = resolveDestination(await gateway.getLink(c.req.query('id')), c.req.query('trackingId'));
+  const location = visitorLocation(c.req.header()); // every request header, lower-cased names
+  const realUrl = resolveDestination(await gateway.getLink(c.req.query('id')), c.req.query('trackingId'), location);
   if (!realUrl) return c.json({ error: 'Link not found' }, 404);
   return c.json({ realUrl });
 });

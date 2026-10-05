@@ -15,6 +15,9 @@ const resolverRule = `--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE ${new URL(
 
 export default defineConfig({
   testDir: 'tests/e2e',
+  // Against a remote host, one worker, so the parity spec's paced Reveal and `/r` calls are the only ones in flight (spec,
+  // Testing Decisions, Reveal pacing); locally Playwright's default.
+  workers: target ? 1 : undefined,
   outputDir: '.scratch/goal_ai/shots',
   use: { baseURL, screenshot: 'only-on-failure', launchOptions: { args: [resolverRule] } },
   projects: [
