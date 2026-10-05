@@ -5,9 +5,13 @@
 # Selected on the VPS by COMPOSE_FILE=compose.yaml:compose.vps.yaml in .env; tests never load it (no n8n_default there).
 # Observed 2026-10-05 on the VPS: no Traefik file provider exists, so the routers live here as labels, and Caddy joins
 # n8n_default so Traefik can dial it; PROXY_PROTOCOL_FROM=172.18.0.0/16 is then Traefik's own address range.
-# ASSUMPTION: Caddy obtains certificates by TLS-ALPN-01 through the passthrough, since port 80 is Traefik's redirect
-# (rung 5: Caddy tries both ACME challenges; HTTP-01 cannot reach it). Overturned if the first https request to the v2
-# host gets no certificate: Caddy's log then shows both challenges failing and the Cutover stops at step 1.
+# Certificates: observed 2026-10-05 that Traefik's own `tlschallenge` resolver answers every acme-tls/1 handshake itself
+# ("unrecognized name"), so TLS-ALPN-01 can never reach Caddy, and that its port-80 redirect sends HTTP-01 to HTTPS, where
+# Caddy has no certificate yet. So the ACME path on port 80 gets its own HTTP router to Caddy's port 80 with priority
+# MaxInt32, above the redirect router Traefik generates at MaxInt32-1 (Traefik docs, EntryPoints, Redirection).
+# ASSUMPTION: Caddy's :80 listener accepts Traefik's plain connection without a PROXY header (rung 1 locally: the wrapper's
+# `allow` uses a header when present and tolerates its absence; tests/proxy-protocol.sh). Overturned if Caddy's log shows
+# the challenge request refused; the HTTP service then needs the header, which Traefik sends for TCP services only.
 # On n8n_default another project's container already answers to the name `app` (observed: fastt-app, alias app), so Caddy
 # reaches our app under the alias oflink-app on the stack's own network, through the Caddyfile's APP_UPSTREAM (default app:3000).
 services:
@@ -30,6 +34,11 @@ services:
       traefik.tcp.routers.oflink.service: oflink
       traefik.tcp.services.oflink.loadbalancer.server.port: "443"
       traefik.tcp.services.oflink.loadbalancer.proxyprotocol.version: "2"
+      traefik.http.routers.oflink-acme.entrypoints: web
+      traefik.http.routers.oflink-acme.rule: PathPrefix(`/.well-known/acme-challenge/`)
+      traefik.http.routers.oflink-acme.priority: "2147483647"
+      traefik.http.routers.oflink-acme.service: oflink-acme
+      traefik.http.services.oflink-acme.loadbalancer.server.port: "80"
 networks:
   traefik:
     external: true
