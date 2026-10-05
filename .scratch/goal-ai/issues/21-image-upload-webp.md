@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 17, 18, 19, 20, 30, 32, 58
 Seams: the running stack's public HTTP surface at baseURL through `./check.sh`: multipart uploads with the `request` fixture, and the returned images loaded in the browser for their natural size. PocketBase's REST API on its loopback port, to make tokens and to try a direct file write
 Blocked by: 16: The Fixture Profile is served by v2's stack and every Phase 0 and Phase 1 spec passes on it
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-05T00:57:28Z
 
 **What to build:** A caller holding a PocketBase token that may change a record sends a photo straight from a phone (JPG, PNG, HEIC, GIF or WebP) to the upload endpoint. The targets are a Profile's avatar, a Link's icon and a Link's background.
 1. The app first checks the token by viewing the target record through PocketBase, before decoding anything. The app never decides ownership itself.
