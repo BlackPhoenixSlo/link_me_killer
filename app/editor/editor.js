@@ -18,6 +18,9 @@
 // "Quick Settings", whose "Deeplink Banner" row is the Profile's default Mode. No badge control, no Username change, no delete.
 // Ticket 28: "Featured Links" edits, moves and deletes Links; the Link form opens a Link with its current values, Destination
 // included, and gains the Geo Rule textarea; a refused save shows its reason and keeps every field as typed.
+// Ticket 29: the session lasts until the Creator ends it. "Log out" drops the token on this device and shows log-in. An answer
+// refused for an ended session sends the Creator to log-in with a return path (`?next=`), and logging in lands them by the
+// Onboarding rule, which for an onboarded Creator is the Editor, so an ended session never shows as a failed save.
 
 const TOKEN = 'ofl.token';
 const screen = document.getElementById('screen');
@@ -39,6 +42,7 @@ async function api(path, { method = 'GET', body, keepalive = false } = {}) {
     body: json ? JSON.stringify(body) : body,
     keepalive,
   });
+  if (token && (await sessionEnded(res, token))) return expired();
   let data = {};
   try {
     data = await res.json();
@@ -53,11 +57,13 @@ async function api(path, { method = 'GET', body, keepalive = false } = {}) {
 async function upload(collection, recordId, field, file) {
   const form = new FormData();
   form.append('file', file);
+  const token = localStorage.getItem(TOKEN) || '';
   const res = await fetch(`/api/upload/${collection}/${recordId}/${field}`, {
     method: 'POST',
-    headers: { Authorization: localStorage.getItem(TOKEN) || '' },
+    headers: { Authorization: token },
     body: form,
   });
+  if (token && (await sessionEnded(res, token))) return expired();
   if (res.ok) return { error: null, url: (await res.json()).url };
   if (res.status === 413) return { error: 'That image is over 20 MB.' };
   if (res.status === 415) return { error: 'That file is not an image we can read (jpg, png, heic, gif or webp).' };
@@ -74,13 +80,44 @@ function signOut() {
   account = null;
 }
 
-// Refreshes the stored token; false when there is none or PocketBase no longer accepts it.
+// Was `res` refused because the session `token` belongs to has ended? A 401 says so. PocketBase 0.40.4 takes a token it no longer
+// accepts as a guest's, so a write answers 404 or 400 instead (observed: a Profile save with an invalid token, "The requested
+// resource wasn't found."), and the upload endpoint passes such a status on. Only then is auth-refresh, which answers 401 to any
+// token it does not accept, asked which it is. A probe that gets no answer counts as "not ended", so the real refusal still shows.
+// ASSUMPTION: every 400, 403 or 404 sent with a token costs one auth-refresh call to tell an ended session from a real refusal
+// (rung 5: no expiry is read out of the token, and no screen changes how it calls PocketBase). Overturned if PocketBase starts
+// answering an unaccepted token with 401; the 401 check alone then does.
+async function sessionEnded(res, token) {
+  if (res.status === 401) return true;
+  if (![400, 403, 404].includes(res.status)) return false;
+  try {
+    const check = await fetch('/api/collections/users/auth-refresh', { method: 'POST', headers: { Authorization: token } });
+    return check.status === 401;
+  } catch {
+    return false;
+  }
+}
+
+// The session has ended: the token goes and log-in shows, with the path to come back to. The caller's own handling of the answer
+// never runs (the promise never settles), so nothing on the page it leaves reads as a failed save.
+function expired() {
+  const back = location.pathname + location.search;
+  signOut();
+  show(`/edit/login?next=${encodeURIComponent(back)}`, drawLogin);
+  return new Promise(() => {});
+}
+
+// Refreshes the stored token; false only when there is none. A token PocketBase no longer accepts ends the session in api(),
+// and a refresh PocketBase does not answer shows "Try again"; neither settles.
+// ASSUMPTION: a failed refresh (5xx) keeps the token and shows "Try again" rather than log-in (rung 3: expired()'s unsettled
+// promise and drawRetry for an unanswered call; the session lasts until the Creator ends it). Overturned if a failed refresh
+// must drop the session.
 async function refresh() {
   if (!localStorage.getItem(TOKEN)) return false;
   const res = await api('users/auth-refresh', { method: 'POST' });
   if (!res.ok) {
-    signOut();
-    return false;
+    drawRetry(res.data.message || 'PocketBase did not answer.');
+    return new Promise(() => {});
   }
   signedIn(res.data);
   return true;
@@ -153,8 +190,8 @@ function fieldReasons(res, fallback) {
 }
 
 // The claim's refusal, from PocketBase's answer. A Username refused by the create rule alone (400 with no field error) can
-// only be a reserved one: the Editor always sends itself as owner and nothing but Username, owner and default Mode, with a
-// token it has just signed in with or refreshed.
+// only be a reserved one: the Editor always sends itself as owner and nothing but Username, owner and default Mode, and a bare
+// 400 sent with a token PocketBase no longer accepts ends the session in api() before it reaches here.
 // ASSUMPTION: "reserved" is inferred from that bare 400, because PocketBase names no reason when a rule refuses a create
 // (observed on 0.40.4: `{"data":{}, "message":"Failed to create record."}`) (rung 5: no separate lookup, as the spec says).
 // Overturned if another clause of the create rule can fail for the Editor's own request; the message then has to say less.
@@ -237,12 +274,15 @@ function submitting(form, busy) {
 }
 
 function drawLogin() {
+  // Log-in reached from an ended session carries a return path; it lands by the Onboarding rule all the same.
+  const ended = new URLSearchParams(location.search).has('next');
   const email = el('input', { name: 'email', type: 'email', required: true, autocomplete: 'email' });
   const password = el('input', { name: 'password', type: 'password', required: true, autocomplete: 'current-password' });
   const status = message();
   const form = el('form', {
     onsubmit: async (event) => {
       event.preventDefault();
+      signOut(); // a new log-in replaces any session left on this device
       submitting(form, true);
       const res = await api('users/auth-with-password', { method: 'POST', body: { identity: email.value, password: password.value } });
       submitting(form, false);
@@ -255,7 +295,8 @@ function drawLogin() {
   el('label', {}, 'Password', password),
   status,
   el('button', { type: 'submit' }, 'Log in'));
-  render('Log in', el('h1', {}, 'Log in'), el('p', { className: 'hint' }, 'Edit your ofl.ink Profile.'), form,
+  const hint = ended ? 'Your session has ended. Log in to carry on.' : 'Edit your ofl.ink Profile.';
+  render('Log in', el('h1', {}, 'Log in'), el('p', { className: 'hint' }, hint), form,
     el('p', { className: 'switch' }, 'New here? ', link('Sign up', '/edit/signup')));
 }
 
@@ -267,6 +308,7 @@ function drawSignup() {
   const form = el('form', {
     onsubmit: async (event) => {
       event.preventDefault();
+      signOut(); // a new sign-up replaces any session left on this device
       submitting(form, true);
       const wanted = username.value;
       const body = { email: email.value, password: password.value, passwordConfirm: password.value };
@@ -311,8 +353,6 @@ function drawClaim({ username = '', error = '' } = {}) {
       event.preventDefault();
       submitting(form, true);
       const wanted = input.value;
-      // A token PocketBase no longer accepts would make the claim a guest's, refused with the bare 400 read as "reserved".
-      if (!(await refresh())) return show('/edit/login', drawLogin);
       const res = await claim(wanted);
       submitting(form, false);
       if (!res.ok) return say(status, claimReason(res, wanted));
@@ -673,7 +713,16 @@ function drawHome(profile, links) {
         history.pushState(null, '', '/edit/add-link');
         drawLinkForm(profile, featured.links());
       },
-    }, 'Add link')));
+    }, 'Add link')),
+    el('div', { className: 'actions' }, el('button', { type: 'button', className: 'secondary', onclick: logOut }, 'Log out')));
+}
+
+// Log out ends the session on this device: the token goes and log-in shows. PocketBase keeps no session to end.
+// ASSUMPTION: "Log out" sits at the foot of the Editor only, not on the Onboarding screens (rung 5: the Template's Edit Profile
+// screen has none to copy, and the Editor is where a Profile is changed). Overturned if a half-onboarded Creator must log out too.
+function logOut() {
+  signOut();
+  show('/edit/login', drawLogin);
 }
 
 // "Featured Links", laid out like the Template's: one row per Link in the order Visitors see them, the title opening the Link

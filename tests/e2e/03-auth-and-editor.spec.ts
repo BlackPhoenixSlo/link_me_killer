@@ -1,9 +1,13 @@
-import { test, expect, type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isWebp, markVerified, onLocalStack, pngFile } from './helpers';
+import {
+  account, CLAIM, createOwnerlessProfile, expectVerifyScreen, featured, fresh, heading, holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN,
+  logIn, markVerified, onLocalStack, ownerOf, PHONE, phoneContext, pngFile, proxy, servedProfile, setOwner, SIGN_UP, signUp, VERIFY,
+  verifiedCreator, visitorSees,
+} from './helpers';
 
 // Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL,
 // the public origin. Creator journeys run in the browser at 390×844; the Visitor side and every second log-in run in a fresh
@@ -16,77 +20,8 @@ import { isWebp, markVerified, onLocalStack, pngFile } from './helpers';
 // Every account is a throwaway with a fresh `signup_<hex>` email and Username; nothing is cleaned up, because the test stack
 // is taken down with its data after the run (tests/stack.sh). Destinations are compared as booleans and never printed.
 const ROOT = join(__dirname, '..', '..');
-const PHONE = { width: 390, height: 844 };
-const TEST_SECRETS: Record<string, string> = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'netlify', 'functions', 'secrets.json'), 'utf8'));
-const holdsDestination = (body: string) => Object.values(TEST_SECRETS).some((d) => body.includes(d));
 
 test.use({ viewport: PHONE });
-
-type Creator = { email: string; password: string; username: string };
-const fresh = (): Creator => {
-  const id = randomBytes(4).toString('hex');
-  return { email: `signup_${id}@example.com`, password: `throwaway-${id}`, username: `signup_${id}` };
-};
-
-// The Editor's screens, found by their headings.
-const SIGN_UP = 'Create your page';
-const LOG_IN = 'Log in';
-const CLAIM = 'Claim your Username';
-const VERIFY = 'Verify your email';
-const heading = (page: Page, name: string) => page.getByRole('heading', { name, exact: true });
-
-async function signUp(page: Page, creator: Creator) {
-  await page.goto('/edit/signup');
-  await page.getByLabel('Email').fill(creator.email);
-  await page.getByLabel('Password').fill(creator.password);
-  await page.getByLabel('Username').fill(creator.username);
-  await page.getByRole('button', { name: 'Create account' }).click();
-}
-
-async function logIn(page: Page, creator: Creator) {
-  await page.goto('/edit');
-  await expect(heading(page, LOG_IN)).toBeVisible();
-  await page.getByLabel('Email').fill(creator.email);
-  await page.getByLabel('Password').fill(creator.password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-}
-
-// A fresh context at 390×844 with no Editor session, with an optional User-Agent. Given the stack's origin, it reaches only that
-// host: every request elsewhere is aborted, so nothing leaves the machine.
-async function phoneContext(browser: Browser, { origin, userAgent }: { origin?: string; userAgent?: string } = {}) {
-  const context = await browser.newContext({ viewport: PHONE, ...(userAgent ? { userAgent } : {}) });
-  if (origin) await context.route((url) => url.host !== new URL(origin).host, (route) => route.abort('blockedbyclient'));
-  return context;
-}
-
-async function expectVerifyScreen(page: Page) {
-  await expect(heading(page, VERIFY)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Resend email' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Continue' })).toBeVisible();
-  await expect(page).toHaveURL(/\/edit\/verify-email$/);
-}
-
-// The proxy, called as the Editor calls it: JSON bodies, the token as the Authorization header.
-const proxy = (request: APIRequestContext, token?: string) => {
-  const headers = token ? { Authorization: token } : {};
-  return {
-    get: (path: string) => request.get(`/api/collections/${path}`, { headers }),
-    post: (path: string, data: object = {}) => request.post(`/api/collections/${path}`, { headers, data }),
-    patch: (path: string, data: object = {}) => request.patch(`/api/collections/${path}`, { headers, data }),
-  };
-};
-
-// An account made and signed in through the proxy: its token and record id.
-async function account(request: APIRequestContext, creator: Creator = fresh()) {
-  const anonymous = proxy(request);
-  const created = await anonymous.post('users/records', { email: creator.email, password: creator.password, passwordConfirm: creator.password });
-  expect(created.status(), 'anonymous sign-up through the proxy').toBe(200);
-  const auth = await anonymous.post('users/auth-with-password', { identity: creator.email, password: creator.password });
-  expect(auth.status(), 'an unverified account signs in through the proxy').toBe(200);
-  const { token, record } = await auth.json();
-  expect(record.verified).toBe(false);
-  return { creator, token: token as string, id: record.id as string };
-}
 
 test.describe('sign-up and the claim', () => {
   test('at 390×844 a stranger signs up with no invitation and lands signed in on "verify your email"; Continue keeps them there', async ({ page, request }) => {
@@ -509,46 +444,6 @@ test.describe('Onboarding after verification', () => {
 
 // ---- Ticket 27: the Editor's Profile panel, Bio Link, avatar and default Mode ------------------------------------------------
 
-// The 00-smoke In-App Browser User-Agent.
-const INSTAGRAM_UA =
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ' +
-  'Mobile/15E148 Instagram 300.0.0.0.0 (iPhone14,2; iOS 17_0; en_US; en-US; scale=3.00; 1170x2532; 0)';
-
-// A verified Creator with a named Profile on Escape Mode and two Links, arranged through the proxy as the Creator would through
-// the Editor; only the verification is the Operator's step. Links are [title, Mode] with '' for "Profile default", and their
-// Destinations are test-only example.com addresses.
-// ASSUMPTION: arranged as the Creator through the proxy, with only the verification as the Operator's step, so the describe
-// skips off the local test stack (rung 3: ticket 26's markVerified and onLocalStack). Overturned when 31's mail catcher lands.
-async function verifiedCreator(request: APIRequestContext, links: [string, string][]) {
-  const { token, id, creator } = await account(request);
-  const as = proxy(request, token);
-  const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig' });
-  expect(claimed.status()).toBe(200);
-  const profileId = (await claimed.json()).id as string;
-  await markVerified(creator.email);
-  const named = await as.patch(`profiles/records/${profileId}`, { displayName: 'Before Name', bio: 'Before bio.' });
-  expect(named.status()).toBe(200);
-  const linkIds: string[] = [];
-  for (const [order, [title, mode]] of links.entries()) {
-    const res = await as.post('links/records', { profile: profileId, title, order, mode, destination: `https://example.com/${creator.username}/${order}` });
-    expect(res.status(), title).toBe(200);
-    linkIds.push((await res.json()).id);
-  }
-  return { creator, token, profileId, linkIds };
-}
-
-type Served = {
-  profile: { displayName: string; bio: string; avatarUrl: string; mode: string };
-  links: { title: string; mode: string; icon: string; backgroundImage: string; isAdult: boolean; tracking: boolean; default_tracknumber?: string }[];
-};
-const servedProfile = async (request: APIRequestContext, username: string): Promise<Served> => {
-  const res = await request.get(`/api/profiles/${username}.json`);
-  expect(res.status()).toBe(200);
-  const body = await res.text();
-  expect(holdsDestination(body) || body.includes('https://example.com/'), 'a Destination in the Profile JSON').toBe(false);
-  return JSON.parse(body);
-};
-
 test.describe('the Editor\'s Profile and default Mode', () => {
   test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
 
@@ -689,20 +584,6 @@ test.describe('the Editor\'s Profile and default Mode', () => {
 });
 
 // ---- Ticket 28: the Editor's Featured Links and the Link form ---------------------------------------------------------------
-
-// "Featured Links": one row per Link, its title the row's only text; Edit is the title, Up, Down and Delete are named buttons.
-const featured = (page: Page) => page.getByRole('list', { name: 'Links' }).getByRole('listitem');
-
-// The next load of the public Profile, in a fresh context: its Link titles in the order Visitors see them.
-async function visitorSees(browser: Browser, origin: string, username: string, titles: string[]) {
-  const context = await phoneContext(browser, { origin });
-  const visitor = await context.newPage();
-  const served = visitor.waitForResponse((res) => new URL(res.url()).pathname === `/api/profiles/${username}.json`);
-  await visitor.goto(`/${username}`);
-  await served;
-  await expect(visitor.locator('.link-card .link-title')).toHaveText(titles);
-  await context.close();
-}
 
 test.describe('the Editor\'s Links', () => {
   test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
@@ -985,5 +866,119 @@ test.describe('the Editor\'s Links', () => {
     await fillAll();
     await page.getByRole('button', { name: 'Save link' }).click();
     await expectKept('Add link');
+  });
+});
+
+// ---- Ticket 29: the session, where log-in lands, and the hand-over ----------------------------------------------------------
+// The hand-over is proved on a throwaway ownerless Profile; no imported v1 Profile gets an owner in this Phase (ADR 0002).
+
+const EDITOR = 'Edit Profile';
+
+test.describe('the session and where log-in lands', () => {
+  test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
+
+  test('reopening the Editor in the same context still shows it; Log out shows log-in, and logging in again lands in the Editor', async ({ page, request }) => {
+    const { creator } = await verifiedCreator(request, [['Session card', '']]);
+    await logIn(page, creator);
+    await expect(heading(page, EDITOR)).toBeVisible();
+    // Reopened, in a new tab of the same context, without logging in.
+    const reopened = await page.context().newPage();
+    await reopened.goto('/edit');
+    await expect(heading(reopened, EDITOR)).toBeVisible();
+    await reopened.close();
+
+    await page.getByRole('button', { name: 'Log out' }).click();
+    await expect(heading(page, LOG_IN)).toBeVisible();
+    await expect(page).toHaveURL(/\/edit\/login$/);
+    // Ended on this device: opening the Editor again shows log-in.
+    await page.goto('/edit/home');
+    await expect(heading(page, LOG_IN)).toBeVisible();
+    await logIn(page, creator);
+    await expect(heading(page, EDITOR)).toBeVisible();
+    await expect(featured(page)).toHaveText(['Session card']);
+  });
+
+  test('a Creator who logs in partway through Onboarding resumes at the claim step, the verify screen, the Profile step or the first-Link step', async ({ browser, request }) => {
+    // Each stage arranged over HTTP as the Creator would reach it; only the verification is the Operator's step.
+    const reach = async (stage: string) => {
+      const { creator, token, id } = await account(request);
+      const as = proxy(request, token);
+      const claimed = await as.post('profiles/records', { username: stage === CLAIM ? 'edit' : creator.username, owner: id, mode: 'escape_ig' });
+      expect(claimed.status(), stage).toBe(stage === CLAIM ? 400 : 200);
+      if (stage === CLAIM || stage === VERIFY) return creator;
+      await markVerified(creator.email);
+      if (stage === 'Add your first Link') expect((await as.patch(`profiles/records/${(await claimed.json()).id}`, { displayName: 'Half way' })).status()).toBe(200);
+      return creator;
+    };
+    const stages: [string, RegExp][] = [[CLAIM, /\/edit\/claim$/], [VERIFY, /\/edit\/verify-email$/], ['Your Profile', /\/edit\/profile$/], ['Add your first Link', /\/edit\/first-link$/]];
+    for (const [stage, url] of stages) {
+      const creator = await reach(stage);
+      const context = await phoneContext(browser);
+      const resumed = await context.newPage();
+      await logIn(resumed, creator);
+      await expect(heading(resumed, stage)).toBeVisible();
+      await expect(resumed, stage).toHaveURL(url);
+      await context.close();
+    }
+  });
+
+  test('with the stored token replaced by an invalid one, a save sends the Creator to log-in, and logging in returns them to the Editor', async ({ page, request }) => {
+    const { creator } = await verifiedCreator(request, [['Session card', '']]);
+    await logIn(page, creator);
+    await expect(heading(page, EDITOR)).toBeVisible();
+    await page.evaluate(() => localStorage.setItem('ofl.token', 'not-a-token'));
+    await page.getByLabel('Display name').fill('Never saved');
+    await page.getByRole('button', { name: 'Save profile' }).click();
+    // Log-in with the way back, saying why: never a failed save.
+    await expect(heading(page, LOG_IN)).toBeVisible();
+    await expect(page).toHaveURL(/\/edit\/login\?next=%2Fedit%2Fhome$/);
+    await expect(page.getByText('Your session has ended. Log in to carry on.')).toBeVisible();
+    await page.getByLabel('Email').fill(creator.email);
+    await page.getByLabel('Password').fill(creator.password);
+    await page.getByRole('button', { name: 'Log in' }).click();
+    await expect(heading(page, EDITOR)).toBeVisible();
+    await expect(page).toHaveURL(/\/edit\/home$/);
+    await expect(page.getByLabel('Display name')).toHaveValue('Before Name');
+  });
+
+  test('hand-over: an ownerless Profile\'s Username is refused with the Cutover message; once the Operator sets its owner, the Creator\'s next log-in lands in the Editor on it', async ({ page, browser, baseURL }) => {
+    const origin = new URL(baseURL!).origin;
+    const creator = fresh();
+    await createOwnerlessProfile(creator.username, 'Handed Over', { title: 'Imported card', destination: `https://example.com/${creator.username}` });
+    await signUp(page, creator);
+    await expect(heading(page, CLAIM)).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('the Operator hands over Usernames held on v1 at Cutover');
+    await page.reload();
+    await expect(heading(page, CLAIM)).toBeVisible();
+
+    await setOwner(creator.username, creator.email);
+    await markVerified(creator.email);
+    const context = await phoneContext(browser);
+    const editor = await context.newPage();
+    await logIn(editor, creator);
+    await expect(heading(editor, EDITOR)).toBeVisible();
+    await expect(editor.getByText(`${origin}/${creator.username}`, { exact: true })).toBeVisible();
+    await expect(editor.getByLabel('Display name')).toHaveValue('Handed Over');
+    await expect(featured(editor)).toHaveText(['Imported card']);
+    await editor.getByLabel('Display name').fill('Edited after hand-over');
+    await editor.getByRole('button', { name: 'Save profile' }).click();
+    await expect(editor.getByText('Profile saved.')).toBeVisible();
+    await context.close();
+    // The public page, in a fresh context with no Editor session.
+    const visit = await phoneContext(browser, { origin });
+    const visitor = await visit.newPage();
+    await visitor.goto(`/${creator.username}`);
+    await expect(visitor.locator('#displayName')).toHaveText('Edited after hand-over');
+    await expect(visitor.locator('.link-card .link-title')).toHaveText(['Imported card']);
+    await visit.close();
+  });
+
+  // ASSUMPTION: "after the whole run" is the spec's last test, which runs after every other test of this file in its worker
+  // (no fullyParallel in playwright.config.ts); no other spec writes an owner, and the later v1 Import re-runs set none (rung 1:
+  // grep; app/bin/import-v1 sends owner on no write). Overturned if another spec starts writing owners; the check then moves to
+  // the last project.
+  test('after the run, the Fixture Profile still has no owner', async () => {
+    // Operator-side guard, not a seam under test: the ticket's criterion has no public-origin answer (spec Testing Decisions name the loopback for arranging only).
+    expect(await ownerOf('fixture')).toBe('');
   });
 });
