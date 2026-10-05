@@ -19,7 +19,7 @@ The results are recorded in this ticket. The Operator shares the sign-up link pr
 
 ASSUMPTION: parked as a VPS step, as 11 and 23 are (rung 3). Overturned once 23 closes; this ticket is then ready for the human.
 
-- [ ] The Application URL and the SMTP sender are set in the admin UI, and the repo holds no SMTP credential.
+- [x] The Application URL and the SMTP sender are set in the admin UI, and the repo holds no SMTP credential. (2026-10-05: set through PocketBase's settings API on the VPS over the tunnel: Application URL https://v2.ofl.ink (to become https://ofl.ink at Cutover step 1), sender ofl.ink <me@jackbase.dev>, SMTP mail.privateemail.com:587 STARTTLS PLAIN; `PATCH /api/settings` 200, `POST /api/settings/test/email` 204. The credential lives in PocketBase's database only.)
 - [ ] Scheduled backups are on, daily at 03:00 and keeping 7, as the admin UI shows.
 - [ ] The real-inbox verification and reset run passes, recorded here.
 - [ ] Both phones complete Onboarding, and the public Profile serves the avatar and the background as `image/webp`, recorded here.
