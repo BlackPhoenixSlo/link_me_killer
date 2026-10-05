@@ -1,8 +1,8 @@
 import { expect, test, type APIRequestContext, type Browser, type Page, type Request } from '@playwright/test';
 import { join } from 'node:path';
 import {
-  account, asSuperuser, createOwnerlessProfile, escapeOverlay, eventCount, fresh, intents, only, onLocalStack, operator, phoneContext, proxy,
-  recordIds, recordNavigations, superuserToken, UA, verifiedCreator, xSafari,
+  account, asSuperuser, createOwnerlessProfile, escapeOverlay, eventCount, fresh, intents, logInToHandedOver, only, onLocalStack, operator,
+  ownerOf, phoneContext, proxy, recordIds, recordNavigations, setOwner, superuserToken, UA, verifiedCreator, xSafari,
 } from './helpers';
 
 // Phase 5 (docs/spec/phase-05-cutover-and-domains.md, Testing Decisions): one seam, this spec against the local stack at the
@@ -11,6 +11,7 @@ import {
 // Ticket 39: Host Resolution, the paths per host, the TLS Ask, the Profile page bootstrap and the Domains schema.
 // Ticket 40: on every host each Mode, the Age Gate, Reveal, Escape and the Escape Overlay behave as on the baseURL, Events are
 // credited to the resolved Profile, nothing is requested from another of ofl.ink's hosts, and Reveal refuses another origin.
+// Ticket 41: the hand-over order of the Cutover runbook's step 12, on a throwaway Profile (the last test).
 // Escapes are captured with Phase 1's navigation recorder and User-Agents (helpers.ts); a Destination a page navigates
 // to is fulfilled with a harmless page, and a redirect hop after `/r`, which no route sees, is stopped by the network guard.
 // Set-up, not a second seam: `beforeAll` gives the Fixture Profile the Custom Domain `creator.test` and lists the Spare Domain
@@ -501,4 +502,25 @@ test('a fetch from a page on creator.test to Reveal on spare.test cannot be read
   const foreign = await request.get(`${REVEAL}?id=${linkId}&user=fixture`, { headers: { host: `${SPARE}:${PORT}`, origin: at(CUSTOM) } });
   expect(foreign.status(), `${SPARE}'s answer to Reveal for Link ${linkId} with Origin ${at(CUSTOM)}`).toBe(403);
   await context.close();
+});
+
+// Ticket 41: the order of the Cutover runbook's step 12 (RUN.md, ## Cutover). A v1 Creator who claimed another Username before
+// the hand-over owns that bare Profile; Phase 3's partial unique index on owner (idx_profiles_owner, pocketbase/pb_migrations/
+// 1791140004_sign_up_and_claim.js) refuses the imported Profile's owner even to a superuser until the bare Profile is deleted.
+// The imported Profile is a throwaway made as the v1 Import makes one (helpers.ts, createOwnerlessProfile); the Operator's
+// steps are helpers.ts's setOwner and operator, as in the admin UI. Nothing shared is changed.
+// ASSUMPTION: here rather than beside 03's hand-over case (rung 2: Phase 5's one seam is this spec, Phase 3's suite is one spec,
+// and 03-auth-and-editor.spec.ts may not grow past its 1000-line limit; the two cases share helpers.ts's logInToHandedOver).
+// Overturned if 03 gains room; the case then moves beside its hand-over case.
+test('step 12\'s hand-over order: setting the owner while the Creator\'s bare Profile exists is refused; once it is deleted the owner is set, the next log-in lands in the Editor on the handed-over Profile with its Links, and the Creator owns exactly one Profile', async ({ browser, request, baseURL }) => {
+  const { creator, id, profileId: bare } = await verifiedCreator(request, []);
+  const imported = fresh().username;
+  await createOwnerlessProfile(imported, 'Handed Over', { title: 'Imported card', destination: `https://example.com/${imported}` });
+  expect(await setOwner(imported, creator.email), 'setting the owner while the bare Profile exists').toBe(400);
+  expect(await ownerOf(imported), 'the imported Profile\'s owner after the refusal').toBe('');
+  expect(await operator('DELETE', `/api/collections/profiles/records/${bare}`), 'the bare Profile deleted').toBe(204);
+  expect(await setOwner(imported, creator.email), 'setting the owner once the bare Profile is gone').toBe(200);
+  const editor = await logInToHandedOver(browser, new URL(baseURL!).origin, creator, imported, 'Handed Over', ['Imported card']);
+  await editor.context().close();
+  expect((await only(await superuserToken(), 'profiles', `owner='${id}'`)).username, 'the one Profile the Creator owns').toBe(imported);
 });

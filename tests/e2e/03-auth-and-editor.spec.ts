@@ -5,10 +5,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { withoutBootstrap } from './domains-helpers';
 import {
-  account, CLAIM, createOwnerlessProfile, expectServedWebp, expectVerifyScreen, featured, forgotPassword, fresh, furnishedCreator, heading,
-  holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN, logIn, mailedLink, mailedLinks, markVerified, onLocalStack, openProfile, operator, ownerOf,
-  passAgeGate, PHONE, phoneContext, pngFile, probe, proxy, reach, readBack, recordIds, refused, servedProfile, setOwner, SIGN_UP, signUp,
-  upload, VERIFY, verifiedCreator, visitorSees,
+  account, CLAIM, createOwnerlessProfile, EDITOR, expectServedWebp, expectVerifyScreen, featured, forgotPassword, fresh, furnishedCreator,
+  heading, holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN, logIn, logInToHandedOver, mailedLink, mailedLinks, markVerified, onLocalStack,
+  openProfile, operator, ownerOf, passAgeGate, PHONE, phoneContext, pngFile, probe, proxy, reach, readBack, recordIds, refused, servedProfile,
+  setOwner, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees,
 } from './helpers';
 
 // Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL.
@@ -856,8 +856,6 @@ test.describe('owner rules, over HTTP at the public origin', () => {
 // ---- Ticket 29: the session, where log-in lands, and the hand-over ----------------------------------------------------------
 // The hand-over is proved on a throwaway ownerless Profile; no imported v1 Profile gets an owner in this Phase (ADR 0002).
 
-const EDITOR = 'Edit Profile';
-
 test.describe('the session and where log-in lands', () => {
   test.skip(!onLocalStack(), 'the mail catcher and the Operator\'s PocketBase port are on the local test stack only');
 
@@ -925,19 +923,13 @@ test.describe('the session and where log-in lands', () => {
     await page.reload();
     await expect(heading(page, CLAIM)).toBeVisible();
 
-    await setOwner(creator.username, creator.email);
+    expect(await setOwner(creator.username, creator.email), 'the Operator sets the owner').toBe(200);
     await markVerified(creator.email);
-    const context = await phoneContext(browser);
-    const editor = await context.newPage();
-    await logIn(editor, creator);
-    await expect(heading(editor, EDITOR)).toBeVisible();
-    await expect(editor.getByText(`${origin}/${creator.username}`, { exact: true })).toBeVisible();
-    await expect(editor.getByLabel('Display name')).toHaveValue('Handed Over');
-    await expect(featured(editor)).toHaveText(['Imported card']);
+    const editor = await logInToHandedOver(browser, origin, creator, creator.username, 'Handed Over', ['Imported card']);
     await editor.getByLabel('Display name').fill('Edited after hand-over');
     await editor.getByRole('button', { name: 'Save profile' }).click();
     await expect(editor.getByText('Profile saved.')).toBeVisible();
-    await context.close();
+    await editor.context().close();
     // The public page, in a fresh context with no Editor session.
     const visitor = await openProfile(browser, origin, creator.username, ['Imported card']);
     await expect(visitor.locator('#displayName')).toHaveText('Edited after hand-over');
@@ -988,9 +980,9 @@ test.describe('the session and where log-in lands', () => {
   });
 
   // ASSUMPTION: "after the whole run" is the spec's last test, which runs after every other test of this file in its worker
-  // (no fullyParallel in playwright.config.ts); no other spec writes an owner, and the later v1 Import re-runs set none (rung 1:
-  // grep; app/bin/import-v1 sends owner on no write). Overturned if another spec starts writing owners; the check then moves to
-  // the last project.
+  // (no fullyParallel in playwright.config.ts); no other spec writes the Fixture's owner (05-domains hands over only a throwaway
+  // Profile), and the later v1 Import re-runs set none (rung 1: grep; app/bin/import-v1 sends owner on no write). Overturned if
+  // another spec starts writing the Fixture's owner; the check then moves to the last project.
   test('after the run, the Fixture Profile still has no owner', async () => {
     // Operator-side guard, not a seam under test: the ticket's criterion has no public-origin answer (spec Testing Decisions name the loopback for arranging only).
     expect(await ownerOf('fixture')).toBe('');

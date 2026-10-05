@@ -7,9 +7,10 @@ import { deflateSync } from 'node:zlib';
 // Plumbing that is not itself a test: Phase 3's plumbing for tests/e2e/03-auth-and-editor.spec.ts (the Operator steps, an
 // in-memory PNG and, moved here by ticket 29, the Creator, Visitor and proxy drivers its tests share), plus the drivers that more
 // than one spec of Phases 1-4 shares: 02-reveal-guard's flood callsTo429 (ticket 36), 04-stats's eventCount and Phase 1's
-// In-App Browser User-Agents and navigation recorder (ticket 40). 01, 02-reveal-guard, 03, 04 and 05-domains import it; Phase 5's
-// own plumbing lives in domains-helpers.ts. Not a spec file (Playwright's default testMatch skips it), so the Phase 3 suite stays
-// one spec (docs/spec/phase-03-auth-and-editor.md, Testing Decisions).
+// In-App Browser User-Agents and navigation recorder (ticket 40), and 03's hand-over log-in, which 05-domains's hand-over order
+// shares (ticket 41). 01, 02-reveal-guard, 03, 04 and 05-domains import it; Phase 5's own plumbing lives in domains-helpers.ts.
+// Not a spec file (Playwright's default testMatch skips it), so the Phase 3 suite stays one spec
+// (docs/spec/phase-03-auth-and-editor.md, Testing Decisions).
 // ASSUMPTION: a helper module beside the spec rather than more lines in it; the specs named above import from it too
 // (rung 5: the one spec file stays under 1000 lines without dropping a test). Overturned if helpers must live in the spec.
 const ROOT = join(__dirname, '..', '..');
@@ -100,10 +101,11 @@ export async function createOwnerlessProfile(
   expect(created.status).toBe(200);
 }
 
+// It returns PocketBase's status, which the caller asserts: 05-domains's hand-over order expects a refusal first.
 export async function setOwner(username: string, email: string) {
   const token = await superuserToken();
   const [profile, user] = [await only(token, 'profiles', `username='${username}'`), await only(token, 'users', `email='${email}'`)];
-  expect((await asSuperuser(token, `/api/collections/profiles/records/${profile.id}`, json('PATCH', { owner: user.id }))).status).toBe(200);
+  return (await asSuperuser(token, `/api/collections/profiles/records/${profile.id}`, json('PATCH', { owner: user.id }))).status;
 }
 
 // A Profile's owner as the Operator sees it in the admin UI: a users record id, or '' for none.
@@ -162,6 +164,7 @@ export const SIGN_UP = 'Create your page';
 export const LOG_IN = 'Log in';
 export const CLAIM = 'Claim your Username';
 export const VERIFY = 'Verify your email';
+export const EDITOR = 'Edit Profile';
 export const heading = (page: Page, name: string) => page.getByRole('heading', { name, exact: true });
 
 export async function signUp(page: Page, creator: Creator) {
@@ -340,6 +343,19 @@ export const featured = (page: Page) => page.getByRole('list', { name: 'Links' }
 // The next load of the public Profile, in a fresh context: its Link titles in the order Visitors see them.
 export async function visitorSees(browser: Browser, origin: string, username: string, titles: string[]) {
   await (await openProfile(browser, origin, username, titles)).context().close();
+}
+
+// The Creator's next log-in after the Operator's hand-over (03's hand-over case; 05-domains's hand-over order, ticket 41): in a
+// fresh 390×844 context it lands in the Editor on the handed-over Profile `username`, showing its display name and its Links'
+// titles. The caller closes the page's context.
+export async function logInToHandedOver(browser: Browser, origin: string, creator: Creator, username: string, displayName: string, titles: string[]) {
+  const editor = await (await phoneContext(browser)).newPage();
+  await logIn(editor, creator);
+  await expect(heading(editor, EDITOR)).toBeVisible();
+  await expect(editor.getByText(`${origin}/${username}`, { exact: true })).toBeVisible();
+  await expect(editor.getByLabel('Display name')).toHaveValue(displayName);
+  await expect(featured(editor)).toHaveText(titles);
+  return editor;
 }
 
 // ---- Ticket 30: the owner rules, probed over HTTP -----------------------------------------------------------------------------

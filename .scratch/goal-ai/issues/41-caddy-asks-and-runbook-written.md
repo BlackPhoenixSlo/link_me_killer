@@ -4,7 +4,7 @@ Spec: docs/spec/phase-05-cutover-and-domains.md
 Covers: user stories 1, 8, 10, 14, 17, 30, 31, 35, 45
 Seams: offline, the local Caddy image adapting the production configuration, and the running local stack called from inside Caddy's container; the Playwright loop through `./check.sh` for the hand-over order, its Operator steps arranged as a superuser at PocketBase's loopback port as Phase 3 arranges them; the spec's local Acceptance block under `set -e`
 Blocked by: 40: On a Custom Domain or Spare Domain every Mode and Escape and Reveal works and counts as on ofl.ink, 29: Log-in lands a Creator where they left off and a handed-over Profile opens in the Editor
-Status: claimed 20261005T084628Z 2026-10-05T16:02:04Z
+Status: done
 
 **What to build:** Everything about the Cutover that can be made and checked on this machine, so that on the day only DNS moves.
 - **Production Caddy site.** The production site address becomes one `https://` catch-all with on-demand TLS, carrying the same routes as Phase 2's public site. A global on-demand policy points its ask at the app's TLS Ask over the Compose network, so Caddy obtains a certificate only for a hostname the app admits: ofl.ink after the switch, Phase 2's v2 host, every Spare Domain and every Custom Domain. The original Host header reaches the app. The local plain-HTTP listener on the baseURL port keeps what Phase 2 gave it and accepts any Host. The primary-hosts setting is `localhost` locally; its production value is set at the runbook's step 1. Nothing in Caddy or the app changes on the day of the switch.
@@ -15,9 +15,9 @@ ASSUMPTION: the production Caddy configuration is checked offline with the Caddy
 ASSUMPTION: the hand-over check lives beside Phase 3's hand-over case, not as a twelfth behaviour of `05-domains` (rung 3: ticket 29 arranges the hand-over that way). Overturned if the implementer finds `05-domains` the only spec that reaches a Creator's log-in; it then goes there.
 ASSUMPTION: setting the owner before deleting the bare Profile is refused by Phase 3's partial unique index on owner (Phase 3 spec, One Profile per Creator). Overturned if Phase 3 fell back to a create-rule check, which a superuser bypasses. RUN.md's step 12 then says the order is not enforced, and the Operator checks the Creator owns one Profile.
 
-- [ ] Adapting the production configuration with the local Caddy image succeeds and reports an on-demand ask endpoint at the app's TLS Ask. On the running local stack, that endpoint called from inside Caddy's container says yes to `localhost` and no to `unknown.invalid`.
-- [ ] The local loop obtains no certificate and reaches no network. Phase 2's parity spec and Phase 4's Stats spec still inject location headers through the local listener and pass.
-- [ ] `RUN.md`'s `## Cutover` holds steps 1 to 15 in the spec's order with its exact commands, and also says:
+- [x] Adapting the production configuration with the local Caddy image succeeds and reports an on-demand ask endpoint at the app's TLS Ask. On the running local stack, that endpoint called from inside Caddy's container says yes to `localhost` and no to `unknown.invalid`.
+- [x] The local loop obtains no certificate and reaches no network. Phase 2's parity spec and Phase 4's Stats spec still inject location headers through the local listener and pass.
+- [x] `RUN.md`'s `## Cutover` holds steps 1 to 15 in the spec's order with its exact commands, and also says:
   - the v1 Import is never run again after the switch, written above step 6's import command;
   - the three things that break or go stale at the Cutover (story 10);
   - what a rollback restores and when to roll back (story 14);
@@ -26,6 +26,10 @@ ASSUMPTION: setting the owner before deleting the bare Profile is refused by Pha
   - step 12's hand-over is never done before step 8;
   - no step changes Netlify: v1 stays live on its netlify.app address indefinitely as the rollback target (plan section 10);
   - which lines rest on the production country source (step 1's ranges line, step 3, the Cloudflare part of step 4, step 7's two header probes, and the record changes in steps 8, 9 and 13), so ticket 42 can rewrite them under the other answer.
-- [ ] `RUN.md` names no Destination.
-- [ ] On the local stack, a Creator who owns a bare Profile is handed an ownerless Profile made the way the v1 Import makes one: setting its owner while the bare Profile exists is refused; after the bare Profile is deleted it succeeds, the Creator's next log-in lands in the Editor on the handed-over Profile with its Links, and they own exactly one Profile.
-- [ ] The spec's local Acceptance block exits 0 under `set -e`: the v1 Snapshot shows no change (the status read and the empty test on two lines), the `05-domains` spec exists, `RUN.md` has `## Cutover`, and `./check.sh` passes.
+- [x] `RUN.md` names no Destination.
+- [x] On the local stack, a Creator who owns a bare Profile is handed an ownerless Profile made the way the v1 Import makes one: setting its owner while the bare Profile exists is refused; after the bare Profile is deleted it succeeds, the Creator's next log-in lands in the Editor on the handed-over Profile with its Links, and they own exactly one Profile.
+- [x] The spec's local Acceptance block exits 0 under `set -e`: the v1 Snapshot shows no change (the status read and the empty test on two lines), the `05-domains` spec exists, `RUN.md` has `## Cutover`, and `./check.sh` passes.
+
+## Landed
+
+Run 20261005T084628Z. Reviewer APPROVE (round 2 of 3). Cold ./check.sh --reporter=line: 358 passed, 1 skipped, exit 0. Caddyfile: global on_demand_tls { ask http://app:3000/internal/tls-ask } and site tls { on_demand }, always present (ASSUMPTION: with SITE_ADDRESS=:80 caddy adapt drops the TLS policy, so the local loop obtains no certificate; proven by tests/caddy-ask.sh, which adapts both envs offline on the local caddy:2-alpine image, calls the ask from inside Caddy's container (localhost 200, unknown.invalid 404), sends a stranger Host to :80, and counts zero certificates). tests/side-stack.sh is the shared side-stack harness now sourced by caddy-ask.sh and proxy-protocol.sh (both PASS). RUN.md gains ## Cutover: steps 1-15 with the spec's commands, set-once variables, import-never-again above step 6, break/stale list, rollback, A record, switch time, hand-over never before step 8 (order enforced by idx_profiles_owner, observed 400), Netlify untouched, and the [country source] lines ticket 42 rewrites; ASSUMPTION: step 1 adds SITE_ADDRESS=https:// (spec Contracts). Hand-over-order test lives in 05-domains (03 at its line cap); setOwner now returns the status. Manual steps stay the Operator's.

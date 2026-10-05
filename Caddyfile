@@ -1,4 +1,13 @@
 # One site, SITE_ADDRESS, proxied to the app. PocketBase is not routed through Caddy.
+# On the VPS SITE_ADDRESS is `https://` (Phase 5 spec, Caddy configuration): one catch-all with on-demand TLS for ofl.ink,
+# Phase 2's v2 host, every Spare Domain and every Custom Domain. Before Caddy obtains a certificate for a hostname it asks the
+# app's TLS Ask over the Compose network, which says yes only to a hostname the app admits (app/server.js, /internal/tls-ask).
+# reverse_proxy passes the original Host header on, Caddy's default. In tests SITE_ADDRESS is `:80`: plain HTTP for any Host.
+# ASSUMPTION: the ask and `tls { on_demand }` are always present rather than in an env-selected snippet like the PROXY
+# protocol's below (rung 1: on the local caddy:2-alpine v2.11.4, `caddy adapt` with SITE_ADDRESS=:80 drops the site's
+# `tls { on_demand }` and gives the same :80 server as without both, with no TLS policy, so nothing asks and no certificate is
+# obtained; tests/caddy-ask.sh checks both adaptations). Overturned if a Caddy release attaches TLS to a plain-HTTP address;
+# the two lines then move into an env-selected snippet.
 
 # PROXY protocol (ticket 45): compose.yaml turns the Operator's PROXY_PROTOCOL_FROM into `off` (empty, as in tests) or
 # `on <CIDRs>`, which picks one of these snippets. On, every listener reads a PROXY protocol header from those addresses only,
@@ -23,8 +32,14 @@
 
 {
 	import proxy_protocol_{$PROXY_PROTOCOL_FROM:off}
+	on_demand_tls {
+		ask http://app:3000/internal/tls-ask
+	}
 }
 
 {$SITE_ADDRESS} {
+	tls {
+		on_demand
+	}
 	reverse_proxy app:3000
 }

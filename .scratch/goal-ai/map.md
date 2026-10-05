@@ -68,7 +68,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 45 tickets (45 added 20
 | 38 | [A phone inside Instagram is recorded as Instagram on v2's VPS host](issues/38-instagram-recorded-on-vps.md) | phase-04 | 36, 32 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 39 | [Custom Domains and Spare Domains listed in PocketBase serve Profiles by host and pass the TLS Ask](issues/39-domains-served-by-host.md) | phase-05 | 22, 30 | done |
 | 40 | [On a Custom Domain or Spare Domain every Mode and Escape and Reveal works and counts as on ofl.ink](issues/40-every-host-behaves-as-ofl-ink.md) | phase-05 | 39, 10, 36 | done |
-| 41 | [Caddy asks the app before every certificate and the Cutover runbook is written](issues/41-caddy-asks-and-runbook-written.md) | phase-05 | 40, 29 | claimed 20261005T084628Z |
+| 41 | [Caddy asks the app before every certificate and the Cutover runbook is written](issues/41-caddy-asks-and-runbook-written.md) | phase-05 | 40, 29 | done |
 | 42 | [Visitor location trusts only the production country source and ofl.ink's DNS is ready for a one-record switch](issues/42-country-source-and-dns-ready.md) | phase-05 | 41 | ready-for-agent |
 | 43 | [The Operator switches ofl.ink to v2 by one DNS change while v1 stays live](issues/43-cutover-runbook.md) | phase-05 | 41, 42, 23, 32, 38 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 44 | [Bio links move to a warmed Spare Domain the day ofl.ink is Flagged](issues/44-spare-domain-rotation.md) | phase-05 | 43 | parked — needs-human: Spare Domain vs Meta Flag |
