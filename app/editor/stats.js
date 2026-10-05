@@ -1,9 +1,11 @@
 // The Stats page (docs/spec/phase-04-stats.md, Stats page; tickets 33 and 34), a screen of the creator-only area at
 // `/edit/stats`, next to the Editor in its navigation. Its own module: it imports the Editor's helpers (api, el, select, render,
 // show, onboarded, creatorNav, pageTitle from app.js; drawRetry from screens/auth.js), and app.js's router calls openStats. It reads the
-// `dailyStats` view through the same-origin proxy with the Creator's token and sends no Profile
-// filter, so PocketBase's list rule alone decides which rows it gets; it never asks for events. Numbers are as of page load or
-// of the last range tab picked.
+// `dailyStats` view through the same-origin proxy with the Creator's token, filtered to the current Profile (Phase 6: an account
+// owns up to three; PocketBase's list rule still decides which rows the token may read); it never asks for events. Numbers are
+// as of page load or of the last range tab picked. The Profile switcher (app.js) heads the page, as it heads the Editor.
+// ASSUMPTION: Stats shows the current Profile only, with no all-Profiles total (the spec's, rung 5; a one-Profile account sees
+// exactly what it saw before). Overturned if the Operator wants a total.
 // Laid out after the link.me Template's analytics page (link.me/analytics.html): the range tabs with their date span, a Link
 // and a Country filter that narrow every panel, three cards in place of Profile Views, Link Clicks and Engagement Rate, the
 // daily panel in place of Traffic Overview, a Links table in place of Top Web Links and a Countries table in place of
@@ -16,11 +18,12 @@
 // a deleted Link's Clicks are in the range (rung 6: the spec fixes the columns and the order, not which Links show). Overturned
 // if only Links with Clicks should show, as the Countries table shows only countries seen.
 
-import { api, el, select, render, show, onboarded, creatorNav, pageTitle } from './app.js';
+import { api, el, select, render, show, onboarded, creatorNav, pageTitle, switcher } from './app.js';
 import { drawRetry } from './screens/auth.js';
 
 const DAY_MS = 86_400_000;
 const PAGE_SIZE = 500;
+let profile; // the current Profile, whose rows the page reads, set by openStats
 
 // The `n` UTC days ending today by the browser's clock, oldest first, as "YYYY-MM-DD".
 function rangeDays(n) {
@@ -31,7 +34,7 @@ function rangeDays(n) {
 // Every dailyStats row from `first` to `last`, PAGE_SIZE to a page, asking for the next page until PocketBase has sent them all:
 // `{ ok, rows, message }`, `ok` false with PocketBase's message from the first page it refuses.
 async function statsRows(first, last) {
-  const filter = encodeURIComponent(`day >= '${first}' && day <= '${last}'`);
+  const filter = encodeURIComponent(`profile='${profile.id}' && day >= '${first}' && day <= '${last}'`);
   const rows = [];
   for (let page = 1; ; page++) {
     const res = await api(`dailyStats/records?perPage=${PAGE_SIZE}&page=${page}&filter=${filter}`);
@@ -49,6 +52,7 @@ const RANGES = [['Today', 1], ['7D', 7], ['30D', 30]];
 export async function openStats() {
   const done = await onboarded();
   if (!done) return;
+  profile = done.profile;
   return showRange(done.links, 7, { link: '', country: '' });
 }
 
@@ -175,6 +179,7 @@ function drawStats(days, links, rows, filters, refocus) {
   render('Stats',
     creatorNav('/edit/stats'),
     pageTitle('Stats'),
+    switcher(profile),
     el('p', { className: 'e-page__lead' }, 'Page Views, Clicks and CTR for your page.'),
     el('div', { className: 'e-range' },
       el('div', { className: 'e-segmented', role: 'group', 'aria-label': 'Range' }, ...RANGES.map(rangeTab)),

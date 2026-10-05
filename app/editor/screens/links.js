@@ -4,7 +4,7 @@
 // brief's (docs/spec/editor-redesign.md, sections 4.9 to 4.12 and 5, as ruled in section 11).
 
 import { api, upload, el, render, message, say, select, check, fileInput, ICONS, MODE_NAMES, submitting, fieldReasons, show,
-  onboard, route, address, copyButton, creatorNav, linksOf, logOut, card, field, steps, icon, pageTitle } from '../app.js';
+  onboard, route, address, copyButton, creatorNav, linksOf, logOut, card, field, steps, icon, pageTitle, switcher, link as navLink } from '../app.js';
 import { drawRetry } from './auth.js';
 import { profileForm, quickSettings } from './profile.js';
 
@@ -209,7 +209,8 @@ function drawLive(profile) {
 
 // ---- The Editor's home --------------------------------------------------------------------------------------------------
 
-// The Editor's home, "Edit Profile", stacked cards (the brief's ruling 1): the jump chips, "Your Bio Link" with Copy and Open,
+// The Editor's home, "Edit Profile", stacked cards (the brief's ruling 1): the Profile switcher (Phase 6, app.js), the jump
+// chips, "Your Bio Link" with Copy, Open and "Domain" (Phase 6's Custom Domain screen, `/edit/domain`),
 // Links (the list and "Add link"), Profile (display name, bio, picture, the @Username read-only), "Quick Settings" (the default
 // Mode), then "Log out". Each form saves on its own button, with no autosave, and the last save wins. A save keeps
 // PocketBase's answer in `profile` (saveProfile), so "Add link" names the default Mode just saved.
@@ -226,14 +227,18 @@ export function drawHome(profile, links) {
   const url = address(profile);
   const copied = message();
   const section = (id, heading, ...children) => Object.assign(card(heading, ...children), { id });
+  const domain = navLink('Domain', '/edit/domain');
+  domain.className = 'e-btn e-btn--ghost';
   render('Edit Profile', creatorNav('/edit'), pageTitle('Edit Profile'),
+    switcher(profile),
     jumpChips(),
     el('div', { className: 'bio-link e-card e-biolink', 'data-test': 'bio-link' },
       el('span', { className: 'label e-biolink__label', 'data-test': 'bio-link-label' }, 'Your Bio Link'),
       el('span', { className: 'value e-biolink__address', 'data-test': 'bio-link-value' }, url),
       el('div', { className: 'e-biolink__actions' },
         copyButton(url, copied),
-        el('a', { className: 'e-btn e-btn--ghost', href: url, target: '_blank', rel: 'noopener' }, 'Open')),
+        el('a', { className: 'e-btn e-btn--ghost', href: url, target: '_blank', rel: 'noopener' }, 'Open'),
+        domain),
       copied),
     linksCard(profile, links),
     section('profile', 'Profile', profileForm(profile, { editor: true, button: 'Save profile', done: (status) => say(status, 'Profile saved.', 'ok') })),

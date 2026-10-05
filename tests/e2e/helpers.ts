@@ -84,7 +84,8 @@ async function verifyByMail(request: APIRequestContext, email: string) {
 }
 
 // Ticket 29's Operator steps for the hand-over (spec, Testing Decisions, Operator steps). A superuser creates an ownerless Profile
-// with a display name and one Link, the way the v1 Import writes one (app/bin/import-v1, write()), and later sets its owner.
+// with a display name and one Link, the way the v1 Import writes one (app/bin/import-v1, write()), and later sets its owner
+// and a slot (handOver, below).
 // Ticket 35's Username reuse creates its throwaway Profiles here too, with an Adult Link that has Tracking on.
 // ASSUMPTION: the throwaway Profile carries no v1Key, so it is born in v2 as far as the stack-import project's stale lines go
 // (rung 1: app/bin/import-v1 names every v1-keyed Profile its input lacks; rung 5). Overturned if the hand-over must be proved on
@@ -99,13 +100,6 @@ export async function createOwnerlessProfile(
   expect(profile.status).toBe(200);
   const created = await asSuperuser(token, '/api/collections/links/records', json('POST', { ...link, profile: (await profile.json()).id, order: 0 }));
   expect(created.status).toBe(200);
-}
-
-// It returns PocketBase's status, which the caller asserts: 05-domains's hand-over order expects a refusal first.
-export async function setOwner(username: string, email: string) {
-  const token = await superuserToken();
-  const [profile, user] = [await only(token, 'profiles', `username='${username}'`), await only(token, 'users', `email='${email}'`)];
-  return (await asSuperuser(token, `/api/collections/profiles/records/${profile.id}`, json('PATCH', { owner: user.id }))).status;
 }
 
 // A Profile's owner as the Operator sees it in the admin UI: a users record id, or '' for none.
@@ -258,7 +252,7 @@ export const INSTAGRAM_UA =
 export async function verifiedCreator(request: APIRequestContext, links: [string, string][]) {
   const { token, id, creator } = await account(request);
   const as = proxy(request, token);
-  const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig' });
+  const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig', slot: 1 });
   expect(claimed.status()).toBe(200);
   const profileId = (await claimed.json()).id as string;
   await verifyByMail(request, creator.email);
@@ -329,7 +323,7 @@ export async function passAgeGate(visitor: Page, title: string, onward: string) 
 export async function reach(request: APIRequestContext, stage: string) {
   const { creator, token, id } = await account(request);
   const as = proxy(request, token);
-  const claimed = await as.post('profiles/records', { username: stage === CLAIM ? 'edit' : creator.username, owner: id, mode: 'escape_ig' });
+  const claimed = await as.post('profiles/records', { username: stage === CLAIM ? 'edit' : creator.username, owner: id, mode: 'escape_ig', slot: 1 });
   expect(claimed.status(), stage).toBe(stage === CLAIM ? 400 : 200);
   if (stage === CLAIM || stage === VERIFY) return creator;
   await verifyByMail(request, creator.email);
@@ -537,3 +531,11 @@ export const intents = (destinations: Navigation[]) => destinations.map(({ url }
 
 // The Escape Overlay.
 export const escapeOverlay = (page: Page) => page.locator('#igOverlay');
+
+// Phase 6's hand-over (RUN.md, ## Cutover, step 12): the Operator sets an imported Profile's owner and a slot the account has
+// free, in one admin UI save. It returns PocketBase's status, which the caller asserts.
+export async function handOver(username: string, email: string, slot: number) {
+  const token = await superuserToken();
+  const [profile, user] = [await only(token, 'profiles', `username='${username}'`), await only(token, 'users', `email='${email}'`)];
+  return (await asSuperuser(token, `/api/collections/profiles/records/${profile.id}`, json('PATCH', { owner: user.id, slot }))).status;
+}

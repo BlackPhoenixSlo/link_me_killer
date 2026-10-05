@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { withoutBootstrap } from './domains-helpers';
 import {
   account, CLAIM, createOwnerlessProfile, EDITOR, expectServedWebp, expectVerifyScreen, featured, forgotPassword, fresh, furnishedCreator,
-  heading, holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN, logIn, logInToHandedOver, mailedLink, mailedLinks, markVerified, onLocalStack,
-  openProfile, openTracking, operator, ownerOf, passAgeGate, PHONE, phoneContext, pngFile, probe, proxy, reach, readBack, recordIds, refused,
-  recordNavigations, servedProfile, setOwner, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees, xSafari,
+  handOver, heading, holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN, logIn, logInToHandedOver, mailedLink, mailedLinks, markVerified,
+  onLocalStack, openProfile, openTracking, operator, ownerOf, passAgeGate, PHONE, phoneContext, pngFile, probe, proxy, reach, readBack,
+  recordIds, refused, recordNavigations, servedProfile, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees, xSafari,
 } from './helpers';
 
 // Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL.
@@ -130,33 +130,35 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
     const { token, id } = await account(request);
     const creator = proxy(request, token);
     for (const name of reserved) {
-      const res = await creator.post('profiles/records', { username: name, owner: id, mode: 'escape_ig' });
+      const res = await creator.post('profiles/records', { username: name, owner: id, mode: 'escape_ig', slot: 1 });
       expect(res.status(), name).toBe(400);
       expect((await res.json()).data, name).toEqual({});
     }
     // The same account can still claim: the refusals were the names, not the account.
-    const ok = await creator.post('profiles/records', { username: `signup_${randomBytes(4).toString('hex')}`, owner: id, mode: 'escape_ig' });
+    const ok = await creator.post('profiles/records', { username: `signup_${randomBytes(4).toString('hex')}`, owner: id, mode: 'escape_ig', slot: 1 });
     expect(ok.status()).toBe(200);
   });
 
-  test('the claim sets only Username, owner and default Mode, for the Creator alone, once', async ({ request }) => {
+  test('the claim sets only Username, owner, default Mode and slot, for the Creator alone, and an unverified account claims one', async ({ request }) => {
     const first = await account(request);
     const other = await account(request);
     const as = proxy(request, first.token);
     const username = () => `signup_${randomBytes(4).toString('hex')}`;
     const refusedClaims: [string, object][] = [
-      ['a display name', { username: username(), owner: first.id, displayName: 'x' }],
-      ['the verified badge', { username: username(), owner: first.id, verified: true }],
-      ['another owner', { username: username(), owner: other.id }],
-      ['no owner', { username: username() }],
+      ['a display name', { username: username(), owner: first.id, slot: 1, displayName: 'x' }],
+      ['the verified badge', { username: username(), owner: first.id, slot: 1, verified: true }],
+      ['another owner', { username: username(), owner: other.id, slot: 1 }],
+      ['no owner', { username: username(), slot: 1 }],
+      ['no slot', { username: username(), owner: first.id, mode: 'escape_ig' }],
     ];
     for (const [name, body] of refusedClaims) expect((await as.post('profiles/records', body)).status(), name).toBe(400);
-    expect((await proxy(request).post('profiles/records', { username: username(), owner: '' })).status(), 'anonymous claim').toBe(400);
-    const claimed = await as.post('profiles/records', { username: username(), owner: first.id, mode: 'escape_ig' });
+    expect((await proxy(request).post('profiles/records', { username: username(), owner: '', slot: 1 })).status(), 'anonymous claim').toBe(400);
+    const claimed = await as.post('profiles/records', { username: username(), owner: first.id, mode: 'escape_ig', slot: 1 });
     expect(claimed.status()).toBe(200);
     expect((await claimed.json()).mode).toBe('escape_ig');
-    const second = await as.post('profiles/records', { username: username(), owner: first.id });
-    expect(second.status(), 'a second Profile').toBe(400);
+    // A second Profile needs a verified email (Phase 6; tests/e2e/07-sites.spec.ts holds the cap's other cases).
+    const second = await as.post('profiles/records', { username: username(), owner: first.id, mode: 'escape_ig', slot: 2 });
+    expect(second.status(), 'a second Profile while unverified').toBe(400);
     // A sign-up that sets anything but email and password is refused.
     const c = fresh();
     for (const extra of [{ verified: true }, { name: 'x' }, { emailVisibility: true }]) {
@@ -170,7 +172,7 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
     expect((await request.get('/api/realtime')).status()).toBe(404);
     const { token, id, creator } = await account(request);
     const as = proxy(request, token);
-    const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig' });
+    const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig', slot: 1 });
     expect(claimed.status()).toBe(200);
     expect((await as.post('users/auth-refresh')).status()).toBe(200);
     expect((await as.post('users/request-verification', { email: creator.email })).status()).toBe(204);
@@ -211,7 +213,7 @@ test.describe('the verified-email gate', () => {
   test('over HTTP an unverified Creator\'s token cannot update its Profile, add a Link or upload an avatar; the owner reads both back unchanged', async ({ request }) => {
     const { token, id, creator } = await account(request);
     const as = proxy(request, token);
-    const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig' });
+    const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig', slot: 1 });
     expect(claimed.status()).toBe(200);
     const profileId = (await claimed.json()).id as string;
     const before = await readBack(request, { token, profileId });
@@ -869,14 +871,14 @@ test.describe('owner rules, over HTTP at the public origin', () => {
     }
   });
 
-  test('the owner cannot change their Username, owner or badge, delete their Profile, add a second, choose a Link Id, upload a file directly or store a Destination outside https://, http:// and /', async ({ request }) => {
+  test('the owner cannot change their Username, owner, badge or slot, delete their Profile, add one on a taken slot or past the cap, choose a Link Id, upload a file directly or store a Destination outside https://, http:// and /', async ({ request }) => {
     const [a, b] = [await furnishedCreator(request), await furnishedCreator(request)];
     const before = await readBack(request, a);
     const as = probe(request, a.token, b.secret);
     const link = { profile: a.profileId, title: 'Probe', order: 9, destination: 'https://example.com/probe' };
-    for (const change of [{ username: `${a.creator.username}x` }, { owner: b.id }, { verified: true }]) refused(await as.patch(`profiles/records/${a.profileId}`, change));
+    for (const change of [{ username: `${a.creator.username}x` }, { owner: b.id }, { verified: true }, { slot: 2 }]) refused(await as.patch(`profiles/records/${a.profileId}`, change));
     refused(await as.delete(`profiles/records/${a.profileId}`));
-    refused(await as.post('profiles/records', { username: `${a.creator.username}x`, owner: a.id, mode: 'escape_ig' }));
+    for (const slot of [1, 4]) refused(await as.post('profiles/records', { username: `${a.creator.username}x`, owner: a.id, mode: 'escape_ig', slot }));
     for (const chosen of [{ id: 'chosenrecord123' }, { linkId: 'chosenlinkid' }]) refused(await as.post('links/records', { ...link, ...chosen }));
     refused(await as.patch(`links/records/${a.linkIds[0]}`, { linkId: 'chosenlinkid' }));
     refused(await as.patchFiles(`profiles/records/${a.profileId}`, { avatar: pngFile('direct.png', [0, 200, 0]) }));
@@ -976,7 +978,7 @@ test.describe('the session and where log-in lands', () => {
     await page.reload();
     await expect(heading(page, CLAIM)).toBeVisible();
 
-    expect(await setOwner(creator.username, creator.email), 'the Operator sets the owner').toBe(200);
+    expect(await handOver(creator.username, creator.email, 1), 'the Operator sets the owner and slot 1').toBe(200);
     await markVerified(creator.email);
     const editor = await logInToHandedOver(browser, origin, creator, creator.username, 'Handed Over', ['Imported card']);
     await editor.getByLabel('Display name').fill('Edited after hand-over');

@@ -35,6 +35,7 @@ import { drawLogin, drawSignup, drawClaim, drawRetry, drawVerify, drawVerified, 
 import { drawLinkForm, drawHome } from './screens/links.js';
 import { drawProfileStep } from './screens/profile.js';
 import { openStats } from './stats.js';
+import { drawDomain } from './screens/domain.js';
 
 const TOKEN = 'ofl.token';
 const screen = document.getElementById('screen');
@@ -80,22 +81,26 @@ export async function api(path, { method = 'GET', body, keepalive = false } = {}
 export async function upload(collection, recordId, field, file) {
   const form = new FormData();
   form.append('file', file);
-  const token = localStorage.getItem(TOKEN) || '';
-  let res;
-  try {
-    res = await fetch(`/api/upload/${collection}/${recordId}/${field}`, {
-      method: 'POST',
-      headers: { Authorization: token },
-      body: form,
-    });
-  } catch {
-    return { error: NO_ANSWER };
-  }
-  if (token && (await sessionEnded(res, token))) return expired();
+  const res = await post(`/api/upload/${collection}/${recordId}/${field}`, { body: form });
+  if (!res) return { error: NO_ANSWER };
   if (res.ok) return { error: null, url: (await res.json()).url };
   if (res.status === 413) return { error: 'That image is over 20 MB.' };
   if (res.status === 415) return { error: 'That file is not an image we can read (jpg, png, heic, gif or webp).' };
   return { error: `The image was refused (${res.status}). Try again.` };
+}
+
+// A POST to one of the app's own routes (the upload, the Custom Domain check) with the Creator's token: the Response, or null
+// when none came. A session that has ended shows log-in instead and never settles, as in api().
+export async function post(path, init = {}) {
+  const token = localStorage.getItem(TOKEN) || '';
+  let res;
+  try {
+    res = await fetch(path, { ...init, method: 'POST', headers: { Authorization: token } });
+  } catch {
+    return null;
+  }
+  if (token && (await sessionEnded(res, token))) return expired();
+  return res;
 }
 
 export function signedIn({ token, record }) {
@@ -261,8 +266,10 @@ export function fieldReasons(res, fallback) {
 }
 
 // The claim's refusal, from PocketBase's answer. A Username refused by the create rule alone (400 with no field error) can
-// only be a reserved one: the Editor always sends itself as owner and nothing but Username, owner and default Mode, and a bare
-// 400 sent with a token PocketBase no longer accepts ends the session in api() before it reaches here.
+// only be a reserved one: the Editor always sends itself as owner and nothing but Username, owner, default Mode and a slot it
+// read as free (Phase 6), and a bare 400 sent with a token PocketBase no longer accepts ends the session in api() before it
+// reaches here. A slot claimed meanwhile (another tab) meets the (owner, slot) index, which PocketBase 0.40.4 names as a
+// `validation_not_unique` field error on owner and slot.
 // ASSUMPTION: "reserved" is inferred from that bare 400, because PocketBase names no reason when a rule refuses a create
 // (observed on 0.40.4: `{"data":{}, "message":"Failed to create record."}`) (rung 5: no separate lookup, as the spec says).
 // Overturned if another clause of the create rule can fail for the Editor's own request; the message then has to say less.
@@ -281,6 +288,8 @@ export function claimReason(res, username) {
       return 'Enter a Username.';
     default:
   }
+  const { owner, slot } = (res.data && res.data.data) || {};
+  if ([owner, slot].some((err) => err && err.code === 'validation_not_unique')) return 'That Profile slot was just taken. Reload.';
   if (res.status === 400 && !Object.keys((res.data && res.data.data) || {}).length) return `“${username}” is reserved. Pick another Username.`;
   return (res.data && res.data.message) || 'The claim failed. Try again.';
 }
@@ -316,19 +325,73 @@ export async function onboard() {
   if (done) show('/edit/home', () => drawHome(done.profile, done.links));
 }
 
-// The onboarded Creator's Profile and its Links, for the screens past Onboarding (the Editor, Stats); otherwise it draws Retry
-// or the first Onboarding step that applies and returns nothing. Its callers hold the fresh token onboard() needs.
+// Phase 6 (docs/spec/phase-06-sites-and-domains.md, § 2 Option A, Editor): an account owns up to MAX_PROFILES Profiles, one per
+// slot. The Editor and Stats work on the current one: the id kept on this device under CURRENT, else the lowest slot.
+// ASSUMPTION: the current Profile is remembered per device, not carried in the URL (the spec's, rung 5). Overturned if
+// Creators edit two Profiles in two tabs; a `?profile=` query then wins over storage.
+const MAX_PROFILES = 3;
+const CURRENT = 'oflink.profile';
+let owned = []; // the account's Profiles by slot, as the last onboarded() read them
+
+export const useProfile = (id) => localStorage.setItem(CURRENT, id);
+
+// The lowest slot none of the account's Profiles holds, or 0 when every slot is taken.
+export function freeSlot() {
+  const taken = new Set(owned.map((p) => p.slot));
+  for (let slot = 1; slot <= MAX_PROFILES; slot++) if (!taken.has(slot)) return slot;
+  return 0;
+}
+
+// The head of the Editor and Stats. With two or more Profiles, a select labelled "Profile" lists them by @Username; choosing
+// one makes it current and draws the same screen for it. "Add a Profile" opens `/edit/new` while a slot is free. A one-Profile
+// account sees that link alone.
+export function switcher(profile) {
+  const head = el('div', { className: 'e-switcher' });
+  if (owned.length > 1) {
+    const choice = select('profile', owned.map((p) => [p.id, `@${p.username}`]), profile.id);
+    choice.addEventListener('change', () => {
+      useProfile(choice.value);
+      route();
+    });
+    head.append(field('profile-switch', 'Profile', choice));
+  }
+  if (freeSlot()) {
+    const add = link('Add a Profile', '/edit/new');
+    add.className = 'e-link';
+    head.append(add);
+  }
+  return head;
+}
+
+// `/edit/new`: the claim step for the next free slot, once the current Profile is past Onboarding; with every slot taken, the
+// Editor.
+async function openNew() {
+  const done = await onboarded();
+  if (!done) return;
+  const slot = freeSlot();
+  if (!slot) return show('/edit/home', () => drawHome(done.profile, done.links));
+  return show('/edit/new', () => drawClaim({ slot }));
+}
+
+// The onboarded Creator's current Profile, its Links and its Custom Domain record (readDomain()), for the screens past
+// Onboarding (the Editor, Stats, the Domain screen); otherwise it draws
+// Retry or the first Onboarding step that applies to the current Profile and returns nothing. Its callers hold the fresh token
+// onboard() needs.
 export async function onboarded() {
-  const res = await api('profiles/records?perPage=1');
+  const res = await api(`profiles/records?perPage=${MAX_PROFILES}&sort=slot`);
   if (!res.ok) return drawRetry(res.data.message);
-  const profile = res.data.items[0];
+  owned = res.data.items;
+  const profile = owned.find((p) => p.id === localStorage.getItem(CURRENT)) || owned[0];
   if (!profile) return show('/edit/claim', () => drawClaim());
   if (!account.verified) return show('/edit/verify-email', drawVerify);
   if (!profile.displayName) return show('/edit/profile', () => drawProfileStep(profile));
   const links = await linksOf(profile);
   if (!links.ok) return drawRetry(links.data.message);
   if (!links.data.items.length) return show('/edit/first-link', () => drawLinkForm(profile, [], { onboarding: true }));
-  return { profile, links: links.data.items };
+  const domain = await readDomain(profile); // so the Bio Link shows a live Custom Domain after a reload too
+  if (domain && domain.status === 'live') liveDomains.set(profile.id, domain.domain);
+  else if (domain !== undefined) liveDomains.delete(profile.id); // with no answer, the last read stands
+  return { profile, links: links.data.items, domain };
 }
 
 // The Profile's Links in the order Visitors see them, with only what the Editor shows or needs: the title and the order.
@@ -347,6 +410,8 @@ export async function route() {
   if (path === '/edit/forgot') return drawForgot();
   if (!(await refresh())) return show('/edit/login', drawLogin);
   if (path === '/edit/stats') return openStats();
+  if (path === '/edit/domain') { const done = await onboarded(); if (done) show('/edit/domain', () => drawDomain(done.profile, done.domain)); return; }
+  if (path === '/edit/new') return openNew();
   return onboard();
 }
 
@@ -401,7 +466,18 @@ export const ICONS = [
   ['igicon.webp', 'Instagram'],
 ];
 
-export const address = (profile) => `${location.origin}/${profile.username}`;
+// The Bio Link: `https://{domain}/` once the Profile's Custom Domain is live (Phase 6 spec, § 3, On a Custom Domain), else this
+// site's `/{username}`. liveDomains holds each Profile's live domain as onboarded(), its one writer, last read it, so every
+// screen past Onboarding (the Domain screen too) shows what was read on the way in.
+const liveDomains = new Map(); // Profile id -> its live domain
+// The Profile's one Custom Domain record, { id, domain, status }, through the proxy: null for none, undefined with no answer.
+async function readDomain(profile) {
+  const filter = encodeURIComponent(`profile='${profile.id}'`);
+  const res = await api(`customDomains/records?perPage=1&fields=id,domain,status&filter=${filter}`);
+  if (!res.ok) return undefined;
+  return res.data.items[0] || null;
+}
+export const address = (profile) => (liveDomains.has(profile.id) ? `https://${liveDomains.get(profile.id)}/` : `${location.origin}/${profile.username}`);
 
 export function fileInput(name) {
   return el('input', { type: 'file', className: 'e-file', name, accept: IMAGE_TYPES });

@@ -429,6 +429,12 @@ h1[tabindex="-1"]:focus { outline: none; }
 .e-profile__picture > .e-field { flex: 1; min-width: 0; }
 @media (max-width: 359px) { .e-profile__picture > .e-avatar--lg { width: 64px; height: 64px; } }
 
+/* The Profile switcher under the h1 of the Editor and Stats (Phase 6): the "Profile" select, when there are two or more, and
+   "Add a Profile" beside it, at its foot. */
+.e-switcher { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--e-space-2) var(--e-space-4); }
+.e-switcher > .e-field { flex: 1 1 12rem; }
+.e-switcher:empty { display: none; }
+
 /* The jump chips under the h1 (Links, Profile, Modes): in-page links to the cards. */
 .e-chips { display: flex; flex-wrap: wrap; gap: var(--e-space-2); }
 .e-chips__item {

@@ -114,6 +114,17 @@ test.describe('the Editor\'s home and Link form', () => {
     await expect(heading(page, 'Edit Profile')).toBeVisible();
   });
 
+  // Phase 6 (docs/spec/phase-06-sites-and-domains.md): with one Profile there is nothing to switch, so the head holds only
+  // "Add a Profile"; the Bio Link card gains "Domain". tests/e2e/07-sites.spec.ts drives both.
+  test('with one Profile the home shows no Profile select, "Add a Profile" to /edit/new and "Domain" to /edit/domain', async ({ page, request }) => {
+    const { creator } = await verifiedCreator(request, [['Head card', '']]);
+    await logIn(page, creator);
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    await expect(page.getByLabel('Profile', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Add a Profile', exact: true })).toHaveAttribute('href', '/edit/new');
+    await expect(page.getByRole('link', { name: 'Domain', exact: true })).toHaveAttribute('href', '/edit/domain');
+  });
+
   test('a Sections jump chip scrolls to its card and keeps what was typed in Display name', async ({ page, request }) => {
     const { creator } = await verifiedCreator(request, [['Jump card', '']]);
     await logIn(page, creator);
@@ -158,7 +169,7 @@ test.describe('the landing page\'s demo', () => {
   test('"See a demo" on / opens the Profile at /demo, which shows the demo Creator\'s display name and Link', async ({ page, request }) => {
     const { creator, token, id } = await account(request, { ...fresh(), username: 'demo' });
     const as = proxy(request, token);
-    const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig' });
+    const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig', slot: 1 });
     expect(claimed.status()).toBe(200);
     const profileId = (await claimed.json()).id as string;
     expect((await proxy(request).post('users/request-verification', { email: creator.email })).status()).toBe(204);

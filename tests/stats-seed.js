@@ -26,7 +26,8 @@ const CREATORS = {
 };
 
 // Run by tests/stack.sh (`node --env-file=tests/e2e.env tests/stats-seed.js`): a superuser at PocketBase's loopback port writes
-// each Creator verified, then their Profile with Escape Mode as its default Mode as the Editor's claim writes it, then its Links.
+// each Creator verified, then their Profile in slot 1 with Escape Mode as its default Mode as the Editor's claim writes it, then
+// its Links.
 // Prints one line, which holds no Destination.
 async function seed() {
   const { PB_PORT, PB_SUPERUSER_EMAIL: identity, PB_SUPERUSER_PASSWORD: superuserPassword } = process.env;
@@ -44,7 +45,7 @@ async function seed() {
     const password = process.env[c.passwordVar];
     if (!password) throw new Error(`${c.passwordVar} is not set`);
     const user = await pb('/api/collections/users/records', { email: c.email, password, passwordConfirm: password, verified: true }, token);
-    const profile = await pb('/api/collections/profiles/records', { username: c.username, displayName: c.displayName, mode: 'escape_ig', owner: user.id }, token);
+    const profile = await pb('/api/collections/profiles/records', { username: c.username, displayName: c.displayName, mode: 'escape_ig', owner: user.id, slot: 1 }, token);
     await pb('/api/collections/links/records', { profile: profile.id, order: 0, ...c.direct, mode: 'direct' }, token);
     await pb('/api/collections/links/records', { profile: profile.id, order: 1, ...c.adult, isAdult: true, tracking: true }, token);
   }

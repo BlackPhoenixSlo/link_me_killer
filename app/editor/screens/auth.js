@@ -4,7 +4,7 @@
 // 4.16); class names: its section 5.
 
 import { account, api, signedIn, signOut, refresh, el, render, message, say, usernameInput, fieldReasons, claimReason, show,
-  go, link, onboard, route, submitting, field, steps, icon, pageTitle, NO_ANSWER } from '../app.js';
+  go, link, onboard, route, submitting, field, steps, icon, pageTitle, useProfile, NO_ANSWER } from '../app.js';
 
 // ---- The parts every screen here is built from -----------------------------------------------------------------------------
 
@@ -101,7 +101,7 @@ export function drawSignup() {
       signedIn(auth.data);
       // The verification email is asked for as soon as the account exists, and not waited on.
       api('users/request-verification', { method: 'POST', body: { email: body.email }, keepalive: true }).catch(() => {});
-      const claimed = await claim(wanted);
+      const claimed = await claim(wanted, 1);
       if (!claimed.ok) return show('/edit/claim', () => drawClaim({ username: wanted, error: claimReason(claimed, wanted) }));
       return show('/edit/verify-email', drawVerify);
     },
@@ -115,13 +115,15 @@ export function drawSignup() {
     quiet('Already have an account? ', textLink('Log in', '/edit/login')));
 }
 
-// The claim: the Profile with only the Username, the Creator as owner and Escape Mode as its default Mode.
-function claim(username) {
-  return api('profiles/records', { method: 'POST', body: { username, owner: account.id, mode: 'escape_ig' } });
+// The claim: the Profile with only the Username, the Creator as owner, Escape Mode as its default Mode and its slot (Phase 6:
+// 1 for an account's first Profile, the next free one for "Add a Profile").
+function claim(username, slot) {
+  return api('profiles/records', { method: 'POST', body: { username, owner: account.id, mode: 'escape_ig', slot } });
 }
 
-// `error`, the sign-up's refused claim, shows at once and describes the Username field.
-export function drawClaim({ username = '', error = '' } = {}) {
+// `error`, the sign-up's refused claim, shows at once and describes the Username field. `slot` above 1 is "Add a Profile"
+// (`/edit/new`): the claimed Profile becomes the current one, and Cancel goes back to the Editor.
+export function drawClaim({ username = '', error = '', slot = 1 } = {}) {
   const control = usernameInput(username);
   const status = message();
   const form = el('form', {
@@ -130,9 +132,10 @@ export function drawClaim({ username = '', error = '' } = {}) {
       event.preventDefault();
       submitting(form, true);
       const wanted = control.value;
-      const res = await claim(wanted);
+      const res = await claim(wanted, slot);
       submitting(form, false);
       if (!res.ok) return say(status, claimReason(res, wanted));
+      useProfile(res.data.id);
       return onboard();
     },
   },
@@ -144,8 +147,10 @@ export function drawClaim({ username = '', error = '' } = {}) {
     control.setAttribute('aria-describedby', status.id);
     say(status, error);
   }
+  const another = slot > 1;
   draw('Claim your Username', steps(1), pageTitle('Claim your Username'),
-    lead('It becomes your page\'s address. Lowercase letters, digits and _, 3 to 30 characters.'), form);
+    lead(`It becomes your ${another ? 'new Profile' : 'page'}'s address. Lowercase letters, digits and _, 3 to 30 characters.`), form,
+    ...(another ? [quiet(textLink('Cancel', '/edit'))] : []));
 }
 
 // Retry, for a call that failed: `reason` is PocketBase's message, or none when it sent none.
