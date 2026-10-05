@@ -4,7 +4,7 @@ Spec: docs/spec/phase-03-auth-and-editor.md
 Covers: user stories 26, 28, 30, 34, 35, 36, 37, 38, 39, 40, 48
 Seams: the running v2 stack at Playwright's baseURL: the Creator in the browser at 390×844; the Visitor in a fresh context, reading the page and Reveal's real answer with the navigation intercepted
 Blocked by: 26: A verified Creator goes through Onboarding to a live Profile whose Links act like imported ones
-Status: claimed 20261005T084628Z 2026-10-05T08:46:52Z
+Status: done
 
 **What to build:** The Editor's "Featured Links", laid out like the link.me Template's: one row per Link in the order Visitors see them, an up and a down button where the Template's drag handle sits, and a delete button.
 - **Edit.** Opening a Link fills the Link form with its current values, the Destination included, which the owner may read. Any field can change. A background can be replaced through Phase 2's upload endpoint (1080 px webp) or removed.
@@ -16,12 +16,16 @@ Status: claimed 20261005T084628Z 2026-10-05T08:46:52Z
 
 Every save shows on the public Profile at the next page load.
 
-- [ ] Each of these shows on the next load of the public Profile:
+- [x] Each of these shows on the next load of the public Profile:
   - a Link title edited;
   - a Link's background replaced (a new `image/webp`), then removed;
   - a Link added, which appears last, then moved up, so the page's order follows;
   - a Link deleted: cancelling the confirmation keeps it, and confirming removes it.
-- [ ] Reopening a Link shows its current Destination in the form. After the Creator changes it, Reveal answers the new Destination.
-- [ ] Invalid Geo Rule JSON shows an error, and the Link read back is unchanged. A valid object saves and fills the textarea after a reload. Emptying the textarea clears the rule.
-- [ ] A Link saved with a `javascript:` Destination is refused by PocketBase. The Editor shows the reason and keeps every field as typed.
-- [ ] `./check.sh` passes.
+- [x] Reopening a Link shows its current Destination in the form. After the Creator changes it, Reveal answers the new Destination.
+- [x] Invalid Geo Rule JSON shows an error, and the Link read back is unchanged. A valid object saves and fills the textarea after a reload. Emptying the textarea clears the rule.
+- [x] A Link saved with a `javascript:` Destination is refused by PocketBase. The Editor shows the reason and keeps every field as typed.
+- [x] `./check.sh` passes.
+
+## Landed
+
+Run 20261005T084628Z. Reviewer: REQUEST CHANGES round 1 (6 findings: spec file over 1000 lines, two casts, per-field null checks, untested current-icon branch, shared mutated array, comment), fix round 1, APPROVE round 2. Coordinator cold `./check.sh --reporter=line`: exit 0, `317 passed (3.7m)`, `1 skipped`. Plumbing moved to tests/e2e/helpers.ts (ASSUMPTION: a non-spec helper module beside the one spec, rung 5).

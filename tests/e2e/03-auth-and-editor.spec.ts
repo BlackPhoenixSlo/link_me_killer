@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { deflateSync } from 'node:zlib';
+import { isWebp, markVerified, onLocalStack, pngFile } from './helpers';
 
 // Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL,
 // the public origin. Creator journeys run in the browser at 390×844; the Visitor side and every second log-in run in a fresh
@@ -319,73 +319,6 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
 
 // ---- Ticket 26: the verified-email gate, and Onboarding to a live Profile -------------------------------------------------
 
-// Is the stack under test the local test stack that tests/stack.sh starts? The same predicate as the 02 specs: the Operator
-// step needs PocketBase's loopback port, which only that stack publishes.
-const onLocalStack = () => !process.env.PLAYWRIGHT_BASE_URL || new URL(process.env.PLAYWRIGHT_BASE_URL).origin === 'http://localhost:4173';
-const ENV: Record<string, string> = Object.fromEntries(
-  readFileSync(join(ROOT, 'tests', 'e2e.env'), 'utf8')
-    .split('\n')
-    .filter((l) => /^[A-Z_]+=/.test(l))
-    .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]),
-);
-const PB = `http://127.0.0.1:${ENV.PB_PORT}`;
-async function superuserToken() {
-  const res = await fetch(`${PB}/api/collections/_superusers/auth-with-password`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ identity: ENV.PB_SUPERUSER_EMAIL, password: ENV.PB_SUPERUSER_PASSWORD }),
-  });
-  expect(res.status).toBe(200);
-  return (await res.json()).token as string;
-}
-const asSuperuser = async (token: string, path: string, init: RequestInit = {}) =>
-  fetch(PB + path, { ...init, headers: { ...(init.headers as Record<string, string>), Authorization: token } });
-
-// The Operator step: a superuser marks the account verified, as the Operator would in the admin UI.
-async function markVerified(email: string) {
-  const token = await superuserToken();
-  const found = await (await asSuperuser(token, `/api/collections/users/records?filter=${encodeURIComponent(`email='${email}'`)}`)).json();
-  expect(found.items.length).toBe(1);
-  const res = await asSuperuser(token, `/api/collections/users/records/${found.items[0].id}`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ verified: true }),
-  });
-  expect(res.status).toBe(200);
-}
-
-// An in-memory PNG of one colour (spec, Testing Decisions, Images): no fixture file, and proof a non-webp input comes out webp.
-const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
-function png(width: number, height: number, [r, g, b]: [number, number, number]) {
-  const crc = (buf: Buffer) => {
-    let c = 0xffffffff;
-    for (const x of buf) c = CRC_TABLE[(c ^ x) & 255] ^ (c >>> 8);
-    return (c ^ 0xffffffff) >>> 0;
-  };
-  const chunk = (type: string, data: Buffer) => {
-    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
-    const out = Buffer.alloc(body.length + 8);
-    out.writeUInt32BE(data.length, 0);
-    body.copy(out, 4);
-    out.writeUInt32BE(crc(body), body.length + 4);
-    return out;
-  };
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8; // 8 bits per channel
-  ihdr[9] = 2; // RGB
-  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: width }, () => [r, g, b]).flat())]);
-  const pixels = Buffer.concat(Array.from({ length: height }, () => row));
-  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(pixels)), chunk('IEND', Buffer.alloc(0))]);
-}
-const pngFile = (name: string, colour: [number, number, number]) => ({ name, mimeType: 'image/png', buffer: png(600, 400, colour) });
-const isWebp = (b: Buffer) => b.length >= 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP';
-
 test.describe('the verified-email gate', () => {
   test('over HTTP an unverified Creator\'s token cannot update its Profile, add a Link or upload an avatar; the owner reads both back unchanged', async ({ request }) => {
     const { token, id, creator } = await account(request);
@@ -595,14 +528,19 @@ async function verifiedCreator(request: APIRequestContext, links: [string, strin
   await markVerified(creator.email);
   const named = await as.patch(`profiles/records/${profileId}`, { displayName: 'Before Name', bio: 'Before bio.' });
   expect(named.status()).toBe(200);
+  const linkIds: string[] = [];
   for (const [order, [title, mode]] of links.entries()) {
     const res = await as.post('links/records', { profile: profileId, title, order, mode, destination: `https://example.com/${creator.username}/${order}` });
     expect(res.status(), title).toBe(200);
+    linkIds.push((await res.json()).id);
   }
-  return { creator, token, profileId };
+  return { creator, token, profileId, linkIds };
 }
 
-type Served = { profile: { displayName: string; bio: string; avatarUrl: string; mode: string }; links: { title: string; mode: string }[] };
+type Served = {
+  profile: { displayName: string; bio: string; avatarUrl: string; mode: string };
+  links: { title: string; mode: string; icon: string; backgroundImage: string; isAdult: boolean; tracking: boolean; default_tracknumber?: string }[];
+};
 const servedProfile = async (request: APIRequestContext, username: string): Promise<Served> => {
   const res = await request.get(`/api/profiles/${username}.json`);
   expect(res.status()).toBe(200);
@@ -747,5 +685,305 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     served = await servedProfile(request, creator.username);
     expect(served.profile.mode).toBe('direct');
     expect(served.links.map((l) => [l.title, l.mode])).toEqual([['Default card', 'direct'], ['Escape card', 'escape_ig']]);
+  });
+});
+
+// ---- Ticket 28: the Editor's Featured Links and the Link form ---------------------------------------------------------------
+
+// "Featured Links": one row per Link, its title the row's only text; Edit is the title, Up, Down and Delete are named buttons.
+const featured = (page: Page) => page.getByRole('list', { name: 'Links' }).getByRole('listitem');
+
+// The next load of the public Profile, in a fresh context: its Link titles in the order Visitors see them.
+async function visitorSees(browser: Browser, origin: string, username: string, titles: string[]) {
+  const context = await phoneContext(browser, { origin });
+  const visitor = await context.newPage();
+  const served = visitor.waitForResponse((res) => new URL(res.url()).pathname === `/api/profiles/${username}.json`);
+  await visitor.goto(`/${username}`);
+  await served;
+  await expect(visitor.locator('.link-card .link-title')).toHaveText(titles);
+  await context.close();
+}
+
+test.describe('the Editor\'s Links', () => {
+  test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
+
+  test('at 390×844 a title edit, a background replaced then removed, a Link added then moved up, and a confirmed delete each show on the next load', async ({ page, browser, request, baseURL }) => {
+    test.setTimeout(180_000);
+    const origin = new URL(baseURL!).origin;
+    const { creator, token, linkIds } = await verifiedCreator(request, [['First card', ''], ['Second card', '']]);
+    // A background already in place, uploaded with the Creator's own token, so the Editor's is a replacement.
+    const first = await request.post(`/api/upload/links/${linkIds[0]}/backgroundImage`, { headers: { Authorization: token }, multipart: { file: pngFile('first.png', [200, 40, 40]) } });
+    expect(first.status()).toBe(200);
+    const backgroundOf = async (title: string) => {
+      const link = (await servedProfile(request, creator.username)).links.find((l) => l.title === title);
+      expect(link, title).toBeDefined();
+      return link!;
+    };
+    const before = (await backgroundOf('First card')).backgroundImage;
+    expect(before.startsWith('/api/files/')).toBe(true);
+
+    await logIn(page, creator);
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    await expect(featured(page)).toHaveText(['First card', 'Second card']);
+
+    // Edit: the row opens the Link form with the Link's current values; the title changes.
+    await page.getByRole('button', { name: 'First card', exact: true }).click();
+    await expect(heading(page, 'Edit link')).toBeVisible();
+    await expect(page.getByLabel('Title')).toHaveValue('First card');
+    await page.getByLabel('Title').fill('Edited card');
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    await expect(featured(page)).toHaveText(['Edited card', 'Second card']);
+    await visitorSees(browser, origin, creator.username, ['Edited card', 'Second card']);
+
+    // The background is replaced through the upload endpoint: the public Profile serves a new WebP.
+    await page.getByRole('button', { name: 'Edited card', exact: true }).click();
+    await expect(heading(page, 'Edit link')).toBeVisible();
+    await page.getByLabel('Background image').setInputFiles(pngFile('second.png', [40, 200, 40]));
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    const replaced = (await backgroundOf('Edited card')).backgroundImage;
+    expect(replaced.startsWith('/api/files/') && replaced !== before, replaced).toBe(true);
+    const image = await request.get(replaced);
+    expect(image.status()).toBe(200);
+    expect(image.headers()['content-type']).toBe('image/webp');
+    expect(isWebp(await image.body())).toBe(true);
+
+    // Then removed: the public Profile serves no background for it.
+    await page.getByRole('button', { name: 'Edited card', exact: true }).click();
+    await page.getByLabel('Remove background').check();
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    expect((await backgroundOf('Edited card')).backgroundImage).toBe('');
+    await visitorSees(browser, origin, creator.username, ['Edited card', 'Second card']);
+
+    // A Link added appears last; moved up, it swaps places with its neighbour, and the page's order follows.
+    await page.getByRole('button', { name: 'Add link' }).click();
+    await page.getByLabel('Title').fill('Third card');
+    await page.getByLabel('Destination').fill(`https://example.com/${creator.username}/third`);
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    await expect(featured(page)).toHaveText(['Edited card', 'Second card', 'Third card']);
+    await visitorSees(browser, origin, creator.username, ['Edited card', 'Second card', 'Third card']);
+    await expect(page.getByRole('button', { name: 'Move Edited card up' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Move Third card down' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Move Third card up' }).click();
+    await expect(featured(page)).toHaveText(['Edited card', 'Third card', 'Second card']);
+    await visitorSees(browser, origin, creator.username, ['Edited card', 'Third card', 'Second card']);
+    // The order is PocketBase's, not only the Editor's: a reload shows the same.
+    await page.reload();
+    await expect(featured(page)).toHaveText(['Edited card', 'Third card', 'Second card']);
+
+    // Delete asks first: cancelling keeps the Link, confirming removes it.
+    const asked: string[] = [];
+    page.once('dialog', (dialog) => {
+      asked.push(dialog.message());
+      return dialog.dismiss();
+    });
+    await page.getByRole('button', { name: 'Delete Second card' }).click();
+    await expect.poll(() => asked.length).toBe(1);
+    expect(asked[0]).toContain('Second card');
+    await expect(featured(page)).toHaveText(['Edited card', 'Third card', 'Second card']);
+    await visitorSees(browser, origin, creator.username, ['Edited card', 'Third card', 'Second card']);
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: 'Delete Second card' }).click();
+    await expect(featured(page)).toHaveText(['Edited card', 'Third card']);
+    await visitorSees(browser, origin, creator.username, ['Edited card', 'Third card']);
+  });
+
+  test('a move whose second write fails shows the reason and reloads the list from PocketBase, matching the page\'s order', async ({ page, browser, request, baseURL }) => {
+    test.setTimeout(120_000);
+    const origin = new URL(baseURL!).origin;
+    const { creator, token, linkIds } = await verifiedCreator(request, [['A card', ''], ['B card', '']]);
+    await logIn(page, creator);
+    await expect(featured(page)).toHaveText(['A card', 'B card']);
+    // Elsewhere (another tab, say), B card is deleted, so the move's second write, to B card, fails.
+    expect((await request.delete(`/api/collections/links/records/${linkIds[1]}`, { headers: { Authorization: token } })).status()).toBe(204);
+    await page.getByRole('button', { name: 'Move A card down' }).click();
+    await expect(page.getByText(/^The move failed: /)).toBeVisible();
+    await expect(featured(page)).toHaveText(['A card']);
+    await visitorSees(browser, origin, creator.username, ['A card']);
+  });
+
+  test('reopening a Link shows its current Destination, and after the Creator changes it Reveal answers the new one', async ({ page, browser, request, baseURL }) => {
+    test.setTimeout(120_000);
+    const origin = new URL(baseURL!).origin;
+    const { creator, token, linkIds } = await verifiedCreator(request, [['Adult card', '']]);
+    // An Adult Link, so the Visitor's press goes through the Age Gate to Reveal. Test-only example.com Destinations, compared as
+    // booleans.
+    expect((await proxy(request, token).patch(`links/records/${linkIds[0]}`, { isAdult: true })).status()).toBe(200);
+    const current = `https://example.com/${creator.username}/0`;
+    const changed = `https://example.com/${creator.username}/changed`;
+
+    await logIn(page, creator);
+    await page.getByRole('button', { name: 'Adult card', exact: true }).click();
+    await expect(heading(page, 'Edit link')).toBeVisible();
+    const destination = page.getByLabel('Destination');
+    expect(await destination.inputValue() === current, 'the form shows the current Destination').toBe(true);
+    await expect(page.getByLabel('18+ Age Gate')).toBeChecked();
+    await destination.fill(changed);
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    await page.getByRole('button', { name: 'Adult card', exact: true }).click();
+    expect(await page.getByLabel('Destination').inputValue() === changed, 'reopened, the form shows the new Destination').toBe(true);
+
+    // The Visitor, in a fresh context: Age Gate, then Reveal's real answer is the new Destination; the navigation is intercepted.
+    const context = await phoneContext(browser, { origin });
+    const visitor = await context.newPage();
+    await visitor.goto(`/${creator.username}`);
+    await visitor.locator('.link-card', { hasText: 'Adult card' }).click();
+    await expect(visitor.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
+    let realUrl: unknown;
+    await visitor.route('**/.netlify/functions/reveal?*', async (route) => {
+      const response = await route.fetch();
+      realUrl = (await response.json()).realUrl;
+      await route.fulfill({ response });
+    });
+    const onward = visitor.waitForEvent('requestfailed', (req) => req.url() === changed);
+    await visitor.getByRole('button', { name: 'Continue (18+)' }).click();
+    expect((await onward).failure()?.errorText).toBe('net::ERR_BLOCKED_BY_CLIENT');
+    expect(realUrl === changed, 'Reveal answers the new Destination').toBe(true);
+    await context.close();
+  });
+
+  test('every field of an opened Link changes: an icon from no stock file stays, then stock icons, Adult flag, Mode, tracking and default Tracking Code reach the page', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const { creator, token, linkIds } = await verifiedCreator(request, [['Plain card', '']]);
+    // An icon made from no stock file, uploaded with the Creator's own token.
+    const uploaded = await request.post(`/api/upload/links/${linkIds[0]}/icon`, { headers: { Authorization: token }, multipart: { file: pngFile('own.png', [40, 40, 200]) } });
+    expect(uploaded.status()).toBe(200);
+    const servedLink = async () => (await servedProfile(request, creator.username)).links[0];
+    const ownIcon = (await servedLink()).icon;
+    expect(ownIcon.startsWith('/api/files/')).toBe(true);
+    const isStock = async (url: string, file: string) => (await (await request.get(url)).body()).equals(readFileSync(join(ROOT, 'app', 'public', 'images', file)));
+
+    // Opened, it shows as "Current icon"; a save that changes every other field leaves it as it is.
+    await logIn(page, creator);
+    await page.getByRole('button', { name: 'Plain card', exact: true }).click();
+    await expect(page.getByLabel('Icon').locator('option:checked')).toHaveText('Current icon');
+    await page.getByLabel('18+ Age Gate').check();
+    await page.getByLabel('Mode').selectOption({ label: 'Direct' });
+    await page.getByLabel('OnlyFans tracking').check();
+    await page.getByLabel('Default Tracking Code').fill('42');
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    let served = await servedLink();
+    expect([served.icon, served.isAdult, served.mode, served.tracking, served.default_tracknumber]).toEqual([ownIcon, true, 'direct', true, '42']);
+
+    // Reopened, the form shows what was saved; the icon goes to Instagram, then, reopened as Instagram, to none.
+    await page.getByRole('button', { name: 'Plain card', exact: true }).click();
+    await expect(page.getByLabel('Icon').locator('option:checked')).toHaveText('Current icon');
+    await expect(page.getByLabel('18+ Age Gate')).toBeChecked();
+    await expect(page.getByLabel('Mode').locator('option:checked')).toHaveText('Direct');
+    await expect(page.getByLabel('OnlyFans tracking')).toBeChecked();
+    await expect(page.getByLabel('Default Tracking Code')).toHaveValue('42');
+    await page.getByLabel('Icon').selectOption({ label: 'Instagram' });
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    expect(await isStock((await servedLink()).icon, 'igicon.webp'), 'the Instagram stock icon').toBe(true);
+    await page.getByRole('button', { name: 'Plain card', exact: true }).click();
+    await expect(page.getByLabel('Icon').locator('option:checked')).toHaveText('Instagram');
+    await page.getByLabel('Icon').selectOption({ label: 'None' });
+    await page.getByLabel('18+ Age Gate').uncheck();
+    await page.getByLabel('Mode').selectOption({ label: 'Profile default (currently Escape)' });
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    served = await servedLink();
+    expect([served.icon, served.isAdult, served.mode]).toEqual(['', false, 'escape_ig']);
+  });
+
+  test('invalid Geo Rule JSON is refused and leaves the Link unchanged; a valid object saves and fills the textarea after a reload; emptying clears it', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const { creator, token, linkIds } = await verifiedCreator(request, [['Geo card', '']]);
+    const own = proxy(request, token);
+    const readBack = async () => {
+      const res = await own.get(`links/records/${linkIds[0]}`);
+      expect(res.status()).toBe(200);
+      return res.json();
+    };
+    const before = await readBack();
+    expect(before.geo).toBeNull();
+
+    await logIn(page, creator);
+    await page.getByRole('button', { name: 'Geo card', exact: true }).click();
+    const geo = page.getByLabel('Geo Rule');
+    await expect(geo).toHaveValue('');
+    // Not JSON, and JSON that is not an object: each blocks the save with a message, and the Link is unchanged.
+    for (const typed of ['{"US": "5",', '["US", "5"]', '"5"']) {
+      await page.getByLabel('Title').fill('Not saved');
+      await geo.fill(typed);
+      await page.getByRole('button', { name: 'Save link' }).click();
+      await expect(page.getByRole('status'), typed).toHaveText('Geo Rule: write a JSON object, such as {"US": "5"}, or leave it empty for no Geo Rule.');
+      await expect(heading(page, 'Edit link')).toBeVisible();
+      await expect(geo).toHaveValue(typed);
+      expect(await readBack(), typed).toEqual(before);
+    }
+
+    // A valid object saves; after a reload the textarea holds it, pretty-printed.
+    await page.getByLabel('Title').fill('Geo card');
+    await geo.fill('{"US": {"CA": "3", "default": "4"}, "default": "9"}');
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    expect((await readBack()).geo).toEqual({ US: { CA: '3', default: '4' }, default: '9' });
+    await page.reload();
+    await page.getByRole('button', { name: 'Geo card', exact: true }).click();
+    await expect(geo).toHaveValue('{\n  "US": {\n    "CA": "3",\n    "default": "4"\n  },\n  "default": "9"\n}');
+
+    // Emptying the textarea clears the rule.
+    await geo.fill('');
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    expect((await readBack()).geo).toBeNull();
+    await page.getByRole('button', { name: 'Geo card', exact: true }).click();
+    await expect(geo).toHaveValue('');
+  });
+
+  test('a Link saved with a javascript: Destination is refused by PocketBase; the Editor shows the reason and keeps every field as typed', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const { creator, token, profileId, linkIds } = await verifiedCreator(request, [['Safe card', '']]);
+    const own = proxy(request, token);
+    const readBack = async () => (await (await own.get(`links/records?sort=order&filter=${encodeURIComponent(`profile='${profileId}'`)}`)).json()).items;
+    const before = await readBack();
+    expect(before.length).toBe(1);
+    const typed = { title: 'Typed title', destination: 'javascript:alert(document.cookie)', code: '12', geo: '{"US": "5"}' };
+    const fillAll = async () => {
+      await page.getByLabel('Title').fill(typed.title);
+      await page.getByLabel('Destination').fill(typed.destination);
+      await page.getByLabel('Icon').selectOption({ label: 'Twitch' });
+      await page.getByLabel('18+ Age Gate').check();
+      await page.getByLabel('Mode').selectOption({ label: 'Deeplink' });
+      await page.getByLabel('OnlyFans tracking').check();
+      await page.getByLabel('Default Tracking Code').fill(typed.code);
+      await page.getByLabel('Geo Rule').fill(typed.geo);
+    };
+    const expectKept = async (what: string) => {
+      await expect(heading(page, what)).toBeVisible();
+      await expect(page.getByRole('status')).toContainText('Destination');
+      await expect(page.getByRole('status')).toContainText('https://, http:// or /');
+      await expect(page.getByLabel('Title')).toHaveValue(typed.title);
+      await expect(page.getByLabel('Destination')).toHaveValue(typed.destination);
+      await expect(page.getByLabel('Icon').locator('option:checked')).toHaveText('Twitch');
+      await expect(page.getByLabel('18+ Age Gate')).toBeChecked();
+      await expect(page.getByLabel('Mode').locator('option:checked')).toHaveText('Deeplink');
+      await expect(page.getByLabel('OnlyFans tracking')).toBeChecked();
+      await expect(page.getByLabel('Default Tracking Code')).toHaveValue(typed.code);
+      await expect(page.getByLabel('Geo Rule')).toHaveValue(typed.geo);
+      await expect(page.getByRole('button', { name: 'Save link' })).toBeEnabled();
+      expect(await readBack(), what).toEqual(before);
+    };
+
+    // An opened Link, changed.
+    await logIn(page, creator);
+    await page.getByRole('button', { name: 'Safe card', exact: true }).click();
+    await fillAll();
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expectKept('Edit link');
+
+    // A new Link.
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: 'Add link' }).click();
+    await fillAll();
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expectKept('Add link');
   });
 });
