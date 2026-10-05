@@ -20,18 +20,62 @@
 }
 
 (proxy_protocol_on) {
-	servers {
-		listener_wrappers {
-			proxy_protocol {
-				allow {args[:]}
-			}
-			tls
+	listener_wrappers {
+		proxy_protocol {
+			allow {args[:]}
 		}
+		tls
 	}
 }
 
+# The Cloudflare lines (ticket 42; Phase 5 spec, The Cloudflare lines): compose.yaml turns the Operator's CLOUDFLARE_RANGES,
+# Cloudflare's published ranges, into `off` (empty, as in tests) or `on <CIDRs>`, which picks one snippet of each pair below.
+# On, the production catch-all trusts those ranges and reads X-Forwarded-For strictly from the right, so a Visitor's forged
+# entry left of Cloudflare's is never the client (## Review D2a); the app gets that one client address as X-Forwarded-For,
+# the key of Reveal's limit (app/src/click-guard.js). v1's X-Country, X-Region and X-NF-Subdivision-Code are removed from
+# every request, because Phase 2 reads them before Cloudflare's and they pass through Cloudflare untouched. CF-IPCountry and
+# CF-Region-Code are removed from any direct peer outside the ranges and pass unchanged from inside them. Off, none of this
+# is there, so the local listener passes every header Phase 2's parity spec and Phase 4's Stats spec inject.
+# The direct peer `remote_ip` and the trusted proxies match is the connection's source; with the PROXY protocol flag on (on
+# the VPS, behind Traefik) that is the address Traefik's PROXY header names, not Traefik's own. tests/cloudflare-lines.sh
+# checks both settings offline at run time, and tests/caddy-ask.sh the production config they adapt to.
+# ASSUMPTION: env-selected snippets keyed on CLOUDFLARE_RANGES, as the PROXY protocol's (rung 3: ticket 45's pattern; Caddy
+# has no conditional, and an empty range list would still add the lines). Overturned if Caddy gains a Caddyfile conditional.
+# Both flags' server options share one `servers` block, because Caddy refuses a second one for the same listeners (rung 1:
+# `caddy adapt` on the local caddy:2-alpine v2.11.4 says "cannot have 'servers' global options with duplicate listener
+# addresses"); an empty `servers` block, or an empty `reverse_proxy` block, adapts to nothing.
+(cloudflare_proxies_off) {
+}
+
+(cloudflare_proxies_on) {
+	trusted_proxies static {args[:]}
+	trusted_proxies_strict
+}
+
+(cloudflare_headers_off) {
+}
+
+(cloudflare_headers_on) {
+	request_header -X-Country
+	request_header -X-Region
+	request_header -X-NF-Subdivision-Code
+	@outside_cloudflare not remote_ip {args[:]}
+	request_header @outside_cloudflare -CF-IPCountry
+	request_header @outside_cloudflare -CF-Region-Code
+}
+
+(cloudflare_forwarded_off) {
+}
+
+(cloudflare_forwarded_on) {
+	header_up X-Forwarded-For {client_ip}
+}
+
 {
-	import proxy_protocol_{$PROXY_PROTOCOL_FROM:off}
+	servers {
+		import proxy_protocol_{$PROXY_PROTOCOL_FROM:off}
+		import cloudflare_proxies_{$CLOUDFLARE_RANGES:off}
+	}
 	on_demand_tls {
 		ask http://app:3000/internal/tls-ask
 	}
@@ -41,5 +85,8 @@
 	tls {
 		on_demand
 	}
-	reverse_proxy app:3000
+	import cloudflare_headers_{$CLOUDFLARE_RANGES:off}
+	reverse_proxy app:3000 {
+		import cloudflare_forwarded_{$CLOUDFLARE_RANGES:off}
+	}
 }

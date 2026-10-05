@@ -17,6 +17,10 @@ services:
       # ticket asks for one variable in this service; rung 3: every variable here passes under its own name). Overturned if a
       # second, derived variable reads better; it would be the selector alone.
       PROXY_PROTOCOL_FROM: ${PROXY_PROTOCOL_FROM:+on }${PROXY_PROTOCOL_FROM:-off}
+      # Cloudflare's published ranges (see .env.example), shaped the same way: `off` when empty (tests), else `on <CIDRs>`,
+      # which selects the Caddyfile's Cloudflare lines.
+      # ASSUMPTION: shaped as PROXY_PROTOCOL_FROM above, under the spec's name (rung 3: ticket 45's pattern). Overturned with it.
+      CLOUDFLARE_RANGES: ${CLOUDFLARE_RANGES:+on }${CLOUDFLARE_RANGES:-off}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

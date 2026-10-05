@@ -4,7 +4,7 @@ Spec: docs/spec/phase-05-cutover-and-domains.md
 Covers: user stories 2, 3, 18, 19
 Seams: offline, the local Caddy image in front of a header-echo upstream (as the spec's review observed, D2a), and `./check.sh`; live, the Operator's terminal, the Namecheap registrar and the Cloudflare dashboard (plan §11). The lines of `RUN.md`'s `## Cutover` that rest on the country source
 Blocked by: 41: Caddy asks the app before every certificate and the Cutover runbook is written
-Status: claimed 20261005T084628Z 2026-10-05T16:36:39Z
+Status: done
 
 **What to build:** Geo Rules and Stats get the Visitor's country and US state only from the production country source, never from a header the Visitor sends, and Reveal's rate limit keys on the Visitor's own address. ofl.ink's DNS is made ready, at least 48 hours ahead, for a switch and a rollback that are each one record change taking effect within minutes, while v1 keeps serving. This ticket holds every Cloudflare-specific part of the Phase. Host Resolution, the TLS Ask, the page, the Domains schema, Custom and Spare Domain serving, backups, the freeze, the final import and the hand-over do not wait for it.
 
@@ -36,12 +36,16 @@ ASSUMPTION (the spec's, evidence blocked): Cloudflare overwrites a Visitor-sent 
   dig +short NS ofl.ink; dig +noall +answer ofl.ink A ofl.ink AAAA www.ofl.ink CNAME www.ofl.ink A www.ofl.ink AAAA; dig +noall +answer DS ofl.ink; whois ofl.ink | grep -i registrar
   ```
 - [x] The human's answer is recorded here with the `dig` output that settled it: Cloudflare (plan §11, 2026-10-04; `dig +short NS ofl.ink` → `dns1/dns2.registrar-servers.com`, no DS record).
-- [ ] Offline on the local Caddy image: a request with v1's three location headers reaches the upstream without them through the production catch-all, and with them through the local listener. Phase 2's parity spec and Phase 4's Stats spec still pass, and `./check.sh` passes.
-- [ ] Offline, with the ranges set to the test network for the check, a trusted peer sending `X-Forwarded-For: 6.6.6.6, 1.2.3.4` reaches the upstream as `1.2.3.4` alone; an untrusted peer reaches it as its own address with no `CF-IPCountry` or `CF-Region-Code`; and a trusted peer's `CF-IPCountry` and `CF-Region-Code` pass unchanged.
+- [x] Offline on the local Caddy image: a request with v1's three location headers reaches the upstream without them through the production catch-all, and with them through the local listener. Phase 2's parity spec and Phase 4's Stats spec still pass, and `./check.sh` passes.
+- [x] Offline, with the ranges set to the test network for the check, a trusted peer sending `X-Forwarded-For: 6.6.6.6, 1.2.3.4` reaches the upstream as `1.2.3.4` alone; an untrusted peer reaches it as its own address with no `CF-IPCountry` or `CF-Region-Code`; and a trusted peer's `CF-IPCountry` and `CF-Region-Code` pass unchanged.
 - [ ] `# manual:` (the Operator) at least 48 hours before step 8, step 3 moves the zone from Namecheap: add ofl.ink to a Cloudflare account; re-create every record from step 2 DNS-only, TTL 300 on the apex and `www`; SSL/TLS mode Full (strict); Always Use HTTPS off; Network → IP Geolocation on; Rules → Transform Rules → Managed Transforms → Add visitor location headers on; write the Cloudflare records into `RUN.md` as the rollback target. If step 2 printed a DS record, turn DNSSEC off at the registrar first and wait until `dig +short DS ofl.ink` prints nothing and that record's TTL has passed. Set the NS at the registrar to the pair Cloudflare names. Once the zone is Active, and only if a DS record existed, turn DNSSEC on in Cloudflare and add its DS record at the registrar. Then:
 
   ```sh
   dig +short NS ofl.ink                                                                  # Cloudflare's pair
   curl -s -D - -o /dev/null "https://ofl.ink/$USERNAME" | grep -qi '^server: netlify'     # v1 still serves
   ```
-- [ ] `RUN.md`'s `## Cutover` matches the Cloudflare answer, and ticket 43 can run every step as written.
+- [x] `RUN.md`'s `## Cutover` matches the Cloudflare answer, and ticket 43 can run every step as written.
+
+## Landed
+
+Run 20261005T084628Z. Agent part only; boxes 1 and 5 (# manual: the Operator's step 2 zone record and step 3 zone move) stay unticked. Reviewer APPROVE (round 3 of 3; round 1 blocker: adapt checks duplicated between two scripts, fixed by making tests/caddy-ask.sh the one owner of offline caddy adapt checks with the Cloudflare lines on; round 2 blocker: an untrue header sentence, fixed by the coordinator). Cold ./check.sh --reporter=line: 358 passed, 1 skipped, exit 0. Caddyfile: Cloudflare lines as env-selected snippets keyed on CLOUDFLARE_RANGES (off in tests): drop v1's X-Country/X-Region/X-NF-Subdivision-Code, trusted_proxies static <ranges> + trusted_proxies_strict, X-Forwarded-For {client_ip} alone to the app, CF-IPCountry/CF-Region-Code dropped from peers outside the ranges; ticket 45's proxy_protocol_on now shares one global servers block (Caddy refuses two). compose.yaml shapes CLOUDFLARE_RANGES like PROXY_PROTOCOL_FROM; .env.example carries the spec's curl line for the Operator. tests/cloudflare-lines.sh proves the runtime behaviour offline on the local caddy:2-alpine image with a header-echo upstream (trusted peer: XFF 6.6.6.6, 1.2.3.4 -> 1.2.3.4; untrusted: own address, no CF headers; two ranges IPv4+IPv6). ASSUMPTION: proven over plain HTTP plus adapted-JSON equality of the https:// catch-all's routes and trusted proxies (reviewer's ruling: sufficient; overturned if box 3 requires a TLS request). RUN.md country-source lines confirmed under the Cloudflare answer.

@@ -105,7 +105,7 @@ For the Operator. Run the steps in this order, every command from this repo's ro
 
 - **v1 is never touched.** No step changes Netlify, the old GitHub repo or the n8n Form. v1 stays live on its netlify.app address (`linkmeclone3.netlify.app`) indefinitely, as the rollback target (plan section 10). There is no step that switches v1 off, and no irreversible step.
 - **The switch is a DNS change only.** Step 8 changes one record in Cloudflare (two if `www` exists), and the rollback (step 13) is the same change reversed. Nothing in Caddy or the app changes on the day: step 1's deploy already serves every hostname the app admits, and ofl.ink's certificate is obtained at the first request after the switch.
-- **Lines marked `[country source]`** rest on the production country source, Cloudflare (plan section 11, 2026-10-04). They are listed at the end of this section, so that ticket 42 can rewrite them if that answer changes.
+- **Lines marked `[country source]`** rest on the production country source, Cloudflare (plan section 11, 2026-10-04). They are listed at the end of this section, so that they can be found and rewritten if that answer ever changes.
 - No line here names a Destination, and no command prints one.
 
 **Set once,** in the Mac terminal before step 1 (the values are the Operator's; nothing here is a secret):
@@ -311,9 +311,9 @@ There is no step after 15. Nothing in Netlify ever changes; v1 stays live on `li
 
 ### Lines that rest on the production country source
 
-Decided 2026-10-04: Cloudflare (plan section 11). Ticket 42 rewrites these under any other answer; each carries `[country source]` above:
+Decided 2026-10-04: Cloudflare (plan section 11), and every line below is written for that answer (ticket 42). Any other answer rewrites them; each carries `[country source]` above:
 
-- step 1: the `CLOUDFLARE_RANGES` line (read by the Cloudflare lines that ticket 42 adds to the Caddyfile);
+- step 1: the `CLOUDFLARE_RANGES` line (compose.yaml hands it to the Caddyfile's Cloudflare lines, on the production catch-all only; `tests/cloudflare-lines.sh` and `tests/caddy-ask.sh` check them offline);
 - step 3: the whole step (the zone move to Cloudflare);
 - step 4: the Cloudflare part (adding the Spare Domain to Cloudflare, A Proxied, its NS);
 - step 7: the two header probes (`CF-IPCountry` and `X-Country`, at the origin and through the Spare Domain);
