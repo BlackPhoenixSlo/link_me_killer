@@ -1,0 +1,28 @@
+# VPS only (ticket 23). Traefik (n8n-traefik-1, v3.6, Docker provider only, exposedbydefault=false, network n8n_default
+# 172.18.0.0/16) holds ports 80 and 443 and fronts Caddy: a TCP router HostSNI(`*`) with TLS passthrough and the PROXY
+# protocol header to Caddy's container port 443. Specific HTTPS routers (n8n's Host rule) win over the HostSNI(`*`)
+# catch-all, so n8n is untouched. Port 80 needs no router: Traefik's web entrypoint already redirects every host to HTTPS.
+# Selected on the VPS by COMPOSE_FILE=compose.yaml:compose.vps.yaml in .env; tests never load it (no n8n_default there).
+# Observed 2026-10-05 on the VPS: no Traefik file provider exists, so the routers live here as labels, and Caddy joins
+# n8n_default so Traefik can dial it; PROXY_PROTOCOL_FROM=172.18.0.0/16 is then Traefik's own address range.
+# ASSUMPTION: Caddy obtains certificates by TLS-ALPN-01 through the passthrough, since port 80 is Traefik's redirect
+# (rung 5: Caddy tries both ACME challenges; HTTP-01 cannot reach it). Overturned if the first https request to the v2
+# host gets no certificate: Caddy's log then shows both challenges failing and the Cutover stops at step 1.
+services:
+  caddy:
+    networks:
+      default: {}
+      traefik: {}
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: n8n_default
+      traefik.tcp.routers.oflink.entrypoints: websecure
+      traefik.tcp.routers.oflink.rule: HostSNI(`*`)
+      traefik.tcp.routers.oflink.tls.passthrough: "true"
+      traefik.tcp.routers.oflink.service: oflink
+      traefik.tcp.services.oflink.loadbalancer.server.port: "443"
+      traefik.tcp.services.oflink.loadbalancer.proxyprotocol.version: "2"
+networks:
+  traefik:
+    external: true
+    name: n8n_default
