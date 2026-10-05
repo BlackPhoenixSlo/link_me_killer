@@ -156,7 +156,7 @@ test.describe('live edits through PocketBase\'s API', () => {
       ['list links', '/api/collections/links/records', 'no record'],
       ['view a link', `/api/collections/links/records/${links.second.id}`, 'no record'],
       ['list events', '/api/collections/events/records', 'refused'],
-      // Nothing writes an Event in this Phase, so no events record id exists to view; a well-formed one stands in.
+      // A well-formed record id stands in for an Event's; this test does not look one up.
       ['view an event', '/api/collections/events/records/aaaaaaaaaaaaaaa', 'refused'],
       ['create a users record', '/api/collections/users/records', 'created', send('POST', { email: `${username}@example.com`, password: 'signup-check-1', passwordConfirm: 'signup-check-1' })],
     ];

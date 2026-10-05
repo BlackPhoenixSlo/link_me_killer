@@ -4,7 +4,7 @@ Spec: docs/spec/phase-04-stats.md
 Covers: user stories 1, 2, 6, 8, 9, 11, 12, 13, 15, 16, 17, 19, 22, 34
 Seams: the running v2 stack at Playwright's baseURL through `./check.sh`. Visitors in fresh browser contexts, with the country set through a request header and fake User-Agents where needed; `/r/*` intercepted with `page.route`, sent on with `route.fetch({ maxRedirects: 0 })`, and fulfilled with a local stub page. The Stats Creator in the browser at 390×844, with every `dailyStats` request watched through `page.route`. Operator reads of Events at PocketBase's loopback port, as a superuser
 Blocked by: 01: The test loop serves the Page Copy, 10: The escaped Link opens by itself in the System Browser credited to the same Tracking Code, 18: Every Click on a v1 Link ends at v1's Destination for the same Tracking Code and Visitor location, 20: A PocketBase admin edit shows on the next page load while PocketBase's API stays closed, 27: A Creator changes their Profile in the Editor and its default Mode reaches the page, 29: Log-in lands a Creator where they left off and a handed-over Profile opens in the Editor
-Status: claimed 20261005T084628Z 2026-10-05T11:40:06Z
+Status: done
 
 **What to build:** The Phase's first path through every layer. A Visitor loads a Profile and follows a Direct Mode Link. Its Creator signs in, opens Stats next to the Editor, and sees one more Page View and one more Click.
 
@@ -36,11 +36,15 @@ ASSUMPTION: the spec's one migration lands whole here, its rules and its Profile
 
 ASSUMPTION: the ping's rate limit and the Event Recorder's bounded, failure-proof write land in 36 with their tests. Until then a failed write fails the request, and pings are unlimited. Rung 3: 22 adds its guard last among the local tickets. Nothing deploys before 38. Overturned if the ping must never run unlimited on any commit. The limit then moves here.
 
-- [ ] The spec's test 1 passes. An `SI` Visitor loads the Stats Profile, and the spec waits for the ping's 204. The Visitor follows the Direct Mode Link, whose `/r` answers 302 to its `.test` Destination. Signed in as the Stats Creator, Stats shows +1 on each of these: the Page Views and Clicks cards, today's daily row, that Link's row and the `SI` row.
-- [ ] Every CTR shown equals Clicks ÷ Page Views as displayed.
-- [ ] Reloaded with every `dailyStats` request's `perPage` rewritten to 1, the cards and both tables read the same.
-- [ ] At 390×844 the page has no horizontal overflow, and the spec saves the Stats screenshot at that size.
-- [ ] The spec's test 6 passes. Five loads carry Instagram, Facebook (`FBAN`), Threads, TikTok and desktop Chrome User-Agents, and the newest Event after each reads instagram, facebook, threads, tiktok and empty. Read as the Operator, Events have exactly the fields `id`, `kind`, `profile`, `link`, `country`, `inAppBrowser` and `created`.
-- [ ] `POST /v/{unknown Username}` answers 404 and records nothing. A GET under `/v/` reaches the Profile route.
-- [ ] No Stats test requests the events collection.
-- [ ] `./check.sh` passes.
+- [x] The spec's test 1 passes. An `SI` Visitor loads the Stats Profile, and the spec waits for the ping's 204. The Visitor follows the Direct Mode Link, whose `/r` answers 302 to its `.test` Destination. Signed in as the Stats Creator, Stats shows +1 on each of these: the Page Views and Clicks cards, today's daily row, that Link's row and the `SI` row.
+- [x] Every CTR shown equals Clicks ÷ Page Views as displayed.
+- [x] Reloaded with every `dailyStats` request's `perPage` rewritten to 1, the cards and both tables read the same.
+- [x] At 390×844 the page has no horizontal overflow, and the spec saves the Stats screenshot at that size.
+- [x] The spec's test 6 passes. Five loads carry Instagram, Facebook (`FBAN`), Threads, TikTok and desktop Chrome User-Agents, and the newest Event after each reads instagram, facebook, threads, tiktok and empty. Read as the Operator, Events have exactly the fields `id`, `kind`, `profile`, `link`, `country`, `inAppBrowser` and `created`.
+- [x] `POST /v/{unknown Username}` answers 404 and records nothing. A GET under `/v/` reaches the Profile route.
+- [x] No Stats test requests the events collection.
+- [x] `./check.sh` passes.
+
+## Landed
+
+Run 20261005T084628Z. Reviewer: REQUEST CHANGES round 1 (3 findings: Phase 4 drivers and the seed import in Phase 3's helpers.ts with casts, openStats duplicating onboard(), the ping's wasted Links query), fix round 1, APPROVE round 2 (nits: helpers header naming 04 — applied by the coordinator; onboard() comment; a keyof cast). Coordinator checked stats.js and editor.js share no top-level names (both are classic scripts in one global scope). Coordinator cold `./check.sh --reporter=line`: exit 0, `330 passed (3.7m)`, `1 skipped`.

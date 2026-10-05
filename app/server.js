@@ -1,6 +1,7 @@
 'use strict';
 // The app behind Caddy (docs/spec/phase-02-vps-foundation.md, Contracts): Profile JSON, /r, Reveal, PocketBase files and the
-// Page Copy; from Phase 3 on also the Editor at /edit and the same-origin API proxy (docs/spec/phase-03-auth-and-editor.md).
+// Page Copy; from Phase 3 on also the Editor at /edit and the same-origin API proxy (docs/spec/phase-03-auth-and-editor.md);
+// from Phase 4 on the Page View Ping, and `/r` records a Click (docs/spec/phase-04-stats.md).
 // It reads PocketBase as the superuser named in the environment and never logs a Destination: nothing below logs
 // a request, a record or an error's details.
 // ASSUMPTION: Page Copy answers carry v1's `/*` header, `Cache-Control: public, max-age=0, must-revalidate` (rung 3:
@@ -15,6 +16,7 @@ const { resolveDestination } = require('./src/destination');
 const { visitorLocation } = require('./src/visitor-location');
 const { toWebp, TARGETS } = require('./src/image');
 const { allow, clientIp, originOf, sameOrigin } = require('./src/click-guard');
+const { createEventRecorder } = require('./src/event-recorder');
 
 const PUBLIC = path.join(__dirname, 'public');
 const EDITOR = path.join(__dirname, 'editor');
@@ -32,6 +34,7 @@ const gateway = createGateway({
   email: process.env.PB_SUPERUSER_EMAIL,
   password: process.env.PB_SUPERUSER_PASSWORD,
 });
+const events = createEventRecorder(gateway);
 const app = new Hono();
 
 const pageCopy = (file) => fs.readFileSync(path.join(PUBLIC, file));
@@ -65,12 +68,26 @@ app.get('/api/profiles/:file', async (c, next) => {
 const underLimit = (c) => allow(clientIp(c.req.raw));
 const TOO_MANY = { error: 'Too many requests' };
 
+// Once the Link resolves, `/r` records a Click, then redirects; from outside it looks as before.
 app.get('/r/:linkId', async (c) => {
   c.header('Cache-Control', 'no-store');
   if (!underLimit(c)) return c.json(TOO_MANY, 429);
-  const destination = resolveDestination(await gateway.getLink(c.req.param('linkId')));
+  const link = await gateway.getLink(c.req.param('linkId'));
+  const destination = resolveDestination(link);
   if (!destination) return c.json({ error: 'Link not found' }, 404);
+  await events.recordClick(c.req.raw, link.profile, link.id);
   return c.redirect(destination, 302);
+});
+
+// The Page View Ping (Phase 4 spec, Contracts): POST only, so a GET under /v/ still reaches the Profile route below and no
+// Username is reserved. 204 once the Page View is recorded; an unknown Username is 404 and records nothing. Its rate limit is
+// ticket 36's.
+app.post('/v/:username', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const profile = await gateway.findProfile(c.req.param('username'));
+  if (!profile) return c.json({ error: 'Profile not found' }, 404);
+  await events.recordPageView(c.req.raw, profile.id);
+  return c.body(null, 204);
 });
 
 // Reveal at v1's path. `user` is accepted and ignored: a v2 Link Id is unique across all Profiles. No CORS header.
@@ -154,7 +171,7 @@ app.post('/api/upload/:collection/:recordId/:field', async (c) => {
 });
 
 // Same-origin API proxy (Phase 3 spec, Interfaces): PocketBase's users, profiles and links collection paths, records and auth
-// alike, go to PocketBase with the caller's own method, headers (its token, or none) and body, and PocketBase's answer comes
+// alike, and from Phase 4 on the Stats page's dailyStats view (never events), go to PocketBase with the caller's own method, headers (its token, or none) and body, and PocketBase's answer comes
 // back as it is. The superuser's token is never added: PocketBase's collection rules decide every call.
 // ASSUMPTION: only hop-by-hop headers are dropped, plus Accept-Encoding on the way in and the encoding and length headers on
 // the way out, because Node's fetch decodes a compressed answer and the stream it hands on is no longer the one those headers
@@ -162,7 +179,7 @@ app.post('/api/upload/:collection/:recordId/:field', async (c) => {
 // ASSUMPTION: a path holding an encoded slash or backslash is not forwarded (404), so nothing past the collection name can
 // step into another collection on PocketBase's side (rung 4: a closed default). Overturned if a PocketBase path in these
 // collections ever needs one.
-const PROXIED = /^\/api\/collections\/(users|profiles|links)\/[^/]/;
+const PROXIED = /^\/api\/collections\/(users|profiles|links|dailyStats)\/[^/]/;
 const DROP_IN = ['connection', 'keep-alive', 'proxy-connection', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'host', 'content-length', 'accept-encoding'];
 const DROP_OUT = ['connection', 'keep-alive', 'transfer-encoding', 'content-encoding', 'content-length'];
 app.all('/api/collections/*', async (c, next) => {

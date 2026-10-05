@@ -24,6 +24,10 @@
 // Ticket 31: the two screens the emails link to, `/edit/verify?token=…` and `/edit/reset?token=…` (fixed URLs), and "Forgot
 // password?" on log-in, at `/edit/forgot`. A bad or expired link says so and offers to send a new one.
 // ASSUMPTION: the screen path `/edit/forgot` (rung 6, as for the screen paths above). Overturned by a later ticket moving it.
+// Ticket 33: the Stats page at `/edit/stats`, in its own file (stats.js), with a "Stats" entry next to the Editor in the
+// creator-only area's navigation; a signed-out Creator opening it is sent to log-in as for the Editor.
+// ASSUMPTION: the screen path `/edit/stats` (rung 6, as above; it adds no top-level path, so no Username is reserved).
+// Overturned by a later ticket moving it.
 
 const TOKEN = 'ofl.token';
 const screen = document.getElementById('screen');
@@ -244,6 +248,13 @@ function link(text, path) {
 // token makes an empty list mean "no Profile", and the same holds for the links list since ticket 26 opened owner reads.
 // Buttons that return here without a write behind them (Cancel, "Go to the Editor") go through route(), which refreshes first.
 async function onboard() {
+  const done = await onboarded();
+  if (done) show('/edit/home', () => drawHome(done.profile, done.links));
+}
+
+// The onboarded Creator's Profile and its Links, for the screens past Onboarding (the Editor, Stats); otherwise it draws Retry
+// or the first Onboarding step that applies and returns nothing. Its callers hold the fresh token onboard() needs.
+async function onboarded() {
   const res = await api('profiles/records?perPage=1');
   if (!res.ok) return drawRetry(res.data.message || 'PocketBase did not answer.');
   const profile = res.data.items[0];
@@ -253,7 +264,7 @@ async function onboard() {
   const links = await linksOf(profile);
   if (!links.ok) return drawRetry(links.data.message || 'PocketBase did not answer.');
   if (!links.data.items.length) return show('/edit/first-link', () => drawLinkForm(profile, []));
-  return show('/edit/home', () => drawHome(profile, links.data.items));
+  return { profile, links: links.data.items };
 }
 
 // The Profile's Links in the order Visitors see them, with only what the Editor shows or needs: the title and the order.
@@ -270,7 +281,18 @@ async function route() {
   if (path === '/edit/reset') return drawReset();
   if (path === '/edit/forgot') return drawForgot();
   if (!(await refresh())) return show('/edit/login', drawLogin);
+  if (path === '/edit/stats') return openStats();
   return onboard();
+}
+
+// The creator-only area's navigation: the Editor and, next to it, Stats. The entry for `current` is marked as the page shown.
+function creatorNav(current) {
+  const entry = (text, path) => {
+    const a = link(text, path);
+    if (path === current) a.setAttribute('aria-current', 'page');
+    return a;
+  };
+  return el('nav', { className: 'creator-nav', 'aria-label': 'Creator' }, entry('Editor', '/edit'), entry('Stats', '/edit/stats'));
 }
 
 // ---- Screens ------------------------------------------------------------------------------------------------------------
@@ -785,7 +807,7 @@ function drawHome(profile, links) {
   el('button', { type: 'submit', className: 'secondary' }, 'Save default Mode'));
 
   const featured = featuredLinks(profile, links);
-  render('Edit Profile', el('h1', {}, 'Edit Profile'),
+  render('Edit Profile', creatorNav('/edit'), el('h1', {}, 'Edit Profile'),
     el('div', { className: 'bio-link' }, el('span', { className: 'label' }, 'Your Bio Link'), el('span', { className: 'value' }, address(profile))),
     el('div', { className: 'actions' }, copyButton(address(profile), copied)),
     copied,

@@ -796,12 +796,11 @@ test.describe('on the test stack', () => {
     });
   });
 
-  // Ticket 20: last in the last project, so after every other spec. The events collection holds no record (nothing writes
-  // one in Phase 2), and only a migration made it: it was created and last changed before the first request PocketBase
-  // logged on this stack's empty volume, so no API call made or altered it. Migrations run before PocketBase serves.
-  // The check needs at least one request log by the end of the run, and asserts it.
-  test('after every spec: the events collection holds no record and only a migration created it', async () => {
-    expect((await (await pb('/api/collections/events/records?perPage=1', { token })).json()).totalItems).toBe(0);
+  // Ticket 20: last in the last project, so after every other spec. Only a migration made the events collection: it was created
+  // and last changed before the first request PocketBase logged on this stack's empty volume, so no API call made or altered
+  // it. Migrations run before PocketBase serves. The check needs at least one request log by the end of the run, and asserts it.
+  // Ticket 33 dropped the check that it holds no record: from Phase 4 on every Profile load and `/r` Click writes an Event.
+  test('after every spec: only a migration created and changed the events collection', async () => {
     const events = await (await pb('/api/collections/events', { token })).json();
     const first = await (await pb(`/api/logs?perPage=1&sort=created&filter=${encodeURIComponent("data.type='request'")}`, { token })).json();
     expect(first.totalItems).toBeGreaterThan(0);

@@ -165,3 +165,25 @@ h2 { font-size: 15px; font-weight: 500; margin: 20px 0 8px; }
 .picture label { flex: 1; min-width: 0; }
 .avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: var(--sidebar); }
 input[readonly] { color: var(--muted-foreground); }
+
+/* The creator-only area's navigation: the Editor and Stats, as pill tabs; the current one is filled. */
+.creator-nav { display: flex; gap: 8px; margin: 0 0 16px; }
+.creator-nav a { padding: 6px 14px; border-radius: 999px; background: #ffffff1a; color: var(--foreground); font-size: 13px; text-decoration: none; }
+.creator-nav a[aria-current="page"] { background: var(--foreground); color: var(--background); font-weight: 600; }
+
+/* Stats (ticket 33), after the Template's analytics page: the range with its date span, three cards, then the tables. */
+.range { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
+.range .hint { margin: 0; }
+.range-tab { padding: 4px 12px; border-radius: 999px; background: var(--foreground); color: var(--background); font-size: 13px; font-weight: 600; }
+.stat-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.stat-card { padding: 12px 10px; border: 0.5px solid var(--border); border-radius: 12px; background: var(--sidebar); }
+.stat-card h3 { margin: 0 0 6px; color: var(--muted-foreground); font-size: 12px; font-weight: 500; }
+.stat-card p { margin: 0; font-size: 20px; font-weight: 600; }
+.stats-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.stats-table th, .stats-table td { padding: 8px 4px; border-bottom: 0.5px solid var(--border); text-align: right; overflow-wrap: anywhere; }
+.stats-table th:first-child { text-align: left; }
+.stats-table thead th { color: var(--muted-foreground); font-weight: 500; }
+.stats-table tbody th { font-weight: 400; }
+.bar { display: inline-block; height: 8px; margin-right: 6px; border-radius: 4px; vertical-align: middle; }
+.bar.views { background: var(--primary); }
+.bar.clicks { background: var(--success); }

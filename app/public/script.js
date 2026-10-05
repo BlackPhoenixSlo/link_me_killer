@@ -65,6 +65,10 @@ document.addEventListener('DOMContentLoaded', () => {
             linksData = data.links;
             renderLinks(linksData);
 
+            // Page View Ping (Phase 4): once per load, after the Profile has rendered, never for an unknown Username (the
+            // fetch above failed for one); keepalive lets it finish when the Visitor leaves at once, and nothing waits on it
+            fetch(`/v/${username}`, { method: 'POST', keepalive: true }).catch(() => {});
+
             // A Link Shortcut whose Link Id is not on this Profile is ignored: the page loads as a plain visit
             const shortcutLink = linkShortcut ? linksData.find(link => link.id === linkShortcut) : null;
 

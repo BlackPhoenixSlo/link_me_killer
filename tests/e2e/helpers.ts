@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 
-// Plumbing for tests/e2e/03-auth-and-editor.spec.ts that is not itself a test: the Operator steps, an in-memory PNG and (moved
+// Plumbing for tests/e2e/03-auth-and-editor.spec.ts (and, from ticket 33, the Operator and log-in steps tests/e2e/04-stats.spec.ts imports) that is not itself a test: the Operator steps, an in-memory PNG and (moved
 // here by ticket 29) the Creator, Visitor and proxy drivers the spec's tests share. Not a
 // spec file (Playwright's default testMatch skips it), so the Phase 3 suite stays one spec (docs/spec/phase-03-auth-and-editor.md,
 // Testing Decisions).
@@ -15,14 +15,14 @@ const ROOT = join(__dirname, '..', '..');
 // Is the stack under test the local test stack that tests/stack.sh starts? The same predicate as the 02 specs: the Operator
 // steps need PocketBase's loopback port and the email links need the mail catcher, which only that stack has.
 export const onLocalStack = () => !process.env.PLAYWRIGHT_BASE_URL || new URL(process.env.PLAYWRIGHT_BASE_URL).origin === 'http://localhost:4173';
-const ENV: Record<string, string> = Object.fromEntries(
+export const ENV: Record<string, string> = Object.fromEntries(
   readFileSync(join(ROOT, 'tests', 'e2e.env'), 'utf8')
     .split('\n')
     .filter((l) => /^[A-Z_]+=/.test(l))
     .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]),
 );
 const PB = `http://127.0.0.1:${ENV.PB_PORT}`;
-async function superuserToken() {
+export async function superuserToken() {
   const res = await fetch(`${PB}/api/collections/_superusers/auth-with-password`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -31,12 +31,12 @@ async function superuserToken() {
   expect(res.status).toBe(200);
   return (await res.json()).token as string;
 }
-const asSuperuser = async (token: string, path: string, init: RequestInit = {}) =>
+export const asSuperuser = async (token: string, path: string, init: RequestInit = {}) =>
   fetch(PB + path, { ...init, headers: { ...(init.headers as Record<string, string>), Authorization: token } });
 
 const json = (method: string, body: object): RequestInit => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 // The one record of `collection` that `filter` finds, as the superuser reads it.
-async function only(token: string, collection: string, filter: string) {
+export async function only(token: string, collection: string, filter: string) {
   const found = await (await asSuperuser(token, `/api/collections/${collection}/records?filter=${encodeURIComponent(filter)}`)).json();
   expect(found.items.length, `${collection} matching ${filter}`).toBe(1);
   return found.items[0];
@@ -181,10 +181,14 @@ export async function forgotPassword(page: Page, email: string) {
   await page.getByRole('button', { name: 'Send reset link' }).click();
 }
 
-// A fresh context at 390×844 with no Editor session, with an optional User-Agent. Given the stack's origin, it reaches only that
-// host: every request elsewhere is aborted, so nothing leaves the machine.
-export async function phoneContext(browser: Browser, { origin, userAgent }: { origin?: string; userAgent?: string } = {}) {
-  const context = await browser.newContext({ viewport: PHONE, ...(userAgent ? { userAgent } : {}) });
+// A fresh context at 390×844 with no Editor session, with an optional User-Agent and extra request headers (a Visitor's
+// `CF-IPCountry`). Given the stack's origin, it reaches only that host: every request elsewhere is aborted, so nothing leaves
+// the machine.
+export async function phoneContext(
+  browser: Browser,
+  { origin, userAgent, headers }: { origin?: string; userAgent?: string; headers?: Record<string, string> } = {},
+) {
+  const context = await browser.newContext({ viewport: PHONE, ...(userAgent ? { userAgent } : {}), ...(headers ? { extraHTTPHeaders: headers } : {}) });
   if (origin) await context.route((url) => url.host !== new URL(origin).host, (route) => route.abort('blockedbyclient'));
   return context;
 }

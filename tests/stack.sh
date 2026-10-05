@@ -36,6 +36,8 @@ node --env-file=tests/e2e.env -e '
     console.log("local mail: PocketBase sends through mailpit; Application URL set");
   })().catch((e) => { console.error(e.message); process.exit(1); });
 ' || { down; exit 1; }
+# Phase 4's two seeded Creators and their Profiles (tests/stats-seed.js), before the v1 Import so the Fixture stays the last write.
+node --env-file=tests/e2e.env tests/stats-seed.js || { down; exit 1; }
 # The seed: the whole v1 Snapshot first, mounted read-only as the VPS line in compose.yaml mounts it, when it is there, and
 # the Fixture site last (tests/fixtures/ with the Page Copy's stock icons as its images/, as compose.yaml documents it), so
 # the Fixture Profile is the last write. Its repaired, dropped, missing-image and no-destination lines are warnings (exit 0).
