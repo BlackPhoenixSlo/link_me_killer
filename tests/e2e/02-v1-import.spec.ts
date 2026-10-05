@@ -589,7 +589,11 @@ test.describe('on the test stack', () => {
       const appId = compose('ps', '-q', 'app').stdout.trim();
       const mounts = JSON.parse(spawnSync('docker', ['inspect', '--format', '{{json .Mounts}}', appId], { encoding: 'utf8' }).stdout);
       expect(mounts).toEqual([]); // the running app mounts no site
-      expect(compose('ps', '-a', '-q').stdout.trim().split('\n').length).toBe(3); // no one-off import container is left
+      // No one-off import container is left: none of the project's containers carries Compose's one-off label.
+      const oneOffs = spawnSync('docker', ['ps', '-a', '-q', '--filter', `label=com.docker.compose.project=${ENV.COMPOSE_PROJECT_NAME}`,
+        '--filter', 'label=com.docker.compose.oneoff=True'], { encoding: 'utf8' });
+      expect(oneOffs.status).toBe(0);
+      expect(oneOffs.stdout.trim()).toBe('');
     } finally {
       for (const p of await list('profiles', "username='stackcheck'")) await pb(`/api/collections/profiles/records/${p.id}`, { method: 'DELETE', token });
     }

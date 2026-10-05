@@ -13,7 +13,7 @@ import { deflateSync } from 'node:zlib';
 const ROOT = join(__dirname, '..', '..');
 
 // Is the stack under test the local test stack that tests/stack.sh starts? The same predicate as the 02 specs: the Operator
-// step needs PocketBase's loopback port, which only that stack publishes.
+// steps need PocketBase's loopback port and the email links need the mail catcher, which only that stack has.
 export const onLocalStack = () => !process.env.PLAYWRIGHT_BASE_URL || new URL(process.env.PLAYWRIGHT_BASE_URL).origin === 'http://localhost:4173';
 const ENV: Record<string, string> = Object.fromEntries(
   readFileSync(join(ROOT, 'tests', 'e2e.env'), 'utf8')
@@ -42,11 +42,42 @@ async function only(token: string, collection: string, filter: string) {
   return found.items[0];
 }
 
-// The Operator step: a superuser marks the account verified, as the Operator would in the admin UI.
+// The Operator step: a superuser marks the account verified, as the Operator would in the admin UI. Only the hand-over uses it
+// (spec, Mail); every other verified Creator follows the mailed link (verifyByMail).
 export async function markVerified(email: string) {
   const token = await superuserToken();
   const user = await only(token, 'users', `email='${email}'`);
   expect((await asSuperuser(token, `/api/collections/users/records/${user.id}`, json('PATCH', { verified: true }))).status).toBe(200);
+}
+
+// The local mail catcher (spec, Testing Decisions, Mail): every link to `path` (`/edit/verify`, `/edit/reset`) in Mailpit's
+// messages to `email`, newest first, read from its HTTP API on loopback (tests/compose.mail.yaml). Other mail to the address,
+// such as PocketBase's "Login from a new location" alert, holds no such link and is skipped.
+export async function mailedLinks(email: string, path: string): Promise<string[]> {
+  const mail = (p: string) => fetch(`http://127.0.0.1:${ENV.MAILPIT_PORT}/api/v1/${p}`).then((res) => res.json());
+  const found = await mail(`search?query=${encodeURIComponent(`to:"${email}"`)}`);
+  const link = new RegExp(`https?://[^\\s"'<>()]+${path}\\?token=[\\w.-]+`);
+  const texts = await Promise.all(found.messages.map(async ({ ID }: { ID: string }) => (await mail(`message/${ID}`)).Text as string));
+  return texts.map((text) => text.match(link)?.[0]).filter((l): l is string => !!l);
+}
+
+// The newest link to `path` mailed to `email`, once one has arrived.
+export async function mailedLink(email: string, path: string) {
+  let links: string[] = [];
+  await expect.poll(async () => (links = await mailedLinks(email, path)).length, { message: `a ${path} email to ${email}` }).toBeGreaterThan(0);
+  return links[0];
+}
+
+// The Creator follows the verification link, as the Editor's `/edit/verify` screen does: the link's token, sent to PocketBase's
+// confirm-verification through the proxy. The email is asked for first, as the Editor asks for it at sign-up.
+// ASSUMPTION: over HTTP rather than in a browser page, for the drivers that arrange a verified Creator (rung 3: the spec's rule
+// checks call the proxy exactly as the Editor does; the tracer and behaviour 7 open the link in the browser). Overturned if
+// every arranged Creator must open the link in a page.
+async function verifyByMail(request: APIRequestContext, email: string) {
+  const anonymous = proxy(request);
+  expect((await anonymous.post('users/request-verification', { email })).status()).toBe(204);
+  const token = new URL(await mailedLink(email, '/edit/verify')).searchParams.get('token');
+  expect((await anonymous.post('users/confirm-verification', { token })).status(), 'the mailed verification link').toBe(204);
 }
 
 // Ticket 29's Operator steps for the hand-over (spec, Testing Decisions, Operator steps). A superuser creates an ownerless Profile
@@ -142,6 +173,14 @@ export async function logIn(page: Page, creator: Creator) {
   await page.getByRole('button', { name: 'Log in' }).click();
 }
 
+// "Forgot password?" from the log-in screen: a reset link asked for `email`.
+export async function forgotPassword(page: Page, email: string) {
+  await page.goto('/edit/login');
+  await page.getByRole('link', { name: 'Forgot password?' }).click();
+  await page.getByLabel('Email').fill(email);
+  await page.getByRole('button', { name: 'Send reset link' }).click();
+}
+
 // A fresh context at 390×844 with no Editor session, with an optional User-Agent. Given the stack's origin, it reaches only that
 // host: every request elsewhere is aborted, so nothing leaves the machine.
 export async function phoneContext(browser: Browser, { origin, userAgent }: { origin?: string; userAgent?: string } = {}) {
@@ -192,17 +231,15 @@ export const INSTAGRAM_UA =
   'Mobile/15E148 Instagram 300.0.0.0.0 (iPhone14,2; iOS 17_0; en_US; en-US; scale=3.00; 1170x2532; 0)';
 
 // A verified Creator with a named Profile on Escape Mode and two Links, arranged through the proxy as the Creator would through
-// the Editor; only the verification is the Operator's step. Links are [title, Mode] with '' for "Profile default", and their
-// Destinations are test-only example.com addresses.
-// ASSUMPTION: arranged as the Creator through the proxy, with only the verification as the Operator's step, so the describe
-// skips off the local test stack (rung 3: ticket 26's markVerified and onLocalStack). Overturned when 31's mail catcher lands.
+// the Editor, the mailed verification link included, so the describes that use it skip off the local test stack. Links are
+// [title, Mode] with '' for "Profile default", and their Destinations are test-only example.com addresses.
 export async function verifiedCreator(request: APIRequestContext, links: [string, string][]) {
   const { token, id, creator } = await account(request);
   const as = proxy(request, token);
   const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig' });
   expect(claimed.status()).toBe(200);
   const profileId = (await claimed.json()).id as string;
-  await markVerified(creator.email);
+  await verifyByMail(request, creator.email);
   const named = await as.patch(`profiles/records/${profileId}`, { displayName: 'Before Name', bio: 'Before bio.' });
   expect(named.status()).toBe(200);
   const linkIds: string[] = [];
@@ -238,6 +275,33 @@ export async function openProfile(browser: Browser, origin: string, username: st
   return visitor;
 }
 
+// The image at `url` as the public origin serves it: a WebP, by its content type and its bytes.
+export async function expectServedWebp(request: APIRequestContext, url: string) {
+  const image = await request.get(url);
+  expect(image.status(), url).toBe(200);
+  expect(image.headers()['content-type'], url).toBe('image/webp');
+  expect(isWebp(await image.body()), url).toBe(true);
+}
+
+// The Visitor presses the Adult Link titled `title` and passes the Age Gate with "Continue (18+)". Reveal's answer comes back as
+// the page received it, once the onward navigation to `onward` has been stopped by the context's fence, as in 00-smoke.
+export async function passAgeGate(visitor: Page, title: string, onward: string) {
+  await visitor.locator('.link-card', { hasText: title }).click();
+  await expect(visitor.locator('#overlay')).toBeVisible();
+  await expect(visitor.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
+  let reveal: { url: URL; status: number; realUrl: unknown } | undefined;
+  await visitor.route('**/.netlify/functions/reveal?*', async (route) => {
+    const response = await route.fetch();
+    reveal = { url: new URL(route.request().url()), status: response.status(), realUrl: (await response.json()).realUrl };
+    await route.fulfill({ response });
+  });
+  const stopped = visitor.waitForEvent('requestfailed', (req) => req.url() === onward);
+  await visitor.getByRole('button', { name: 'Continue (18+)' }).click();
+  expect((await stopped).failure()?.errorText).toBe('net::ERR_BLOCKED_BY_CLIENT');
+  if (!reveal) throw new Error('no Reveal was observed before the onward navigation');
+  return reveal;
+}
+
 // A Creator arranged over HTTP at an Onboarding stage, named by its screen's heading: a refused claim (CLAIM), claimed but
 // unverified (VERIFY), verified with no display name, or named with no Link (moved here by ticket 30).
 export async function reach(request: APIRequestContext, stage: string) {
@@ -246,7 +310,7 @@ export async function reach(request: APIRequestContext, stage: string) {
   const claimed = await as.post('profiles/records', { username: stage === CLAIM ? 'edit' : creator.username, owner: id, mode: 'escape_ig' });
   expect(claimed.status(), stage).toBe(stage === CLAIM ? 400 : 200);
   if (stage === CLAIM || stage === VERIFY) return creator;
-  await markVerified(creator.email);
+  await verifyByMail(request, creator.email);
   if (stage === 'Add your first Link') expect((await as.patch(`profiles/records/${(await claimed.json()).id}`, { displayName: 'Half way' })).status()).toBe(200);
   return creator;
 }

@@ -21,6 +21,9 @@
 // Ticket 29: the session lasts until the Creator ends it. "Log out" drops the token on this device and shows log-in. An answer
 // refused for an ended session sends the Creator to log-in with a return path (`?next=`), and logging in lands them by the
 // Onboarding rule, which for an onboarded Creator is the Editor, so an ended session never shows as a failed save.
+// Ticket 31: the two screens the emails link to, `/edit/verify?token=…` and `/edit/reset?token=…` (fixed URLs), and "Forgot
+// password?" on log-in, at `/edit/forgot`. A bad or expired link says so and offers to send a new one.
+// ASSUMPTION: the screen path `/edit/forgot` (rung 6, as for the screen paths above). Overturned by a later ticket moving it.
 
 const TOKEN = 'ofl.token';
 const screen = document.getElementById('screen');
@@ -263,6 +266,9 @@ async function route() {
   const path = location.pathname.replace(/\/+$/, '');
   if (path === '/edit/signup') return drawSignup();
   if (path === '/edit/login') return drawLogin();
+  if (path === '/edit/verify') return drawVerified();
+  if (path === '/edit/reset') return drawReset();
+  if (path === '/edit/forgot') return drawForgot();
   if (!(await refresh())) return show('/edit/login', drawLogin);
   return onboard();
 }
@@ -297,6 +303,7 @@ function drawLogin() {
   el('button', { type: 'submit' }, 'Log in'));
   const hint = ended ? 'Your session has ended. Log in to carry on.' : 'Edit your ofl.ink Profile.';
   render('Log in', el('h1', {}, 'Log in'), el('p', { className: 'hint' }, hint), form,
+    el('p', { className: 'switch' }, link('Forgot password?', '/edit/forgot')),
     el('p', { className: 'switch' }, 'New here? ', link('Sign up', '/edit/signup')));
 }
 
@@ -323,7 +330,7 @@ function drawSignup() {
         return say(status, `Your account was made, but log-in was refused: ${auth.data.message || auth.status}`);
       }
       signedIn(auth.data);
-      // The verification email is asked for and not waited on: until a mail server is set up, none is delivered.
+      // The verification email is asked for as soon as the account exists, and not waited on.
       api('users/request-verification', { method: 'POST', body: { email: body.email }, keepalive: true }).catch(() => {});
       const claimed = await claim(wanted);
       if (!claimed.ok) return show('/edit/claim', () => drawClaim({ username: wanted, error: claimReason(claimed, wanted) }));
@@ -371,6 +378,10 @@ function drawRetry(reason) {
   render('Try again', el('h1', {}, 'Try again'), status, el('button', { type: 'button', onclick: route }, 'Try again'));
 }
 
+// PocketBase answers 204 to a repeat request inside its throttle window and sends nothing (observed on 0.40.4), so the
+// screen says the email was asked for, never that one went out.
+const resendAsked = (email) => `We asked for a new link to ${email}. If none arrives within a few minutes, check your spam folder and try again.`;
+
 function drawVerify() {
   const status = message();
   const resend = el('button', {
@@ -380,7 +391,7 @@ function drawVerify() {
       resend.disabled = true;
       const res = await api('users/request-verification', { method: 'POST', body: { email: account.email } });
       resend.disabled = false;
-      if (res.ok) say(status, `We sent a new link to ${account.email}.`, 'ok');
+      if (res.ok) say(status, resendAsked(account.email), 'ok');
       else say(status, res.data.message || 'The email could not be sent. Try again.');
     },
   }, 'Resend email');
@@ -398,6 +409,83 @@ function drawVerify() {
   render('Verify your email', el('h1', {}, 'Verify your email'),
     el('p', { className: 'hint' }, 'We sent a link to ', el('strong', {}, account.email), '. Open it to verify your email, then press Continue.'),
     status, el('div', { className: 'actions' }, next, resend));
+}
+
+// ---- The emails' screens -------------------------------------------------------------------------------------------------
+
+const CHECK_INBOX = 'If an account uses that address, we sent it a link. Check your inbox.';
+const linkToken = () => new URLSearchParams(location.search).get('token') || '';
+
+// An email field whose button asks PocketBase to send `endpoint`'s email. PocketBase answers 204 whether or not an account uses
+// the address, so the screen says the same either way and reveals nothing about who has one.
+function mailForm(button, endpoint) {
+  const email = el('input', { name: 'email', type: 'email', required: true, autocomplete: 'email' });
+  const status = message();
+  const form = el('form', {
+    onsubmit: async (event) => {
+      event.preventDefault();
+      submitting(form, true);
+      const res = await api(`users/${endpoint}`, { method: 'POST', body: { email: email.value } });
+      submitting(form, false);
+      if (res.ok) say(status, CHECK_INBOX, 'ok');
+      else say(status, fieldReasons(res, 'The email could not be sent. Try again.'));
+    },
+  },
+  el('label', {}, 'Email', email),
+  status,
+  el('button', { type: 'submit' }, button));
+  return form;
+}
+
+function drawInvalidLink(what, button, endpoint) {
+  render('Link invalid or expired', el('h1', {}, 'Link invalid or expired'),
+    el('p', { className: 'hint' }, `This ${what} link is invalid or expired. Enter your email and we will send you a new one.`),
+    mailForm(button, endpoint));
+}
+
+// The verification email's link. PocketBase confirms its token whether or not this browser is signed in; Continue then goes
+// through `/edit`, which lands a signed-in Creator on their next Onboarding step and anyone else on log-in.
+async function drawVerified() {
+  const res = await api('users/confirm-verification', { method: 'POST', body: { token: linkToken() } });
+  if (!res.ok) return drawInvalidLink('verification', 'Resend email', 'request-verification');
+  return render('Email verified', el('h1', {}, 'Email verified'), el('p', { className: 'hint' }, 'Your email is verified.'),
+    el('button', { type: 'button', onclick: () => go('/edit') }, 'Continue'));
+}
+
+// The reset email's link: a new password for the account its token names. PocketBase says whether the token is good only when
+// the password is sent, so a bad or expired link shows as such then.
+// ASSUMPTION: the token is checked on submit rather than on opening (rung 5: PocketBase has no call that checks a reset token
+// without using it). Overturned if the screen must say so before a password is typed; the Editor would then read the token's
+// expiry itself.
+function drawReset() {
+  const password = el('input', { name: 'password', type: 'password', required: true, autocomplete: 'new-password' });
+  const status = message();
+  const form = el('form', {
+    onsubmit: async (event) => {
+      event.preventDefault();
+      submitting(form, true);
+      const body = { token: linkToken(), password: password.value, passwordConfirm: password.value };
+      const res = await api('users/confirm-password-reset', { method: 'POST', body });
+      submitting(form, false);
+      if (res.ok) {
+        return render('Password changed', el('h1', {}, 'Password changed'), el('p', { className: 'hint' }, 'Log in with your new password.'),
+          el('button', { type: 'button', onclick: () => go('/edit/login') }, 'Log in'));
+      }
+      if (res.data.data && res.data.data.token) return drawInvalidLink('reset', 'Send a new link', 'request-password-reset');
+      return say(status, fieldReasons(res, 'The password could not be set. Try again.'));
+    },
+  },
+  el('label', {}, 'New password', password),
+  status,
+  el('button', { type: 'submit' }, 'Set password'));
+  render('Set a new password', el('h1', {}, 'Set a new password'), form);
+}
+
+function drawForgot() {
+  render('Forgot password', el('h1', {}, 'Forgot password'),
+    el('p', { className: 'hint' }, 'Enter your email and we will send you a link to set a new password.'),
+    mailForm('Send reset link', 'request-password-reset'),
+    el('p', { className: 'switch' }, link('Back to log in', '/edit/login')));
 }
 
 // ---- Onboarding after verification, and the Editor ---------------------------------------------------------------------

@@ -4,19 +4,18 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  account, CLAIM, createOwnerlessProfile, expectVerifyScreen, featured, fresh, furnishedCreator, heading, holdsDestination, INSTAGRAM_UA,
-  isWebp, LOG_IN, logIn, markVerified, onLocalStack, openProfile, operator, ownerOf, PHONE, phoneContext, pngFile, probe, proxy, reach,
-  readBack, recordIds, refused, servedProfile, setOwner, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees,
+  account, CLAIM, createOwnerlessProfile, expectServedWebp, expectVerifyScreen, featured, forgotPassword, fresh, furnishedCreator, heading,
+  holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN, logIn, mailedLink, mailedLinks, markVerified, onLocalStack, openProfile, operator, ownerOf,
+  passAgeGate, PHONE, phoneContext, pngFile, probe, proxy, reach, readBack, recordIds, refused, servedProfile, setOwner, SIGN_UP, signUp,
+  upload, VERIFY, verifiedCreator, visitorSees,
 } from './helpers';
 
-// Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL,
-// the public origin. Creator journeys run in the browser at 390×844; the Visitor side and every second log-in run in a fresh
-// context with no Editor session; rule and proxy checks use the `request` fixture at the same origin, calling the proxy
-// exactly as the Editor does.
+// Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL.
+// Creator journeys run at 390×844, the Visitor and every second log-in in a fresh context; rule checks call the proxy over HTTP.
 // Ticket 25: sign-up, the claim and its refusals, the verify screen, the landing page's button, and the proxy's allow-list.
-// Ticket 26: the verified-email gate over HTTP, and Onboarding after verification to a live Profile whose Links act like
-// imported ones. Its one Operator step, marking the account verified, goes to PocketBase as a superuser at the loopback port the
-// test stack publishes (spec, Testing Decisions, Operator steps; the ticket's ASSUMPTION until 31 brings mail).
+// Ticket 26: the verified-email gate over HTTP, and Onboarding after verification to a live Profile like an imported one.
+// Ticket 31: every verified Creator follows the verification link mailed to the local mail catcher (helpers.ts, mailedLink);
+// marking an account verified as a superuser is left to the hand-over alone (spec, Testing Decisions, Mail).
 // Every account is a throwaway with a fresh `signup_<hex>` email and Username; nothing is cleaned up, because the test stack
 // is taken down with its data after the run (tests/stack.sh). Destinations are compared as booleans and never printed.
 const ROOT = join(__dirname, '..', '..');
@@ -228,11 +227,10 @@ test.describe('the verified-email gate', () => {
     expect(after).toEqual(before);
     expect(after.profile.displayName === '' && after.profile.bio === '' && after.profile.avatar === '').toBe(true);
   });
-
 });
 
 test.describe('Onboarding after verification', () => {
-  test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
+  test.skip(!onLocalStack(), 'the mail catcher and the Operator\'s PocketBase port are on the local test stack only');
 
   test('at 390×844 a verified Creator goes through Onboarding to a live Profile whose Links act like imported ones', async ({ page, browser, request, baseURL }) => {
     test.setTimeout(180_000);
@@ -247,7 +245,8 @@ test.describe('Onboarding after verification', () => {
 
     await signUp(page, creator);
     await expectVerifyScreen(page);
-    await markVerified(creator.email);
+    await page.goto(await mailedLink(creator.email, '/edit/verify'));
+    await expect(heading(page, 'Email verified')).toBeVisible();
     await page.getByRole('button', { name: 'Continue' }).click();
 
     // The Profile step: no display name, no move.
@@ -305,8 +304,7 @@ test.describe('Onboarding after verification', () => {
     await page.goto('/edit');
     await expect(heading(page, 'Edit Profile')).toBeVisible();
 
-    // The stored values (spec, Contracts, Stored values), as the Creator reads them through the proxy with the Editor's own
-    // token. Destinations compared as booleans.
+    // The stored values (spec, Contracts, Stored values), read through the proxy with the Editor's own token, as booleans.
     const own = proxy(request, (await page.evaluate(() => localStorage.getItem('ofl.token')))!);
     const [profile] = (await (await own.get(`profiles/records?filter=${encodeURIComponent(`username='${creator.username}'`)}`)).json()).items;
     expect(profile.displayName === 'Onboarding Creator' && profile.bio === 'Made in the Editor.' && profile.avatar !== '' && profile.mode === 'escape_ig').toBe(true);
@@ -360,24 +358,11 @@ test.describe('Onboarding after verification', () => {
     expect(redirect.status()).toBe(302);
     expect(redirect.headers()['location'] === directDestination, 'the redirect goes to the Direct Link\'s Destination').toBe(true);
 
-    // The Adult Link: Age Gate, then Reveal's real answer is the entered Destination followed by /c7; the navigation is
-    // intercepted, as in 00-smoke.
+    // The Adult Link: Age Gate, then Reveal's real answer is the entered Destination followed by /c7 (helpers.ts, passAgeGate).
     const adultId = served.links.find((l) => l.title === 'Adult card')!.id;
     pressed = true;
-    await visitor.locator('.link-card', { hasText: 'Adult card' }).click();
-    await expect(visitor.locator('#overlay')).toBeVisible();
-    await expect(visitor.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
-    let reveal: { url: URL; status: number; realUrl: unknown } | undefined;
-    await visitor.route('**/.netlify/functions/reveal?*', async (route) => {
-      const response = await route.fetch();
-      reveal = { url: new URL(route.request().url()), status: response.status(), realUrl: (await response.json()).realUrl };
-      await route.fulfill({ response });
-    });
     const expected = `${adultDestination}/c7`;
-    const onward = visitor.waitForEvent('requestfailed', (req) => req.url() === expected);
-    await visitor.getByRole('button', { name: 'Continue (18+)' }).click();
-    expect((await onward).failure()?.errorText).toBe('net::ERR_BLOCKED_BY_CLIENT');
-    if (!reveal) throw new Error('no Reveal was observed before the onward navigation');
+    const reveal = await passAgeGate(visitor, 'Adult card', expected);
     expect(reveal.url.searchParams.get('id') === adultId).toBe(true);
     expect(reveal.url.searchParams.get('trackingId')).toBe('7');
     expect(reveal.status).toBe(200);
@@ -389,7 +374,7 @@ test.describe('Onboarding after verification', () => {
 // ---- Ticket 27: the Editor's Profile panel, Bio Link, avatar and default Mode ------------------------------------------------
 
 test.describe('the Editor\'s Profile and default Mode', () => {
-  test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
+  test.skip(!onLocalStack(), 'the mail catcher and the Operator\'s PocketBase port are on the local test stack only');
 
   test('at 390×844 the Creator copies the Bio Link, edits display name and bio, replaces the avatar; Username read-only, no badge control', async ({ page, browser, request, baseURL }) => {
     test.setTimeout(120_000);
@@ -439,12 +424,10 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     await expect(page.getByText('Profile saved.', { exact: true })).toBeVisible();
 
     // The next load of the public Profile shows both.
-    const context = await phoneContext(browser, { origin });
-    const visitor = await context.newPage();
-    await visitor.goto(`/${creator.username}`);
+    const visitor = await openProfile(browser, origin, creator.username, ['First card']);
     await expect(visitor.locator('#displayName')).toHaveText('After Name');
     await expect(visitor.locator('#bio')).toHaveText('After bio, from the Editor.');
-    await context.close();
+    await visitor.context().close();
 
     // "Change Profile Picture" is a field of the Profile panel: picking a file saves nothing until "Save profile", which
     // replaces the avatar through the upload endpoint; the public Profile then serves a new WebP.
@@ -464,10 +447,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     expect(after.startsWith('/api/files/'), after).toBe(true);
     await expect(page.getByText('Profile saved.', { exact: true })).toBeVisible();
     await expect(page.locator('img.avatar')).toHaveAttribute('src', after);
-    const image = await request.get(after);
-    expect(image.status()).toBe(200);
-    expect(image.headers()['content-type']).toBe('image/webp');
-    expect(isWebp(await image.body())).toBe(true);
+    await expectServedWebp(request, after);
     // Saving the picture saved the panel's display name and bio as they stood.
     await expect(displayName).toHaveValue('After Name');
     const saved = (await servedProfile(request, creator.username)).profile;
@@ -522,7 +502,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
 // ---- Ticket 28: the Editor's Featured Links and the Link form ---------------------------------------------------------------
 
 test.describe('the Editor\'s Links', () => {
-  test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
+  test.skip(!onLocalStack(), 'the mail catcher and the Operator\'s PocketBase port are on the local test stack only');
 
   test('at 390×844 a title edit, a background replaced then removed, a Link added then moved up, and a confirmed delete each show on the next load', async ({ page, browser, request, baseURL }) => {
     test.setTimeout(180_000);
@@ -561,10 +541,7 @@ test.describe('the Editor\'s Links', () => {
     await expect(heading(page, 'Edit Profile')).toBeVisible();
     const replaced = (await backgroundOf('Edited card')).backgroundImage;
     expect(replaced.startsWith('/api/files/') && replaced !== before, replaced).toBe(true);
-    const image = await request.get(replaced);
-    expect(image.status()).toBe(200);
-    expect(image.headers()['content-type']).toBe('image/webp');
-    expect(isWebp(await image.body())).toBe(true);
+    await expectServedWebp(request, replaced);
 
     // Then removed: the public Profile serves no background for it.
     await page.getByRole('button', { name: 'Edited card', exact: true }).click();
@@ -645,22 +622,9 @@ test.describe('the Editor\'s Links', () => {
     expect(await page.getByLabel('Destination').inputValue() === changed, 'reopened, the form shows the new Destination').toBe(true);
 
     // The Visitor, in a fresh context: Age Gate, then Reveal's real answer is the new Destination; the navigation is intercepted.
-    const context = await phoneContext(browser, { origin });
-    const visitor = await context.newPage();
-    await visitor.goto(`/${creator.username}`);
-    await visitor.locator('.link-card', { hasText: 'Adult card' }).click();
-    await expect(visitor.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
-    let realUrl: unknown;
-    await visitor.route('**/.netlify/functions/reveal?*', async (route) => {
-      const response = await route.fetch();
-      realUrl = (await response.json()).realUrl;
-      await route.fulfill({ response });
-    });
-    const onward = visitor.waitForEvent('requestfailed', (req) => req.url() === changed);
-    await visitor.getByRole('button', { name: 'Continue (18+)' }).click();
-    expect((await onward).failure()?.errorText).toBe('net::ERR_BLOCKED_BY_CLIENT');
-    expect(realUrl === changed, 'Reveal answers the new Destination').toBe(true);
-    await context.close();
+    const visitor = await openProfile(browser, origin, creator.username, ['Adult card']);
+    expect((await passAgeGate(visitor, 'Adult card', changed)).realUrl === changed, 'Reveal answers the new Destination').toBe(true);
+    await visitor.context().close();
   });
 
   test('every field of an opened Link changes: an icon from no stock file stays, then stock icons, Adult flag, Mode, tracking and default Tracking Code reach the page', async ({ page, request }) => {
@@ -810,7 +774,7 @@ test.describe('the Editor\'s Links', () => {
 // off the local test stack no read probe runs (rung 5). Overturned if the probes must run against a deployed stack (needs 31's mail).
 
 test.describe('owner rules, over HTTP at the public origin', () => {
-  test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
+  test.skip(!onLocalStack(), 'the mail catcher and the Operator\'s PocketBase port are on the local test stack only');
 
   test('another Creator cannot change, delete, add to or take from a Profile, nor replace its images; the owners read all back unchanged', async ({ request }) => {
     const [a, b] = [await furnishedCreator(request), await furnishedCreator(request)];
@@ -895,7 +859,7 @@ test.describe('owner rules, over HTTP at the public origin', () => {
 const EDITOR = 'Edit Profile';
 
 test.describe('the session and where log-in lands', () => {
-  test.skip(!onLocalStack(), 'the Operator step needs the local test stack\'s PocketBase port');
+  test.skip(!onLocalStack(), 'the mail catcher and the Operator\'s PocketBase port are on the local test stack only');
 
   test('reopening the Editor in the same context still shows it; Log out shows log-in, and logging in again lands in the Editor', async ({ page, request }) => {
     const { creator } = await verifiedCreator(request, [['Session card', '']]);
@@ -919,7 +883,7 @@ test.describe('the session and where log-in lands', () => {
   });
 
   test('a Creator who logs in partway through Onboarding resumes at the claim step, the verify screen, the Profile step or the first-Link step', async ({ browser, request }) => {
-    // Each stage arranged over HTTP as the Creator would reach it (helpers.ts, reach); only the verification is the Operator's step.
+    // Each stage arranged over HTTP as the Creator would reach it (helpers.ts, reach), the mailed verification link included.
     const stages: [string, RegExp][] = [[CLAIM, /\/edit\/claim$/], [VERIFY, /\/edit\/verify-email$/], ['Your Profile', /\/edit\/profile$/], ['Add your first Link', /\/edit\/first-link$/]];
     for (const [stage, url] of stages) {
       const creator = await reach(request, stage);
@@ -975,12 +939,52 @@ test.describe('the session and where log-in lands', () => {
     await expect(editor.getByText('Profile saved.')).toBeVisible();
     await context.close();
     // The public page, in a fresh context with no Editor session.
-    const visit = await phoneContext(browser, { origin });
-    const visitor = await visit.newPage();
-    await visitor.goto(`/${creator.username}`);
+    const visitor = await openProfile(browser, origin, creator.username, ['Imported card']);
     await expect(visitor.locator('#displayName')).toHaveText('Edited after hand-over');
-    await expect(visitor.locator('.link-card .link-title')).toHaveText(['Imported card']);
-    await visit.close();
+    await visitor.context().close();
+  });
+
+  test('a bad verification link says invalid or expired and offers a resend; "Resend email" delivers a verification email, and once its link is followed Continue opens the Profile step', async ({ page, request }) => {
+    await page.goto('/edit/verify?token=not-a-token');
+    await expect(heading(page, 'Link invalid or expired')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Resend email' })).toBeVisible();
+    // Claimed over HTTP, so no verification email was ever asked for (helpers.ts, reach): the one that arrives is Resend's.
+    const creator = await reach(request, VERIFY);
+    await logIn(page, creator);
+    await expectVerifyScreen(page);
+    expect(await mailedLinks(creator.email, '/edit/verify')).toHaveLength(0);
+    await page.getByRole('button', { name: 'Resend email' }).click();
+    await expect(page.getByRole('status')).toContainText(`We asked for a new link to ${creator.email}.`);
+    const tab = await page.context().newPage();
+    await tab.goto(await mailedLink(creator.email, '/edit/verify'));
+    await expect(heading(tab, 'Email verified')).toBeVisible();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(heading(page, 'Your Profile')).toBeVisible();
+  });
+
+  test('"Forgot password" says the same for a known and an unknown address; a bad reset link offers a new one; the mailed one sets a password that lands in the Editor, the old one refused', async ({ page, request }) => {
+    const { creator } = await verifiedCreator(request, [['Reset card', '']]);
+    for (const email of [creator.email, fresh().email]) {
+      await forgotPassword(page, email);
+      await expect(page.getByRole('status')).toHaveText('If an account uses that address, we sent it a link. Check your inbox.');
+    }
+    const setPassword = async (link: string) => {
+      await page.goto(link);
+      await expect(heading(page, 'Set a new password')).toBeVisible();
+      await page.getByLabel('New password').fill('throwaway-renewed');
+      await page.getByRole('button', { name: 'Set password' }).click();
+    };
+    await setPassword('/edit/reset?token=not-a-token');
+    await expect(heading(page, 'Link invalid or expired')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Send a new link' })).toBeVisible();
+    await setPassword(await mailedLink(creator.email, '/edit/reset'));
+    await expect(heading(page, 'Password changed')).toBeVisible();
+    await page.getByRole('button', { name: 'Log in' }).click();
+    await expect(heading(page, LOG_IN)).toBeVisible();
+    await logIn(page, creator);
+    await expect(page.getByRole('status')).toHaveText('Wrong email or password.');
+    await logIn(page, { ...creator, password: 'throwaway-renewed' });
+    await expect(heading(page, EDITOR)).toBeVisible();
   });
 
   // ASSUMPTION: "after the whole run" is the spec's last test, which runs after every other test of this file in its worker
