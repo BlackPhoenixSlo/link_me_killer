@@ -21,9 +21,16 @@ export default defineConfig({
   outputDir: '.scratch/goal_ai/shots',
   use: { baseURL, screenshot: 'only-on-failure', launchOptions: { args: [resolverRule] } },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: '**/02-v1-import.spec.ts' },
-    // The last project (spec, Testing Decisions, Spec order): the import spec writes to the stack that the others read.
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: ['**/02-v1-import.spec.ts', '**/02-reveal-guard.spec.ts'] },
+    // The last projects (spec, Testing Decisions, Spec order): the import spec writes to the stack that the others read, and
+    // the Reveal-guard spec uses up the Click guard's window, so it runs after the import spec too, whose `/r` calls it would
+    // refuse.
+    // ASSUMPTION: two chained last projects rather than one, because in one project the guard spec would run beside or before
+    // the import spec (files run in name order, and 02-reveal-guard sorts first) and its used-up window would refuse the
+    // import spec's `/r` calls (rung 1: tests/e2e/02-v1-import.spec.ts calls /r). Overturned if the import spec stops calling
+    // `/r`; both specs can then share one last project.
     { name: 'stack-import', use: { ...devices['Desktop Chrome'] }, testMatch: '**/02-v1-import.spec.ts', dependencies: ['chromium'] },
+    { name: 'reveal-guard', use: { ...devices['Desktop Chrome'] }, testMatch: '**/02-reveal-guard.spec.ts', dependencies: ['stack-import'] },
   ],
   webServer: target
     ? undefined

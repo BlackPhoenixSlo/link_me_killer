@@ -13,6 +13,7 @@ const { toPublicProfile } = require('./src/public-profile');
 const { resolveDestination } = require('./src/destination');
 const { visitorLocation } = require('./src/visitor-location');
 const { toWebp, TARGETS } = require('./src/image');
+const { allow, clientIp, originOf, sameOrigin } = require('./src/click-guard');
 
 const PUBLIC = path.join(__dirname, 'public');
 const MUST_REVALIDATE = 'public, max-age=0, must-revalidate';
@@ -31,12 +32,6 @@ const gateway = createGateway({
 });
 const app = new Hono();
 
-// The origin the Visitor used: Caddy passes the Host through and sets X-Forwarded-Proto.
-function originOf(c) {
-  const proto = c.req.header('x-forwarded-proto') === 'https' ? 'https' : 'http';
-  return `${proto}://${c.req.header('host')}`;
-}
-
 const pageCopy = (file) => fs.readFileSync(path.join(PUBLIC, file));
 
 app.get('/api/profiles/:file', async (c, next) => {
@@ -45,19 +40,28 @@ app.get('/api/profiles/:file', async (c, next) => {
   c.header('Cache-Control', MUST_REVALIDATE);
   const found = await gateway.getProfile(file.slice(0, -'.json'.length));
   if (!found) return c.json({ error: 'Profile not found' }, 404);
-  return c.json(toPublicProfile(found.profile, found.links, originOf(c)));
+  return c.json(toPublicProfile(found.profile, found.links, originOf(c.req.raw)));
 });
+
+// The Click guard's answers are fixed bodies, checked before the Link lookup: a refused call costs no PocketBase read.
+const underLimit = (c) => allow(clientIp(c.req.raw));
+const TOO_MANY = { error: 'Too many requests' };
 
 app.get('/r/:linkId', async (c) => {
   c.header('Cache-Control', 'no-store');
+  if (!underLimit(c)) return c.json(TOO_MANY, 429);
   const destination = resolveDestination(await gateway.getLink(c.req.param('linkId')));
   if (!destination) return c.json({ error: 'Link not found' }, 404);
   return c.redirect(destination, 302);
 });
 
 // Reveal at v1's path. `user` is accepted and ignored: a v2 Link Id is unique across all Profiles. No CORS header.
+// ASSUMPTION: the same-origin check runs before the limit, so a cross-origin call refused with 403 does not use up the window
+// of the IP it came from (rung 5). Overturned if cross-origin attempts must count against the limit too; `allow` then moves first.
 app.get('/.netlify/functions/reveal', async (c) => {
   c.header('Cache-Control', 'no-store');
+  if (!sameOrigin(c.req.raw)) return c.json({ error: 'Cross-origin request refused' }, 403);
+  if (!underLimit(c)) return c.json(TOO_MANY, 429);
   const location = visitorLocation(c.req.header()); // every request header, lower-cased names
   const realUrl = resolveDestination(await gateway.getLink(c.req.query('id')), c.req.query('trackingId'), location);
   if (!realUrl) return c.json({ error: 'Link not found' }, 404);
