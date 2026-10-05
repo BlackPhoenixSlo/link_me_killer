@@ -46,7 +46,7 @@ The production country source stays out of this ticket. Phase 2's Visitor locati
   - the import exits 0, and its lines hold no Destination; (`imported: 27 Profiles, 38 Links, 56 images, 30 warnings`, exit 0; warnings are `dropped: secrets entry … has no Link` / `unused` and one `repaired: trailing comma`, no Destination printed)
   - no `stale in v2:` record is left; (0 lines)
   - the HTTPS redirect line; (`curl -sI http://v2.ofl.ink/weiwei` → 301 https://v2.ofl.ink/weiwei, Traefik's redirect; Caddy's own :80 answers 308 on the ACME router's path)
-  - the parity spec's summary, all passing; (`PLAYWRIGHT_BASE_URL=https://v2.ofl.ink … --grep-invert 'Geo Rule'`: 154 passed, 18 skipped (the Fixture-only blocks, not served on the VPS), 1 failed, which was the leak check asking for the Fixture; fixed in 51b86eb and passing alone; a clean full rerun: pending)
+  - the parity spec's summary, all passing; (`PLAYWRIGHT_BASE_URL=https://v2.ofl.ink … --grep-invert 'Geo Rule'`: 154 passed, 18 skipped (the Fixture-only blocks, not served on the VPS), 1 failed, which was the leak check asking for the Fixture; fixed in 51b86eb and passing alone; a clean full rerun the same day: 155 passed, 18 skipped, 0 failed, exit 0)
   - the admin edit seen on the next load.
 - [x] PocketBase's admin UI answers only through the SSH tunnel. The v2 host does not route to it, and its port is not reachable from outside. (2026-10-05: `ss -ltn` shows 127.0.0.1:8090 only; from the Mac http://72.62.92.114:8090/_/ and https://v2.ofl.ink:8090/_/ both fail to connect)
 - [ ] `docker compose restart` on the VPS brings the stack back with its data and certificate. A full reboot is the Operator's call, because n8n shares the VPS.
