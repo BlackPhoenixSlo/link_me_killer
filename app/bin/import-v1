@@ -23,7 +23,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { toWebp, TARGETS } = require('../src/image');
 
-const USERNAME = /^[a-z0-9_]+$/;
+// The Username field's own rule (1791140004_sign_up_and_claim.js), so a v1 file name it would refuse is refused before any write.
+// ASSUMPTION: the import follows Phase 3's 3-to-30 length (rung 3: the field's pattern; every v1 file name has 4 to 13
+// characters). Overturned if a v1 Username outside that length must import; the field's pattern then has to change too.
+const USERNAME = /^[a-z0-9_]{3,30}$/;
 const MODES = new Set(['direct', 'escape_ig', 'deeplink']);
 const DEFAULT_MODE = 'escape_ig';
 // Absolute http(s) URL or root-relative path: the same source as links.destination's pattern (1791140002_links.js).

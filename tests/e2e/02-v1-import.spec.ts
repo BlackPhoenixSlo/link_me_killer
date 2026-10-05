@@ -425,12 +425,21 @@ test.describe('on the test stack', () => {
     expect(viaCaddy.headers()['via']).toContain('Caddy');
   });
 
-  test('the schema: fields, patterns, relations, file fields, and every rule superuser-only', async () => {
+  // Amended by ticket 25 (Phase 3), only where it opens a rule: users sign-up, log-in and own-record reads, and the profiles
+  // claim and owner reads (1791140004_sign_up_and_claim.js); the Username's length and the one-Profile-per-owner index.
+  test('the schema: fields, patterns, relations, file fields, and every rule superuser-only but the ones Phase 3 opens', async () => {
     const collection = async (name: string) => (await pb(`/api/collections/${name}`, { token })).json();
     const [users, profiles, links, events] = await Promise.all(['users', 'profiles', 'links', 'events'].map(collection));
-    const rulesClosed = (c: Record<string, unknown>) => ['listRule', 'viewRule', 'createRule', 'updateRule', 'deleteRule'].every((r) => c[r] === null);
-    expect(users.type === 'auth' && rulesClosed(users) && users.manageRule === null, 'users closed, sign-up included').toBe(true);
-    expect(rulesClosed(profiles), 'profiles closed').toBe(true);
+    const rulesClosed = (c: Record<string, unknown>, rules = ['listRule', 'viewRule', 'createRule', 'updateRule', 'deleteRule']) => rules.every((r) => c[r] === null);
+    const OWN = '@request.auth.id != "" && id = @request.auth.id';
+    const OWNER = '@request.auth.id != "" && owner = @request.auth.id';
+    expect(users.type === 'auth' && rulesClosed(users, ['updateRule', 'deleteRule']) && users.manageRule === null, 'users update and delete closed').toBe(true);
+    expect(users.authRule === '' && users.listRule === OWN && users.viewRule === OWN, 'users sign in, and read only their own record').toBe(true);
+    expect(users.createRule.includes('@request.body.verified:isset = false'), 'users sign-up sets nothing but email and password').toBe(true);
+    expect(rulesClosed(profiles, ['updateRule', 'deleteRule']), 'profiles update and delete closed').toBe(true);
+    expect(profiles.listRule === OWNER && profiles.viewRule === OWNER, 'profiles read by their owner only').toBe(true);
+    expect(profiles.createRule.startsWith('@request.auth.id != "" && @request.body.owner = @request.auth.id && '), 'profiles claimed by a signed-in Creator for itself').toBe(true);
+    expect(profiles.indexes.some((i: string) => /UNIQUE INDEX .*\(owner\) WHERE owner != ''/.test(i)), 'one Profile per owner, ownerless ones exempt').toBe(true);
     expect(rulesClosed(links), 'links closed').toBe(true);
     expect(events.type === 'base' && rulesClosed(events), 'events closed').toBe(true);
     type Field = { name: string; type: string; system?: boolean; [k: string]: unknown };
@@ -442,7 +451,7 @@ test.describe('on the test stack', () => {
     );
     expect(shape(events)).toBe('profile:relation link:relation kind:select country:text inAppBrowser:text created:autodate');
     const username = field(profiles, 'username');
-    expect(username.required && username.pattern === '^[a-z0-9_]+$').toBe(true);
+    expect(username.required && username.pattern === '^[a-z0-9_]{3,30}$' && username.min === 3 && username.max === 30).toBe(true);
     expect(profiles.indexes.some((i: string) => /UNIQUE INDEX .* \(username\)/.test(i))).toBe(true);
     const linkId = field(links, 'linkId');
     expect(linkId.required && linkId.autogeneratePattern === '[a-z0-9]{12}' && linkId.pattern === '^[a-z0-9]{12}$').toBe(true);
@@ -578,7 +587,9 @@ test.describe('on the test stack', () => {
     const password = ENV.PB_SUPERUSER_PASSWORD;
     const reset = await pb(`/api/collections/_superusers/records/${superuser.id}`, { ...json({ password, passwordConfirm: password }), method: 'PATCH', token });
     expect(reset.status).toBe(200);
-    expect((await pb('/api/collections/profiles/records', { token })).status).toBe(403); // the old token is now a guest's
+    // The old token is now a guest's. Probed on links, which stay superuser-only: since ticket 25 a guest lists profiles as an
+    // empty list (200), which the app's gateway confirms with a token refresh (app/src/gateway.js).
+    expect((await pb('/api/collections/links/records', { token })).status).toBe(403);
     await signIn();
     const res = await request.get('/api/profiles/fixture.json');
     expect(res.status()).toBe(200);

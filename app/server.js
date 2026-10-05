@@ -1,6 +1,7 @@
 'use strict';
 // The app behind Caddy (docs/spec/phase-02-vps-foundation.md, Contracts): Profile JSON, /r, Reveal, PocketBase files and the
-// Page Copy. It reads PocketBase as the superuser named in the environment and never logs a Destination: nothing below logs
+// Page Copy; from Phase 3 on also the Editor at /edit and the same-origin API proxy (docs/spec/phase-03-auth-and-editor.md).
+// It reads PocketBase as the superuser named in the environment and never logs a Destination: nothing below logs
 // a request, a record or an error's details.
 // ASSUMPTION: Page Copy answers carry v1's `/*` header, `Cache-Control: public, max-age=0, must-revalidate` (rung 3:
 // linkme_clone3/netlify.toml), so a page edit reaches the next load. Overturned if Phase 5 wants the Page Copy cached at an edge.
@@ -16,6 +17,7 @@ const { toWebp, TARGETS } = require('./src/image');
 const { allow, clientIp, originOf, sameOrigin } = require('./src/click-guard');
 
 const PUBLIC = path.join(__dirname, 'public');
+const EDITOR = path.join(__dirname, 'editor');
 const MUST_REVALIDATE = 'public, max-age=0, must-revalidate';
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 const TYPES = {
@@ -33,6 +35,22 @@ const gateway = createGateway({
 const app = new Hono();
 
 const pageCopy = (file) => fs.readFileSync(path.join(PUBLIC, file));
+
+// The file at `rel` under `root`, else `root`'s index.html, with the Page Copy's cache header.
+function staticFile(c, root, rel) {
+  let file = null;
+  try {
+    const candidate = path.resolve(root, '.' + decodeURIComponent(rel));
+    if (candidate.startsWith(root + path.sep) && fs.statSync(candidate).isFile()) file = candidate;
+  } catch {
+    // a malformed escape or a missing file falls through to the index page
+  }
+  file ||= path.join(root, 'index.html');
+  return c.body(fs.readFileSync(file), 200, {
+    'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
+    'Cache-Control': MUST_REVALIDATE,
+  });
+}
 
 app.get('/api/profiles/:file', async (c, next) => {
   const file = c.req.param('file');
@@ -135,24 +153,54 @@ app.post('/api/upload/:collection/:recordId/:field', async (c) => {
   return c.json({ url: `/api/files/${collection}/${recordId}/${replaced.filename}` });
 });
 
+// Same-origin API proxy (Phase 3 spec, Interfaces): PocketBase's users, profiles and links collection paths, records and auth
+// alike, go to PocketBase with the caller's own method, headers (its token, or none) and body, and PocketBase's answer comes
+// back as it is. The superuser's token is never added: PocketBase's collection rules decide every call.
+// ASSUMPTION: only hop-by-hop headers are dropped, plus Accept-Encoding on the way in and the encoding and length headers on
+// the way out, because Node's fetch decodes a compressed answer and the stream it hands on is no longer the one those headers
+// describe (rung 5). Overturned if a client needs PocketBase's own compression through the proxy.
+// ASSUMPTION: a path holding an encoded slash or backslash is not forwarded (404), so nothing past the collection name can
+// step into another collection on PocketBase's side (rung 4: a closed default). Overturned if a PocketBase path in these
+// collections ever needs one.
+const PROXIED = /^\/api\/collections\/(users|profiles|links)\/[^/]/;
+const DROP_IN = ['connection', 'keep-alive', 'proxy-connection', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'host', 'content-length', 'accept-encoding'];
+const DROP_OUT = ['connection', 'keep-alive', 'transfer-encoding', 'content-encoding', 'content-length'];
+app.all('/api/collections/*', async (c, next) => {
+  const { pathname, search } = new URL(c.req.url);
+  if (!PROXIED.test(pathname) || /%2f|%5c|\\/i.test(pathname)) return next();
+  const headers = new Headers(c.req.raw.headers);
+  for (const name of DROP_IN) headers.delete(name);
+  const withBody = c.req.method !== 'GET' && c.req.method !== 'HEAD';
+  const res = await fetch(process.env.PB_URL + pathname + search, {
+    method: c.req.method,
+    headers,
+    body: withBody ? c.req.raw.body : undefined,
+    duplex: 'half',
+    redirect: 'manual',
+  });
+  const out = new Headers(res.headers);
+  for (const name of DROP_OUT) out.delete(name);
+  return new Response(res.body, { status: res.status, headers: out });
+});
+
+// Every other /api/ path is not v2's: not PocketBase's other collections, `_superusers` included, nor realtime, batch,
+// settings or logs. PocketBase's own files go only through the file route above.
+// ASSUMPTION: one 404 for every /api/ path no route above answers, every method, rather than the index page the catch-all gave
+// a GET there in Phase 2 (rung 2: the ticket requires `/api/realtime` to answer 404; rung 4: a closed default). Overturned if
+// some /api/ GET must keep the index page.
+app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
+
+// The Editor (Phase 3 spec, Editor route): its files under app/editor/, and its index.html for every other /edit path, matched
+// before the Profile catch-all.
+const editor = (c) => staticFile(c, EDITOR, c.req.path.slice('/edit'.length));
+app.get('/edit', editor);
+app.get('/edit/*', editor);
+
 // v1's leak path stays dead: 404, with the landing page as its body.
 app.get('/netlify/*', (c) => c.body(pageCopy('landing.html'), 404, { 'Content-Type': TYPES['.html'], 'Cache-Control': MUST_REVALIDATE }));
 
 // Any other GET: the Page Copy file at that path, else index.html (v1's `/* -> /index.html` rule).
-app.get('*', (c) => {
-  let file = null;
-  try {
-    const candidate = path.resolve(PUBLIC, '.' + decodeURIComponent(c.req.path));
-    if (candidate.startsWith(PUBLIC + path.sep) && fs.statSync(candidate).isFile()) file = candidate;
-  } catch {
-    // a malformed escape or a missing file falls through to the index page
-  }
-  file ||= path.join(PUBLIC, 'index.html');
-  return c.body(fs.readFileSync(file), 200, {
-    'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
-    'Cache-Control': MUST_REVALIDATE,
-  });
-});
+app.get('*', (c) => staticFile(c, PUBLIC, c.req.path));
 
 // A fixed line only: an error can carry a PocketBase answer, and a record can hold a Destination.
 app.onError((err, c) => {

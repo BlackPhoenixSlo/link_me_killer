@@ -144,21 +144,30 @@ test.describe('live edits through PocketBase\'s API', () => {
     }
   });
 
-  test('anonymous calls to PocketBase are refused and no answer holds a Destination', async () => {
-    const calls: [string, string, RequestInit?][] = [
-      ['list profiles', '/api/collections/profiles/records'],
-      ['view a profile', `/api/collections/profiles/records/${profileId}`],
-      ['list links', '/api/collections/links/records'],
-      ['view a link', `/api/collections/links/records/${links.second.id}`],
-      ['list events', '/api/collections/events/records'],
+  // Amended by ticket 25 (Phase 3), only where it opens a rule: an anonymous sign-up now succeeds, and an anonymous list or
+  // view of profiles returns no record (an empty list or a refusal both pass). Every other call is still refused.
+  test('anonymous calls to PocketBase: sign-up succeeds, profiles show no record, the rest are refused, and no answer holds a Destination', async () => {
+    type Expected = 'refused' | 'no record' | 'created';
+    const calls: [string, string, Expected, RequestInit?][] = [
+      ['list profiles', '/api/collections/profiles/records', 'no record'],
+      ['view a profile', `/api/collections/profiles/records/${profileId}`, 'no record'],
+      ['list links', '/api/collections/links/records', 'refused'],
+      ['view a link', `/api/collections/links/records/${links.second.id}`, 'refused'],
+      ['list events', '/api/collections/events/records', 'refused'],
       // Nothing writes an Event in this Phase, so no events record id exists to view; a well-formed one stands in.
-      ['view an event', '/api/collections/events/records/aaaaaaaaaaaaaaa'],
-      ['create a users record', '/api/collections/users/records', send('POST', { email: `${username}@example.com`, password: 'signup-check-1', passwordConfirm: 'signup-check-1' })],
+      ['view an event', '/api/collections/events/records/aaaaaaaaaaaaaaa', 'refused'],
+      ['create a users record', '/api/collections/users/records', 'created', send('POST', { email: `${username}@example.com`, password: 'signup-check-1', passwordConfirm: 'signup-check-1' })],
     ];
-    for (const [name, path, init] of calls) {
+    for (const [name, path, expected, init] of calls) {
       const res = await pb(path, init);
-      expect(res.status, name).toBe(403);
-      expect(holdsDestination(await res.text()), `a Destination in the answer to: ${name}`).toBe(false);
+      const body = await res.text();
+      expect(holdsDestination(body), `a Destination in the answer to: ${name}`).toBe(false);
+      if (expected === 'refused') expect(res.status, name).toBe(403);
+      if (expected === 'created') expect(res.status, name).toBe(200);
+      if (expected === 'no record') {
+        const empty = res.status === 200 && Array.isArray(JSON.parse(body).items) && JSON.parse(body).items.length === 0;
+        expect(empty || [403, 404].includes(res.status), name).toBe(true);
+      }
     }
   });
 

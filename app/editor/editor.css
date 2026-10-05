@@ -1,0 +1,116 @@
+/* The Editor's look, copied from the link.me Template's "Edit Profile" screen (link.me/profile/edit.html and its
+   build/globals-*.css `.dark` palette): a dark top bar with the screen's title, cards on a zinc background, pill buttons.
+   Phone-first: one column, at most 480px wide. Hand-written; the Template's own CSS and scripts are not used. */
+:root {
+    --background: #18181b;
+    --foreground: #fafafa;
+    --card: #18181b;
+    --sidebar: #09090b;
+    --border: #27272a;
+    --input: #27272a;
+    --muted-foreground: #a1a1aa;
+    --primary: #6d86ff;
+    --destructive: #ec008c;
+    --success: #00c853;
+    --topbar-height: 55px;
+    color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--background);
+    color: var(--foreground);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--topbar-height);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    background: var(--sidebar);
+    border-bottom: 1px solid var(--border);
+    z-index: 10;
+}
+
+.topbar-title { font-size: 14px; letter-spacing: 0.025em; }
+
+.screen {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: calc(var(--topbar-height) + 20px) 16px 32px;
+}
+
+.card {
+    padding: 20px 16px;
+    border: 0.5px solid var(--border);
+    border-radius: 15px;
+    background: #ffffff0d;
+}
+
+h1 { font-size: 18px; font-weight: 500; margin: 0 0 6px; }
+
+.hint { color: var(--muted-foreground); font-size: 13px; margin: 0 0 16px; }
+
+form { display: flex; flex-direction: column; gap: 14px; }
+
+label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; }
+
+input {
+    height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--input);
+    border-radius: 12px;
+    background: var(--sidebar);
+    color: var(--foreground);
+    font-size: 16px; /* 16px keeps iOS from zooming in on focus */
+}
+
+input:focus { outline: 2px solid #6d86ff99; outline-offset: 0; }
+
+.address { display: flex; align-items: center; gap: 0; }
+.address span { color: var(--muted-foreground); font-size: 13px; padding-right: 2px; }
+.address input { flex: 1; min-width: 0; }
+
+button {
+    height: 44px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--foreground);
+    color: var(--background);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+button.secondary { background: #ffffff1a; color: var(--foreground); }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.actions { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+
+.message { min-height: 1.4em; margin: 0; font-size: 13px; }
+.message.error { color: var(--destructive); }
+.message.ok { color: var(--success); }
+
+.switch { margin: 16px 0 0; text-align: center; color: var(--muted-foreground); font-size: 13px; }
+.switch a { color: var(--primary); text-decoration: none; }
+
+.bio-link {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    border: 1px solid #ffffff1a;
+    border-radius: 999px;
+    background: #ffffff1a;
+    overflow: hidden;
+    font-size: 13px;
+}
+.bio-link .label { padding: 0 12px; color: #fafafa99; border-right: 1px solid #ffffff1a; white-space: nowrap; }
+.bio-link .value { padding: 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

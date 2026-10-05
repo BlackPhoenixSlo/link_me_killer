@@ -1,0 +1,29 @@
+#!/usr/bin/env node
+'use strict';
+// reserved-usernames
+// The reserved Usernames (docs/spec/phase-03-auth-and-editor.md, Username rules): `api`, `edit`, `images`, `internal` and
+// `netlify`, plus every other top-level path segment of 3 or more characters that the app routes, read from the app itself:
+// the paths its routes register in server.js, and the top-level entries of the Page Copy that its catch-all serves. Only
+// Username-shaped segments count; a shorter one (`r`) or one with a dot (`.netlify`, `landing.html`) fails the Username
+// pattern anyway.
+// Prints the list as JSON. tests/e2e/03-auth-and-editor.spec.ts claims every name on it over HTTP, so a new top-level route
+// with no clause in the migrations fails there (a later Phase adds the clause in an additive migration).
+// ASSUMPTION: the route table is read from server.js's source (`app.<method>('<path>'`), not by loading the app, which would
+// start the server and need PocketBase (rung 5). Overturned if routes are ever registered another way; this reader then has
+// to follow them.
+const fs = require('node:fs');
+const path = require('node:path');
+
+const APP = path.join(__dirname, '..');
+const USERNAME = /^[a-z0-9_]{3,30}$/;
+const FIXED = ['api', 'edit', 'images', 'internal', 'netlify'];
+
+function reservedUsernames() {
+  const source = fs.readFileSync(path.join(APP, 'server.js'), 'utf8');
+  const routes = [...source.matchAll(/\bapp\.(?:get|post|put|patch|delete|all|on|use)\(\s*['"`](\/[^'"`]*)['"`]/g)].map((m) => m[1]);
+  const segments = routes.map((r) => r.split('/')[1]);
+  const pageCopy = fs.readdirSync(path.join(APP, 'public'));
+  return [...new Set([...FIXED, ...segments, ...pageCopy].filter((s) => USERNAME.test(s || '')))].sort();
+}
+
+console.log(JSON.stringify(reservedUsernames()));
