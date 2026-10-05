@@ -186,9 +186,14 @@ export async function forgotPassword(page: Page, email: string) {
 // the machine.
 export async function phoneContext(
   browser: Browser,
-  { origin, userAgent, headers }: { origin?: string; userAgent?: string; headers?: Record<string, string> } = {},
+  { origin, userAgent, headers, timezoneId }: { origin?: string; userAgent?: string; headers?: Record<string, string>; timezoneId?: string } = {},
 ) {
-  const context = await browser.newContext({ viewport: PHONE, ...(userAgent ? { userAgent } : {}), ...(headers ? { extraHTTPHeaders: headers } : {}) });
+  const context = await browser.newContext({
+    viewport: PHONE,
+    ...(userAgent ? { userAgent } : {}),
+    ...(headers ? { extraHTTPHeaders: headers } : {}),
+    ...(timezoneId ? { timezoneId } : {}),
+  });
   if (origin) await context.route((url) => url.host !== new URL(origin).host, (route) => route.abort('blockedbyclient'));
   return context;
 }

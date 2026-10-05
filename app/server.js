@@ -1,7 +1,7 @@
 'use strict';
 // The app behind Caddy (docs/spec/phase-02-vps-foundation.md, Contracts): Profile JSON, /r, Reveal, PocketBase files and the
 // Page Copy; from Phase 3 on also the Editor at /edit and the same-origin API proxy (docs/spec/phase-03-auth-and-editor.md);
-// from Phase 4 on the Page View Ping, and `/r` records a Click (docs/spec/phase-04-stats.md).
+// from Phase 4 on the Page View Ping, and `/r` and Reveal record a Click (docs/spec/phase-04-stats.md).
 // It reads PocketBase as the superuser named in the environment and never logs a Destination: nothing below logs
 // a request, a record or an error's details.
 // ASSUMPTION: Page Copy answers carry v1's `/*` header, `Cache-Control: public, max-age=0, must-revalidate` (rung 3:
@@ -91,6 +91,8 @@ app.post('/v/:username', async (c) => {
 });
 
 // Reveal at v1's path. `user` is accepted and ignored: a v2 Link Id is unique across all Profiles. No CORS header.
+// Each Destination it returns records a Click first (Phase 4 spec, Interfaces); a refusal, 429 or 404 records nothing. For any
+// one Click either Reveal or `/r` hands out the Destination, never both, so no Click counts twice.
 // ASSUMPTION: the same-origin check runs before the limit, so a cross-origin call refused with 403 does not use up the window
 // of the IP it came from (rung 5). Overturned if cross-origin attempts must count against the limit too; `allow` then moves first.
 app.get('/.netlify/functions/reveal', async (c) => {
@@ -98,8 +100,10 @@ app.get('/.netlify/functions/reveal', async (c) => {
   if (!sameOrigin(c.req.raw)) return c.json({ error: 'Cross-origin request refused' }, 403);
   if (!underLimit(c)) return c.json(TOO_MANY, 429);
   const location = visitorLocation(c.req.header()); // every request header, lower-cased names
-  const realUrl = resolveDestination(await gateway.getLink(c.req.query('id')), c.req.query('trackingId'), location);
+  const link = await gateway.getLink(c.req.query('id'));
+  const realUrl = resolveDestination(link, c.req.query('trackingId'), location);
   if (!realUrl) return c.json({ error: 'Link not found' }, 404);
+  await events.recordClick(c.req.raw, link.profile, link.id);
   return c.json({ realUrl });
 });
 

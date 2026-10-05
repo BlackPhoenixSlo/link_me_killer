@@ -4,7 +4,7 @@ Spec: docs/spec/phase-04-stats.md
 Covers: user stories 3, 4, 5, 7, 12, 14, 18, 21
 Seams: the running v2 stack at Playwright's baseURL through `./check.sh`. Visitors in fresh browser contexts with the country set by 33's helper: `/r/*` intercepted as in 33, Reveal answers awaited with `waitForResponse`, and every navigation to a host other than baseURL fulfilled with the stub page. The `request` fixture for unknown-Id `/r` and Reveal calls and for a foreign-`Origin` Reveal. The Stats Creator in the browser, with `dailyStats` requests watched and the browser clock moved through `page.clock`. A `dailyStats` read with the Stats Creator's token
 Blocked by: 33: A Page View and a Click through /r reach the Creator's Stats page, 22: Reveal and /r answer only v2's own origin within a per-client limit
-Status: claimed 20261005T084628Z 2026-10-05T12:47:00Z
+Status: done
 
 **What to build:** Every Destination a Visitor is handed counts once, whichever endpoint hands it out, and the Creator narrows Stats until it reads "Clicks on this Link, per day, from this country" (the plan's Phase 4 DONE).
 
@@ -20,16 +20,20 @@ ASSUMPTION: the spec's test 4 waits on the production country source (37, Cloudf
 
 ASSUMPTION (the spec's, evidence blocked): a Creator session issued at real time stays valid in a browser whose clock is one day ahead. Overturned by a shorter token lifetime. The test then signs in again after moving the clock.
 
-- [ ] The spec's test 2 passes. Between two reads, an `SI` Visitor clicks the Adult Link and passes the Age Gate, an `SI` Visitor clicks the Direct Mode Link, and a `DE` Visitor clicks the Adult Link and passes the Age Gate. Stats → 7D then shows:
+- [x] The spec's test 2 passes. Between two reads, an `SI` Visitor clicks the Adult Link and passes the Age Gate, an `SI` Visitor clicks the Direct Mode Link, and a `DE` Visitor clicks the Adult Link and passes the Age Gate. Stats → 7D then shows:
   - no filter: Page Views +3, Clicks +3;
   - Link = Adult Link: Clicks +2, Page Views still +3;
   - Link = Adult Link and Country = `SI`: Page Views +2, and Clicks +1 on the card and in today's daily row. The Links table lists only the Adult Link (+1), and the Countries table only `SI` (Page Views +2, Clicks +1).
-- [ ] Every CTR shown in test 2 equals Clicks ÷ Page Views as displayed.
-- [ ] Read with the Stats Creator's token, `dailyStats` holds exactly one row for (Direct Mode Link, `SI`, today), and its Clicks rose by 1 across test 2.
-- [ ] The spec's test 3 passes: a Direct Mode Link Shortcut lands on the stub through `/r`, and an Adult Link Shortcut lands on the stub through Reveal after the Age Gate if it shows. `GET /r/{unknown Id}` and a Reveal for an unknown Link Id answer 404, and a foreign-`Origin` Reveal for the Adult Link is refused. Clicks rise by exactly 2, one on each Link's row.
-- [ ] A Visitor with no country header loads the Stats Profile. The Countries table shows "Unknown" +1, and `US` gains nothing.
-- [ ] The spec's test 5 passes. Today, 7D and 30D show 1, 7 and 30 UTC days ending today, and each tab's `dailyStats` request names today, today − 6 or today − 29 in its filter. With the browser clock moved one day ahead and the server's clock untouched:
+- [x] Every CTR shown in test 2 equals Clicks ÷ Page Views as displayed.
+- [x] Read with the Stats Creator's token, `dailyStats` holds exactly one row for (Direct Mode Link, `SI`, today), and its Clicks rose by 1 across test 2.
+- [x] The spec's test 3 passes: a Direct Mode Link Shortcut lands on the stub through `/r`, and an Adult Link Shortcut lands on the stub through Reveal after the Age Gate if it shows. `GET /r/{unknown Id}` and a Reveal for an unknown Link Id answer 404, and a foreign-`Origin` Reveal for the Adult Link is refused. Clicks rise by exactly 2, one on each Link's row.
+- [x] A Visitor with no country header loads the Stats Profile. The Countries table shows "Unknown" +1, and `US` gains nothing.
+- [x] The spec's test 5 passes. Today, 7D and 30D show 1, 7 and 30 UTC days ending today, and each tab's `dailyStats` request names today, today − 6 or today − 29 in its filter. With the browser clock moved one day ahead and the server's clock untouched:
   - Today reads "No Page Views or Clicks in this range yet.";
   - 7D and 30D each list the real today's date, with the Page Views and Clicks the Today tab showed before the move.
-- [ ] No Stats test requests the events collection.
-- [ ] `./check.sh` passes.
+- [x] No Stats test requests the events collection.
+- [x] `./check.sh` passes.
+
+## Landed
+
+Run 20261005T084628Z. Reviewer: REQUEST CHANGES round 1 (4 findings: duplicate .range CSS rule, filterControl id/htmlFor labelling against house precedent, UTC-day proof weak (fixed with a Pacific/Kiritimati context and a fixed clock), test 2's SI dependency uncommented), fix round 1, APPROVE round 2. Coordinator cold `./check.sh --reporter=line`: exit 0, `334 passed (3.5m)`, `1 skipped`.

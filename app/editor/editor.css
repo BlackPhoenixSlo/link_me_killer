@@ -171,10 +171,14 @@ input[readonly] { color: var(--muted-foreground); }
 .creator-nav a { padding: 6px 14px; border-radius: 999px; background: #ffffff1a; color: var(--foreground); font-size: 13px; text-decoration: none; }
 .creator-nav a[aria-current="page"] { background: var(--foreground); color: var(--background); font-weight: 600; }
 
-/* Stats (ticket 33), after the Template's analytics page: the range with its date span, three cards, then the tables. */
-.range { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
+/* Stats (tickets 33 and 34), after the Template's analytics page: the range tabs and filters with the date span, three cards, then the tables. */
+.range { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 6px 0 14px; }
 .range .hint { margin: 0; }
-.range-tab { padding: 4px 12px; border-radius: 999px; background: var(--foreground); color: var(--background); font-size: 13px; font-weight: 600; }
+.range-tab { height: auto; padding: 4px 12px; background: #ffffff1a; color: var(--foreground); font-size: 13px; }
+.range-tab[aria-pressed="true"] { background: var(--foreground); color: var(--background); }
+.filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 14px; }
+.filter { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.filter select { width: 100%; min-width: 0; }
 .stat-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .stat-card { padding: 12px 10px; border: 0.5px solid var(--border); border-radius: 12px; background: var(--sidebar); }
 .stat-card h3 { margin: 0 0 6px; color: var(--muted-foreground); font-size: 12px; font-weight: 500; }

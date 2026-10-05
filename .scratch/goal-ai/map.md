@@ -61,7 +61,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 45 tickets (45 added 20
 | 31 | [Verification and reset emails reach the local mail catcher and their links work](issues/31-mail-links.md) | phase-03 | 24, 22, 27, 28, 29, 30 | done |
 | 32 | [Sign-up runs on the VPS with the Operator's mail and nightly backups](issues/32-vps-sign-up-live.md) | phase-03 | 31, 23 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 33 | [A Page View and a Click through /r reach the Creator's Stats page](issues/33-page-view-and-click-reach-stats.md) | phase-04 | 01, 10, 18, 20, 27, 29 | done |
-| 34 | [Reveals and Link Shortcuts count as Clicks and Stats read per Link per day per country](issues/34-reveals-and-shortcuts-count.md) | phase-04 | 33, 22 | claimed 20261005T084628Z |
+| 34 | [Reveals and Link Shortcuts count as Clicks and Stats read per Link per day per country](issues/34-reveals-and-shortcuts-count.md) | phase-04 | 33, 22 | done |
 | 35 | [A Tracking Code stays with the Profile it arrived on](issues/35-tracking-code-stays-with-profile.md) | phase-04 | 33, 01, 10, 18 | ready-for-agent |
 | 36 | [Only the owner reads a Profile's Stats and recording never blocks a Click or a deletion](issues/36-owner-only-stats-and-safe-recording.md) | phase-04 | 34, 35, 22, 31 | ready-for-agent |
 | 37 | [Events carry each Visitor's real country from the production country source](issues/37-production-country-source.md) | phase-04 | 36, 42 | ready-for-agent |
