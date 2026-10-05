@@ -8,8 +8,16 @@
 # ASSUMPTION: Caddy obtains certificates by TLS-ALPN-01 through the passthrough, since port 80 is Traefik's redirect
 # (rung 5: Caddy tries both ACME challenges; HTTP-01 cannot reach it). Overturned if the first https request to the v2
 # host gets no certificate: Caddy's log then shows both challenges failing and the Cutover stops at step 1.
+# On n8n_default another project's container already answers to the name `app` (observed: fastt-app, alias app), so Caddy
+# reaches our app under the alias oflink-app on the stack's own network, through the Caddyfile's APP_UPSTREAM (default app:3000).
 services:
+  app:
+    networks:
+      default:
+        aliases: [oflink-app]
   caddy:
+    environment:
+      APP_UPSTREAM: oflink-app:3000
     networks:
       default: {}
       traefik: {}
