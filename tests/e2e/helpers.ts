@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type APIResponse, type Browser, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type APIResponse, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -82,10 +82,15 @@ async function verifyByMail(request: APIRequestContext, email: string) {
 
 // Ticket 29's Operator steps for the hand-over (spec, Testing Decisions, Operator steps). A superuser creates an ownerless Profile
 // with a display name and one Link, the way the v1 Import writes one (app/bin/import-v1, write()), and later sets its owner.
+// Ticket 35's Username reuse creates its throwaway Profiles here too, with an Adult Link that has Tracking on.
 // ASSUMPTION: the throwaway Profile carries no v1Key, so it is born in v2 as far as the stack-import project's stale lines go
 // (rung 1: app/bin/import-v1 names every v1-keyed Profile its input lacks; rung 5). Overturned if the hand-over must be proved on
 // a v1-keyed Profile; the test then deletes it before the stack-import project runs, as 02-image-upload does.
-export async function createOwnerlessProfile(username: string, displayName: string, link: { title: string; destination: string }) {
+export async function createOwnerlessProfile(
+  username: string,
+  displayName: string,
+  link: { title: string; destination: string; isAdult?: boolean; tracking?: boolean },
+) {
   const token = await superuserToken();
   const profile = await asSuperuser(token, '/api/collections/profiles/records', json('POST', { username, displayName, mode: 'escape_ig' }));
   expect(profile.status).toBe(200);
@@ -181,18 +186,21 @@ export async function forgotPassword(page: Page, email: string) {
   await page.getByRole('button', { name: 'Send reset link' }).click();
 }
 
-// A fresh context at 390×844 with no Editor session, with an optional User-Agent and extra request headers (a Visitor's
-// `CF-IPCountry`). Given the stack's origin, it reaches only that host: every request elsewhere is aborted, so nothing leaves
-// the machine.
+// A fresh context at 390×844 with no Editor session, with an optional User-Agent, extra request headers (a Visitor's
+// `CF-IPCountry`) and starting storage (a Visitor's leftover `localStorage`). Given the stack's origin, it reaches only that
+// host: every request elsewhere is aborted, so nothing leaves the machine.
 export async function phoneContext(
   browser: Browser,
-  { origin, userAgent, headers, timezoneId }: { origin?: string; userAgent?: string; headers?: Record<string, string>; timezoneId?: string } = {},
+  { origin, userAgent, headers, timezoneId, storageState }: {
+    origin?: string; userAgent?: string; headers?: Record<string, string>; timezoneId?: string; storageState?: BrowserContextOptions['storageState'];
+  } = {},
 ) {
   const context = await browser.newContext({
     viewport: PHONE,
     ...(userAgent ? { userAgent } : {}),
     ...(headers ? { extraHTTPHeaders: headers } : {}),
     ...(timezoneId ? { timezoneId } : {}),
+    ...(storageState ? { storageState } : {}),
   });
   if (origin) await context.route((url) => url.host !== new URL(origin).host, (route) => route.abort('blockedbyclient'));
   return context;

@@ -168,7 +168,8 @@ test.describe('Profile JSON', () => {
     expect(res.headers()['cache-control']).toBe(MUST_REVALIDATE);
     const text = await res.text();
     const json: Served = JSON.parse(text);
-    expect(Object.keys(json.profile).sort()).toEqual(['avatarUrl', 'bio', 'displayName', 'mode', 'username', 'verified']);
+    // `id` is the Profile's record id, added by Phase 4 as its per-Profile Tracking Code key (Phase 2 spec, Contracts).
+    expect(Object.keys(json.profile).sort()).toEqual(['avatarUrl', 'bio', 'displayName', 'id', 'mode', 'username', 'verified']);
     expect(json.profile.username).toBe('fixture');
     expect(json.links.map((l) => l.title)).toEqual(fixture.links.map((l) => l.title)); // in order
     for (const [i, link] of json.links.entries()) {

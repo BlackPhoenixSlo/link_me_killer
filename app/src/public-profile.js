@@ -9,6 +9,8 @@ function toPublicProfile(profile, links, origin) {
   const profileMode = MODES.has(profile.mode) ? profile.mode : 'escape_ig';
   return {
     profile: {
+      // The record id: the per-Profile Tracking Code key (docs/spec/phase-04-stats.md, Contracts, Tracking Code storage).
+      id: profile.id,
       username: profile.username,
       displayName: profile.displayName,
       bio: profile.bio,

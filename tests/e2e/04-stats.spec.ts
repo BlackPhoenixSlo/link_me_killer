@@ -1,7 +1,9 @@
 import { devices, expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { join } from 'node:path';
 import { CREATORS } from '../stats-seed';
-import { asSuperuser, ENV, heading, INSTAGRAM_UA, logIn, only, onLocalStack, phoneContext, proxy, superuserToken } from './helpers';
+import {
+  asSuperuser, createOwnerlessProfile, ENV, heading, INSTAGRAM_UA, logIn, only, onLocalStack, operator, phoneContext, proxy, recordIds, superuserToken,
+} from './helpers';
 
 // Phase 4 (docs/spec/phase-04-stats.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL. Every Visitor
 // is a fresh browser context with its country sent as `CF-IPCountry`; `/r` is sent on for real without following its redirect
@@ -12,6 +14,7 @@ import { asSuperuser, ENV, heading, INSTAGRAM_UA, logIn, only, onLocalStack, pho
 // Ticket 33: test 1, test 6, and the Page View Ping's unknown Username and GET.
 // Ticket 34: tests 2, 3 and 5, and test 4's first Visitor; a Destination handed out by Reveal is a fresh navigation, fulfilled
 // with the same stub page (throughReveal, below).
+// Ticket 35: the Profile JSON's `profile.id` and test 8.
 // A run that straddles 00:00 UTC can fail a daily-row assertion; rerun it.
 const SCREENSHOT = join(__dirname, '..', '..', '.scratch', 'goal_ai', 'shots', '04-stats.png');
 const today = () => new Date().toISOString().slice(0, 10); // the UTC day
@@ -61,7 +64,8 @@ const linkCard = (visitor: Page, title: string) => visitor.locator('.link-card',
 const followThroughR = (visitor: Page, title: string, destination: string) => throughR(visitor, destination, () => linkCard(visitor, title).click());
 
 // `act` makes the page Reveal a Link. The spec waits for Reveal's 200, and the page's onward navigation off `origin`, a fresh
-// navigation to the Destination Reveal handed out, is fulfilled with the stub page and must be at `destination`.
+// navigation to the Destination Reveal handed out, is fulfilled with the stub page and must be at `destination`. Returns the
+// Tracking Code the Reveal request carried, or null for none.
 async function throughReveal(visitor: Page, origin: string, destination: string, act: () => Promise<unknown>) {
   await visitor.route((url) => url.origin !== origin, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: STUB }));
   const reveal = visitor.waitForResponse((res) => new URL(res.url()).pathname === '/.netlify/functions/reveal');
@@ -69,14 +73,22 @@ async function throughReveal(visitor: Page, origin: string, destination: string,
   expect((await reveal).status(), `Reveal for ${destination}`).toBe(200);
   await landedOnStub(visitor);
   expect(visitor.url()).toBe(destination);
+  return new URL((await reveal).url()).searchParams.get('trackingId');
 }
-// The Visitor clicks the Adult Link titled `title` and passes the Age Gate with "Continue (18+)", which Reveals it.
+// The Visitor clicks the Adult Link titled `title` and passes the Age Gate with "Continue (18+)", which Reveals it. Returns the
+// Tracking Code that Reveal request carried, or null for none.
 const passGateToStub = (visitor: Page, origin: string, title: string, destination: string) =>
   throughReveal(visitor, origin, destination, async () => {
     await linkCard(visitor, title).click();
     await expect(visitor.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
     await visitor.getByRole('button', { name: 'Continue (18+)' }).click();
   });
+
+// The Link Id of the Link titled `title`, as the public Profile JSON serves it.
+async function servedLinkId(request: APIRequestContext, username: string, title: string) {
+  const served: { links: { id: string; title: string }[] } = await (await request.get(`/api/profiles/${username}.json`)).json();
+  return served.links.find((l) => l.title === title)?.id;
+}
 
 // Every request the page sends to the events collection: a Stats page must send none (spec, Testing Decisions).
 function watchEvents(page: Page) {
@@ -313,24 +325,23 @@ test('3. Link Shortcuts count through /r and through Reveal; an unknown Link Id 
   const origin = new URL(baseURL!).origin;
   const { page, events } = await statsCreatorOnStats(browser, origin);
   const before = await readStats(page);
-  const served: { links: { id: string; title: string }[] } = await (await request.get(`/api/profiles/${stats.username}.json`)).json();
-  const linkId = (title: string) => served.links.find((l) => l.title === title)?.id;
-  const shortcut = (title: string) => `/${stats.username}?link=${linkId(title)}`;
+  const directId = await servedLinkId(request, stats.username, stats.direct.title);
+  const adultId = await servedLinkId(request, stats.username, stats.adult.title);
 
   // A non-Adult Link's Shortcut follows its `/r` url. An Adult Link's Shortcut Reveals on load; a Link Shortcut has no Age Gate
   // (app/public/script.js), so none shows to pass. Each load is committed only: the page leaves it for the Destination at once.
   const viaR = await (await phoneContext(browser, { origin })).newPage();
-  await throughR(viaR, stats.direct.destination, () => viaR.goto(shortcut(stats.direct.title), { waitUntil: 'commit' }));
+  await throughR(viaR, stats.direct.destination, () => viaR.goto(`/${stats.username}?link=${directId}`, { waitUntil: 'commit' }));
   await viaR.context().close();
   const viaReveal = await (await phoneContext(browser, { origin })).newPage();
-  await throughReveal(viaReveal, origin, stats.adult.destination, () => viaReveal.goto(shortcut(stats.adult.title), { waitUntil: 'commit' }));
+  await throughReveal(viaReveal, origin, stats.adult.destination, () => viaReveal.goto(`/${stats.username}?link=${adultId}`, { waitUntil: 'commit' }));
   await viaReveal.context().close();
 
   // Left out: an unknown Link Id on `/r` and on Reveal, and a Reveal for the Adult Link from another origin.
   const unknownId = '000000000000';
   expect((await request.get(`/r/${unknownId}`, { maxRedirects: 0 })).status(), '/r for an unknown Link Id').toBe(404);
   expect((await request.get(`/.netlify/functions/reveal?id=${unknownId}&user=${stats.username}`)).status(), 'Reveal for an unknown Link Id').toBe(404);
-  const foreign = await request.get(`/.netlify/functions/reveal?id=${linkId(stats.adult.title)}&user=${stats.username}`, { headers: { Origin: 'https://elsewhere.test' } });
+  const foreign = await request.get(`/.netlify/functions/reveal?id=${adultId}&user=${stats.username}`, { headers: { Origin: 'https://elsewhere.test' } });
   expect(foreign.status(), 'a foreign-Origin Reveal for the Adult Link').toBe(403);
 
   await page.reload();
@@ -435,6 +446,75 @@ test('6. each load records its In-App Browser, and an Event holds nothing but it
     expect({ kind: event.kind, inAppBrowser: event.inAppBrowser }, userAgent).toEqual({ kind: 'page_view', inAppBrowser });
   }
   expect((await eventFields()).sort()).toEqual(['country', 'created', 'id', 'inAppBrowser', 'kind', 'link', 'profile']);
+});
+
+test('the Stats Profile\'s and the Other Profile\'s JSON each carry profile.id, their record id, and no private key', async ({ request }) => {
+  for (const { username } of [stats, other]) {
+    const res = await request.get(`/api/profiles/${username}.json`);
+    expect(res.status(), username).toBe(200);
+    const keys: string[] = [];
+    const json = JSON.parse(await res.text(), (key, value) => { keys.push(key); return value; });
+    expect(json.profile.id, `${username}: profile.id`).toBe((await recordIds(username)).profileId);
+    for (const key of ['destination', 'geo', 'owner', 'v1Key']) expect(keys.includes(key), `${username}: ${key}`).toBe(false);
+  }
+});
+
+// v1's global Tracking Code key as a Visitor's browser may still hold it at Cutover, here with 999 (spec, Contracts, Tracking
+// Code storage): the starting storage of a Visitor's context on the stack's origin.
+const v1GlobalCode = (origin: string) => ({ cookies: [], origins: [{ origin, localStorage: [{ name: 'linkme_tracking_id', value: '999' }] }] });
+// The Operator deletes the Profile at `username`; its Links and Events go with it (cascade).
+const deleteProfile = async (username: string) =>
+  expect(await operator('DELETE', `/api/collections/profiles/records/${(await recordIds(username)).profileId}`), `delete ${username}`).toBe(204);
+
+test('8. a Tracking Code stays with the Profile it arrived on: never v1\'s global code, another Profile\'s, or a reused Username\'s', async ({ browser, baseURL, request }) => {
+  const origin = new URL(baseURL!).origin;
+  const visitor = await phoneContext(browser, { origin, storageState: v1GlobalCode(origin) });
+  // The code arrives on the Other Profile, and that Profile's Adult Link carries it.
+  const onOther = await visitor.newPage();
+  await onOther.goto(`/${other.username}/123`);
+  const toOther = new URL('c123', other.adult.destination).href;
+  expect(await passGateToStub(onOther, origin, other.adult.title, toOther), 'the Other Profile\'s Reveal').toBe('123');
+  // On the Stats Profile neither the Other Profile's 123 nor v1's 999 is sent, by a tap or by a Link Shortcut, and v1's global
+  // key still holds 999: the code that arrived on the Other Profile did not rewrite it.
+  const onStats = await visitor.newPage();
+  await onStats.goto(`/${stats.username}`);
+  expect(await onStats.evaluate(() => localStorage.getItem('linkme_tracking_id')), 'v1\'s global key').toBe('999');
+  expect(await passGateToStub(onStats, origin, stats.adult.title, stats.adult.destination), 'the Stats Profile\'s Reveal after a tap').toBeNull();
+  const viaShortcut = await visitor.newPage();
+  const adultId = await servedLinkId(request, stats.username, stats.adult.title);
+  const shortcut = () => viaShortcut.goto(`/${stats.username}?link=${adultId}`, { waitUntil: 'commit' });
+  expect(await throughReveal(viaShortcut, origin, stats.adult.destination, shortcut), 'the Stats Profile\'s Reveal from a Link Shortcut').toBeNull();
+  await visitor.close();
+
+  // In Instagram the Escape Overlay shows on open and the address bar is the escape target (Phase 1): on the Other Profile it
+  // keeps the code that arrived there, and on the Stats Profile it carries neither that code nor v1's.
+  const inApp = await phoneContext(browser, { origin, userAgent: INSTAGRAM_UA, storageState: v1GlobalCode(origin) });
+  const igOther = await inApp.newPage();
+  await igOther.goto(`/${other.username}/123`);
+  await expect(igOther.locator('#igOverlay')).toBeVisible();
+  expect(new URL(igOther.url()).pathname, 'the Other Profile\'s escape target').toBe(`/${other.username}/123`);
+  const igStats = await inApp.newPage();
+  await igStats.goto(`/${stats.username}`);
+  await expect(igStats.locator('#igOverlay')).toBeVisible();
+  expect(new URL(igStats.url()).pathname, 'the Stats Profile\'s escape target').toBe(`/${stats.username}`);
+  await inApp.close();
+
+  // Username reuse: a code that arrived on a deleted Profile does not reach the new Profile under the same Username. The first
+  // Profile's own Reveal shows the code did arrive.
+  const reused = `reuse_${Date.now().toString(36)}`;
+  const adult = { title: 'Reuse Adult', destination: 'https://reuse-adult.test/', isAdult: true, tracking: true };
+  await createOwnerlessProfile(reused, 'Reuse Profile', adult);
+  const third = await phoneContext(browser, { origin });
+  const onFirst = await third.newPage();
+  await onFirst.goto(`/${reused}/777`);
+  expect(await passGateToStub(onFirst, origin, adult.title, new URL('c777', adult.destination).href), 'the first Profile\'s Reveal').toBe('777');
+  await deleteProfile(reused);
+  await createOwnerlessProfile(reused, 'Reuse Profile', adult);
+  const onSecond = await third.newPage();
+  await onSecond.goto(`/${reused}`);
+  expect(await passGateToStub(onSecond, origin, adult.title, adult.destination), 'the new Profile\'s Reveal').toBeNull();
+  await third.close();
+  await deleteProfile(reused);
 });
 
 test('the Page View Ping: an unknown Username is 404 and records nothing, and a GET under /v/ reaches the Profile route', async ({ request }) => {

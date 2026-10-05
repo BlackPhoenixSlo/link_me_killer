@@ -38,10 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!username || username === 'index.html') username = 'juliafilippo_'; // Default
 
-    // Store the ID if present
+    // A Tracking Code in the path is stored once the Profile JSON names its Profile (below)
     if (trackingId) {
         console.log(`Captured tracking ID: ${trackingId}`);
-        localStorage.setItem('linkme_tracking_id', trackingId);
 
         // Clean URL: Remove the tracking ID from the address bar, outside In-App Browsers only,
         // so the app's own "Open in browser" menu item carries the Tracking Code
@@ -62,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(data => {
             renderProfile(data.profile);
             currentProfile = data.profile;
+            if (trackingId) localStorage.setItem(trackingKey(), trackingId);
             linksData = data.links;
             renderLinks(linksData);
 
@@ -197,9 +197,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return MODES.includes(link.mode) ? link.mode : defaultMode();
     }
 
-    // Stored Tracking Code: the path code the page keeps, read by Reveal and by the escape target
+    // Tracking Code key (Phase 4): one per Profile, by the record id the Profile JSON carries, so a code that arrived on one
+    // Profile never reaches another, even one that later holds its Username. v1's global `linkme_tracking_id` is never read
+    // or written: at Cutover it may hold another Creator's code.
+    function trackingKey() {
+        return `linkme_tracking_id:${currentProfile.id}`;
+    }
+
+    // Stored Tracking Code: the path code this Profile keeps, read by Reveal and by the escape target
     function storedTrackingCode() {
-        return localStorage.getItem('linkme_tracking_id');
+        return localStorage.getItem(trackingKey());
     }
 
     // Reveal URL: Link Id, Username, and a Tracking Code when the Link has tracking on
