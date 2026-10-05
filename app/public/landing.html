@@ -1,89 +1,389 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profile Not Found</title>
-    <link rel="stylesheet" href="/style.css">
-    <style>
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            text-align: center;
-        }
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ofl.ink: one link for your bio</title>
+  <meta name="description" content="Put all your Links on one page, help Visitors get out of the Instagram and TikTok browser, and see what they tap.">
+  <link rel="stylesheet" href="/edit/tokens.css">
+  <style>
+    /* The landing page's own look (docs/spec/editor-redesign.md section 6). Colours, sizes and timings come from
+       /edit/tokens.css; this block holds only the landing's l- layout and components. No script, no external asset. */
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--e-color-bg);
+      color: var(--e-color-text);
+      font-family: var(--e-font-sans);
+      font-size: var(--e-text-md);
+      line-height: var(--e-leading-md);
+      -webkit-font-smoothing: antialiased;
+      --l-shot-w: 260px; /* phone screenshot width; the desktop shot sets its own */
+    }
+    h1, h2, h3, p, ol, ul { margin: 0; }
+    ol, ul { padding: 0; list-style: none; }
+    img { display: block; max-width: 100%; }
+    :focus-visible { outline: var(--e-focus-width) solid var(--e-color-focus); outline-offset: var(--e-focus-offset); }
 
-        .container {
-            max-width: 400px;
-            padding: 20px;
-        }
+    .l-wrap {
+      --l-pad: var(--e-space-4);
+      max-width: 1120px;
+      margin-inline: auto;
+      padding-left: max(var(--l-pad), env(safe-area-inset-left));
+      padding-right: max(var(--l-pad), env(safe-area-inset-right));
+    }
 
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
+    /* Header */
+    .l-header { background: var(--e-color-surface); border-bottom: 1px solid var(--e-color-border); }
+    .l-header__inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--e-space-4);
+      min-height: var(--e-topbar-h);
+    }
+    .l-brand {
+      font-size: var(--e-text-lg);
+      line-height: var(--e-leading-lg);
+      font-weight: var(--e-weight-bold);
+      letter-spacing: -0.01em;
+      color: var(--e-color-text);
+    }
 
-        p {
-            margin-bottom: 2rem;
-            color: #aaa;
-        }
-    </style>
+    /* Buttons */
+    .l-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: var(--e-control-h);
+      padding: 0 var(--e-space-6);
+      border: 1px solid transparent;
+      border-radius: var(--e-radius-pill);
+      font-size: var(--e-text-md);
+      line-height: var(--e-leading-md);
+      font-weight: var(--e-weight-semibold);
+      text-align: center;
+      text-decoration: none;
+      transition: background-color var(--e-dur-fast) var(--e-ease), transform var(--e-dur-fast) var(--e-ease);
+    }
+    .l-btn:active { transform: scale(0.98); }
+    .l-btn--primary { background: var(--e-color-primary); color: var(--e-color-text-inverse); }
+    .l-btn--primary:hover { background: var(--e-color-primary-hover); }
+    .l-btn--ghost { min-height: var(--e-tap); padding: 0 var(--e-space-4); color: var(--e-color-primary); }
+    .l-btn--ghost:hover { background: var(--e-color-primary-soft); }
+
+    /* Type */
+    .l-h2 {
+      font-size: var(--e-text-2xl);
+      line-height: var(--e-leading-2xl);
+      font-weight: var(--e-weight-bold);
+      letter-spacing: -0.01em;
+      text-wrap: balance;
+    }
+    .l-h3 { font-size: var(--e-text-lg); line-height: var(--e-leading-lg); font-weight: var(--e-weight-semibold); }
+    .l-lead { margin-top: var(--e-space-3); font-size: var(--e-text-lg); line-height: var(--e-leading-lg); color: var(--e-color-text-muted); }
+    .l-text { margin-top: var(--e-space-1); color: var(--e-color-text-muted); }
+
+    /* Sections */
+    .l-section { padding-block: var(--e-space-12); }
+    .l-section--surface { background: var(--e-color-surface); border-block: 1px solid var(--e-color-border); }
+    .l-section__head { max-width: var(--e-content-max); }
+
+    /* Screenshot slots: a fixed-ratio box in a light frame, so the page does not jump while an image loads. */
+    .l-shot {
+      width: calc(var(--l-shot-w) + 2 * var(--e-space-2) + 2px); /* image + padding + 1px border each side */
+      max-width: 100%;
+      margin-inline: auto;
+      padding: var(--e-space-2);
+      background: var(--e-color-surface);
+      border: 1px solid var(--e-color-border);
+      border-radius: calc(var(--e-radius-xl) + var(--e-space-2));
+      box-shadow: var(--e-shadow-md);
+    }
+    .l-shot__img {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 390 / 844;
+      object-fit: cover;
+      border-radius: var(--e-radius-xl);
+      background: var(--e-color-surface-muted);
+      color: var(--e-color-text-muted);
+      font-size: var(--e-text-sm);
+      line-height: var(--e-leading-sm);
+    }
+    .l-shot--desktop {
+      --l-shot-w: 880px;
+      border-radius: calc(var(--e-radius-lg) + var(--e-space-2));
+    }
+    .l-shot--desktop .l-shot__img { aspect-ratio: 1280 / 800; border-radius: var(--e-radius-lg); }
+
+    /* 1. Hero */
+    .l-hero { padding-block: var(--e-space-8) var(--e-space-12); }
+    .l-hero__inner { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--e-space-10); }
+    .l-hero__text { max-width: var(--e-content-max); }
+    .l-hero__title {
+      font-size: var(--e-text-4xl);
+      line-height: var(--e-leading-4xl);
+      font-weight: var(--e-weight-bold);
+      letter-spacing: -0.02em;
+      text-wrap: balance;
+    }
+    .l-hero .l-lead { margin-top: var(--e-space-4); }
+    .l-actions { display: flex; flex-wrap: wrap; gap: var(--e-space-3); margin-top: var(--e-space-6); }
+    .l-actions .l-btn--primary { flex: 1 1 auto; }
+    .l-note {
+      margin-top: var(--e-space-6);
+      padding: var(--e-space-3) var(--e-space-4);
+      border-radius: var(--e-radius-md);
+      background: var(--e-color-surface-muted);
+      color: var(--e-color-text-muted);
+      font-size: var(--e-text-sm);
+      line-height: var(--e-leading-sm);
+    }
+
+    /* 2. How it works */
+    .l-steps__list { counter-reset: l-step; display: grid; gap: var(--e-space-6); margin-top: var(--e-space-8); }
+    .l-steps__item {
+      counter-increment: l-step;
+      display: grid;
+      grid-template-columns: var(--e-space-10) minmax(0, 1fr);
+      column-gap: var(--e-space-4);
+      align-content: start;
+      align-items: start;
+    }
+    .l-steps__item::before {
+      content: counter(l-step);
+      content: counter(l-step) / "";
+      grid-row: span 2;
+      display: grid;
+      place-items: center;
+      width: var(--e-space-10);
+      height: var(--e-space-10);
+      border-radius: 50%;
+      background: var(--e-color-primary);
+      color: var(--e-color-text-inverse);
+      font-size: var(--e-text-lg);
+      font-weight: var(--e-weight-bold);
+    }
+    .l-steps__item .l-h3 { padding-top: var(--e-space-2); }
+
+    /* 3. Modes and Reveal */
+    .l-modes__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--e-space-10); margin-top: var(--e-space-8); }
+    .l-modes__cards { display: grid; gap: var(--e-space-4); }
+    .l-card {
+      padding: var(--e-space-4);
+      background: var(--e-color-surface);
+      border: 1px solid var(--e-color-border);
+      border-radius: var(--e-radius-lg);
+      box-shadow: var(--e-shadow-sm);
+    }
+    .l-card .l-text { margin-top: var(--e-space-2); }
+    .l-tag {
+      display: inline-block;
+      margin-left: var(--e-space-2);
+      padding: 2px var(--e-space-2);
+      border-radius: var(--e-radius-pill);
+      background: var(--e-color-primary-soft);
+      color: var(--e-color-primary);
+      font-size: var(--e-text-xs);
+      line-height: var(--e-leading-xs);
+      font-weight: var(--e-weight-semibold);
+      vertical-align: 2px;
+    }
+
+    /* 4. Stats preview */
+    .l-stats__inner { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--e-space-10); }
+    .l-checks {
+      --l-icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12 2a10 10 0 1 1 0 20a10 10 0 0 1 0-20zM10.75 16.25 17.25 9.75 15.85 8.35 10.75 13.45 8.15 10.85 6.75 12.25z'/%3E%3C/svg%3E");
+      display: grid;
+      gap: var(--e-space-3);
+      margin-top: var(--e-space-6);
+    }
+    .l-checks li { display: flex; align-items: flex-start; gap: var(--e-space-3); font-weight: var(--e-weight-medium); }
+    .l-checks li::before {
+      content: "";
+      flex: none;
+      width: 24px;
+      height: 24px;
+      background: var(--e-color-success);
+      -webkit-mask: var(--l-icon-check) center / contain no-repeat;
+      mask: var(--l-icon-check) center / contain no-repeat;
+    }
+
+    /* 6. Final call to action */
+    .l-cta__inner { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; }
+    .l-cta .l-shot--desktop { display: none; margin-bottom: var(--e-space-12); }
+    .l-cta .l-btn { margin-top: var(--e-space-6); }
+
+    /* 7. Footer */
+    .l-footer {
+      background: var(--e-color-surface);
+      border-top: 1px solid var(--e-color-border);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .l-footer__inner { padding-block: var(--e-space-6); }
+
+    @media (min-width: 768px) {
+      .l-wrap { --l-pad: var(--e-space-8); }
+      .l-section { padding-block: var(--e-space-16); }
+      .l-h2 { font-size: var(--e-text-3xl); line-height: var(--e-leading-3xl); }
+      .l-actions .l-btn--primary { flex: 0 0 auto; }
+      .l-card { padding: var(--e-space-6); }
+
+      .l-steps__list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--e-space-8); }
+      .l-steps__item { grid-template-columns: minmax(0, 1fr); }
+      .l-steps__item::before { grid-row: auto; margin-bottom: var(--e-space-2); }
+      .l-steps__item .l-h3 { padding-top: 0; }
+
+      .l-modes__cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .l-card--wide { grid-column: 1 / -1; }
+
+      .l-stats__inner { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--e-space-12); }
+      .l-stats__inner .l-shot { grid-column: 1; grid-row: 1; }
+
+      .l-cta .l-shot--desktop { display: block; }
+    }
+
+    @media (min-width: 1024px) {
+      body { --l-shot-w: 300px; }
+      .l-wrap { --l-pad: var(--e-space-10); }
+
+      .l-hero { padding-block: var(--e-space-16); }
+      .l-hero__inner { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--e-space-16); }
+      .l-hero__title { font-size: var(--e-text-5xl); line-height: var(--e-leading-5xl); }
+
+      .l-modes__body { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--e-space-12); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .l-btn:active { transform: none; }
+    }
+  </style>
 </head>
-
 <body>
-    <div class="container">
-        <h1>Profile Not Found</h1>
-        <p>Make your own page.</p>
-        <a href="/edit/signup" class="link-card"
-            style="display: block; text-decoration: none; color: white;">
-            <div class="link-content">
-                <span class="link-title">Create Your Own Page</span>
-                <span class="link-subtitle">Powered by n8n & Git & Netlify</span>
-            </div>
-
-        </a>
-
-        <a href="https://www.youtube.com/watch?v=_vneaf1ch0I" target="_blank"
-            style="display: block; margin-top: 15px; color: #888; font-size: 0.9rem; text-decoration: none;">
-            Watch Tutorial on YouTube <i class="fas fa-external-link-alt"
-                style="font-size: 0.8em; margin-left: 5px;"></i>
-        </a>
-
-        <div class="video-wrapper" style="margin-top: 2rem; width: 100%;">
-            <video class="lazy-video" width="100%" controls playsinline data-src="example.webm"
-                style="border-radius: 8px; background: #000;">
-                <p>Your browser does not support the video tag.</p>
-            </video>
-        </div>
+  <header class="l-header" data-test="landing-header">
+    <div class="l-wrap l-header__inner">
+      <span class="l-brand">ofl.ink</span>
+      <a class="l-btn l-btn--ghost" href="/edit/login">Log in</a>
     </div>
+  </header>
 
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            var lazyVideos = [].slice.call(document.querySelectorAll("video.lazy-video"));
+  <main>
+    <section class="l-hero" aria-labelledby="l-hero-title" data-test="landing-hero">
+      <div class="l-wrap l-hero__inner">
+        <div class="l-hero__text">
+          <h1 class="l-hero__title" id="l-hero-title">One link for your bio</h1>
+          <p class="l-lead">Put all your Links on one page. Help Visitors get out of the Instagram and TikTok browser, so your Links open in Safari or Chrome. See what they tap.</p>
+          <div class="l-actions">
+            <a class="l-btn l-btn--primary" href="/edit/signup">Create your page</a>
+          </div>
+          <p class="l-note">Followed a link here? That page doesn't exist. Check the address in the bio you came from.</p>
+        </div>
+        <div class="l-shot">
+          <img class="l-shot__img" src="/images/landing/editor-links-mobile.webp" width="780" height="1688"
+            alt="The Editor on a phone: the Bio Link with Copy, Add link and three Links."
+            data-test="landing-shot-links">
+        </div>
+      </div>
+    </section>
 
-            if ("IntersectionObserver" in window) {
-                var lazyVideoObserver = new IntersectionObserver(function (entries, observer) {
-                    entries.forEach(function (video) {
-                        if (video.isIntersecting) {
-                            if (video.target.dataset.src) {
-                                video.target.src = video.target.dataset.src;
-                            }
-                            video.target.load();
-                            video.target.classList.remove("lazy-video");
-                            lazyVideoObserver.unobserve(video.target);
-                        }
-                    });
-                });
+    <section class="l-section l-section--surface l-steps" aria-labelledby="l-steps-title" data-test="landing-steps">
+      <div class="l-wrap">
+        <h2 class="l-h2" id="l-steps-title">Live in three steps</h2>
+        <ol class="l-steps__list" role="list">
+          <li class="l-steps__item">
+            <h3 class="l-h3">Claim your Username</h3>
+            <p class="l-text">Pick a name. Your page lives at your own address.</p>
+          </li>
+          <li class="l-steps__item">
+            <h3 class="l-h3">Add your Links</h3>
+            <p class="l-text">A title, where it leads, a picture. Reorder them any time from your phone.</p>
+          </li>
+          <li class="l-steps__item">
+            <h3 class="l-h3">Paste it in your bio</h3>
+            <p class="l-text">Copy your address into Instagram or TikTok. Visitors tap it to see all your Links.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
 
-                lazyVideos.forEach(function (lazyVideo) {
-                    lazyVideoObserver.observe(lazyVideo);
-                });
-            }
-        });
-    </script>
+    <section class="l-section l-modes" aria-labelledby="l-modes-title" data-test="landing-modes">
+      <div class="l-wrap">
+        <div class="l-section__head">
+          <h2 class="l-h2" id="l-modes-title">Taps that land where you want</h2>
+          <p class="l-lead">Instagram and TikTok open links in their own browser. You choose how your Links get out.</p>
+        </div>
+        <div class="l-modes__body">
+          <ul class="l-modes__cards" role="list">
+            <li class="l-card">
+              <h3 class="l-h3">Direct <span class="l-tag">Mode</span></h3>
+              <p class="l-text">Opens the Link straight away, in whatever browser the Visitor is in.</p>
+            </li>
+            <li class="l-card">
+              <h3 class="l-h3">Escape <span class="l-tag">Mode</span></h3>
+              <p class="l-text">Tries to move Visitors out of the Instagram or TikTok browser into Safari or Chrome. If the phone won't switch by itself, your page shows how.</p>
+            </li>
+            <li class="l-card">
+              <h3 class="l-h3">Deeplink <span class="l-tag">Mode</span></h3>
+              <p class="l-text">Inside Instagram or TikTok, a tap goes straight to Safari or Chrome with no how-to screen. On Android it can open the Link's own app.</p>
+            </li>
+            <li class="l-card">
+              <h3 class="l-h3">18+ Age Gate</h3>
+              <p class="l-text">Turn it on for a Link and Visitors who tap it on your page confirm they are 18 or older first. It works with every Mode.</p>
+            </li>
+            <li class="l-card l-card--wide">
+              <h3 class="l-h3">Your Destinations stay hidden</h3>
+              <p class="l-text">Your page never contains the addresses your Links lead to. Each one is handed out only when a Visitor opens that Link, which keeps casual bots from collecting them.</p>
+            </li>
+          </ul>
+          <div class="l-shot">
+            <img class="l-shot__img" src="/images/landing/profile-mobile.webp" width="780" height="1688" loading="lazy"
+              alt="A Creator's page on a phone: photo, name and Link cards."
+              data-test="landing-shot-profile">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="l-section l-section--surface l-stats" aria-labelledby="l-stats-title" data-test="landing-stats">
+      <div class="l-wrap l-stats__inner">
+        <div>
+          <h2 class="l-h2" id="l-stats-title">See what works</h2>
+          <p class="l-lead">Stats show how often your page is opened and which Links Visitors tap.</p>
+          <ul class="l-checks" role="list">
+            <li>Page Views, Clicks and CTR</li>
+            <li>Per Link, per day and per country</li>
+            <li>Today, 7 days or 30 days</li>
+          </ul>
+        </div>
+        <div class="l-shot">
+          <img class="l-shot__img" src="/images/landing/editor-stats-mobile.webp" width="780" height="1688" loading="lazy"
+            alt="The Stats screen on a phone: Page Views, Clicks and CTR for 7 days."
+            data-test="landing-shot-stats">
+        </div>
+      </div>
+    </section>
+
+    <section class="l-section l-cta" aria-labelledby="l-cta-title" data-test="landing-cta-final">
+      <div class="l-wrap l-cta__inner">
+        <div class="l-shot l-shot--desktop">
+          <img class="l-shot__img" src="/images/landing/editor-desktop.webp" width="1280" height="800" loading="lazy"
+            alt="The Editor on a laptop."
+            data-test="landing-shot-desktop">
+        </div>
+        <h2 class="l-h2" id="l-cta-title">Ready when you are</h2>
+        <p class="l-lead">All you need is an email address.</p>
+        <a class="l-btn l-btn--primary" href="/edit/signup">Start your page</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="l-footer" data-test="landing-footer">
+    <div class="l-wrap l-footer__inner">
+      <span class="l-brand">ofl.ink</span>
+    </div>
+  </footer>
 </body>
-
 </html>
