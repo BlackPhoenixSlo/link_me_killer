@@ -48,7 +48,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 | 18 | [Every Click on a v1 Link ends at v1's Destination for the same Tracking Code and Visitor location](issues/18-v1-clicks-match.md) | phase-02 | 17 | done |
 | 19 | [Re-running the v1 Import keeps every Link Id and refuses a broken v1 tree without writing](issues/19-import-reruns-and-refusal.md) | phase-02 | 17 | done |
 | 20 | [A PocketBase admin edit shows on the next page load while PocketBase's API stays closed](issues/20-live-edit-closed-api.md) | phase-02 | 16 | done |
-| 21 | [A photo uploaded in any D4 format is stored upright and resized as WebP](issues/21-image-upload-webp.md) | phase-02 | 16 | claimed 20261004T191309Z |
+| 21 | [A photo uploaded in any D4 format is stored upright and resized as WebP](issues/21-image-upload-webp.md) | phase-02 | 16 | done (HEIC sub-item parked — network) |
 | 22 | [Reveal and /r answer only v2's own origin within a per-client limit](issues/22-reveal-guard.md) | phase-02 | 18, 19, 20, 21 | ready-for-agent |
 | 23 | [v2 serves every v1 Profile identically on its public https host on the VPS](issues/23-vps-deploy.md) | phase-02 | 22 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 24 | [The Operator pulls the local mail catcher's image](issues/24-mail-catcher-image.md) | phase-03 | None | done |

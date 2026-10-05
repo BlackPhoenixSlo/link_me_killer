@@ -12,6 +12,7 @@ const { createGateway } = require('./src/gateway');
 const { toPublicProfile } = require('./src/public-profile');
 const { resolveDestination } = require('./src/destination');
 const { visitorLocation } = require('./src/visitor-location');
+const { toWebp, TARGETS } = require('./src/image');
 
 const PUBLIC = path.join(__dirname, 'public');
 const MUST_REVALIDATE = 'public, max-age=0, must-revalidate';
@@ -76,6 +77,58 @@ app.get('/api/files/:collection/:recordId/:filename', async (c) => {
     'Content-Type': res.headers.get('content-type') || 'application/octet-stream',
     'Cache-Control': IMMUTABLE,
   });
+});
+
+// Upload (D4): the caller's token is checked by viewing the target record through PocketBase before anything is decoded;
+// the WebP replaces the file with the same token. The app never decides ownership. Neither the body nor the token is logged.
+// ASSUMPTION: the checks run in this order: no token (401), a target not in the list (404), a declared length over the cap
+// (413), PocketBase's view with the caller's token (its own status passed through), then the body read under the same cap
+// (413), the multipart `file` (a missing one is 415, as not a decodable image) and the decode (415). Rung 5: the cheap checks
+// that need no PocketBase call come first, and no byte is decoded before PocketBase has answered. Overturned if a bad target
+// must answer 401 to a caller with no token.
+const UPLOAD_CAP = 20 * 1024 * 1024; // the 20 MB input cap (spec, Upload (D4) ASSUMPTION), whole multipart body
+
+// The request body, or null once it passes `cap` bytes; the rest is left unread.
+async function readCapped(stream, cap) {
+  if (!stream) return Buffer.alloc(0);
+  const parts = [];
+  let size = 0;
+  for await (const part of stream) {
+    size += part.length;
+    if (size > cap) return null;
+    parts.push(part);
+  }
+  return Buffer.concat(parts);
+}
+
+app.post('/api/upload/:collection/:recordId/:field', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const { collection, recordId, field } = c.req.param();
+  const token = c.req.header('authorization');
+  if (!token) return c.json({ error: 'Token required' }, 401);
+  const maxSide = TARGETS[`${collection}/${field}`];
+  if (!maxSide) return c.json({ error: 'Not found' }, 404);
+  if (Number(c.req.header('content-length')) > UPLOAD_CAP) return c.json({ error: 'Over 20 MB' }, 413);
+  const viewed = await gateway.viewRecord(collection, recordId, token);
+  if (viewed !== 200) return c.json({ error: 'Refused by PocketBase' }, viewed);
+  const body = await readCapped(c.req.raw.body, UPLOAD_CAP);
+  if (!body) return c.json({ error: 'Over 20 MB' }, 413);
+  let file;
+  try {
+    file = (await new Response(body, { headers: { 'content-type': c.req.header('content-type') || '' } }).formData()).get('file');
+  } catch {
+    file = null;
+  }
+  if (!file || typeof file === 'string') return c.json({ error: 'Not a decodable image' }, 415);
+  let webp;
+  try {
+    webp = await toWebp(Buffer.from(await file.arrayBuffer()), maxSide);
+  } catch {
+    return c.json({ error: 'Not a decodable image' }, 415);
+  }
+  const replaced = await gateway.replaceFile(collection, recordId, field, webp, token);
+  if (replaced.status !== 200) return c.json({ error: 'Refused by PocketBase' }, replaced.status);
+  return c.json({ url: `/api/files/${collection}/${recordId}/${replaced.filename}` });
 });
 
 // v1's leak path stays dead: 404, with the landing page as its body.

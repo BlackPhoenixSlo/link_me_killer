@@ -66,6 +66,30 @@ function createGateway({ url, email, password }) {
       }
       return res;
     },
+    // The upload's two calls carry the caller's token, never the superuser's, so PocketBase alone decides ownership.
+    // Each answers PocketBase's own status; nothing of a record (a Link holds its Destination) leaves here but a file name.
+    async viewRecord(collection, recordId, callerToken) {
+      if (!RECORD_ID.test(recordId || '')) return 404;
+      const res = await fetch(`${url}/api/collections/${collection}/records/${recordId}?fields=id`, { headers: { Authorization: callerToken } });
+      await res.body?.cancel();
+      return res.status;
+    },
+    // Replaces the record's file field with the WebP bytes; PocketBase deletes the old file. { status, filename }.
+    async replaceFile(collection, recordId, field, webp, callerToken) {
+      if (!RECORD_ID.test(recordId || '')) return { status: 404 };
+      const form = new FormData();
+      form.append(field, new Blob([webp], { type: 'image/webp' }), `${field}.webp`);
+      const res = await fetch(`${url}/api/collections/${collection}/records/${recordId}?fields=${field}`, {
+        method: 'PATCH',
+        headers: { Authorization: callerToken },
+        body: form,
+      });
+      if (!res.ok) {
+        await res.body?.cancel();
+        return { status: res.status };
+      }
+      return { status: res.status, filename: (await res.json())[field] };
+    },
   };
 }
 

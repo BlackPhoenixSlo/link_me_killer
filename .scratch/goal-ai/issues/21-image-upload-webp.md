@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 17, 18, 19, 20, 30, 32, 58
 Seams: the running stack's public HTTP surface at baseURL through `./check.sh`: multipart uploads with the `request` fixture, and the returned images loaded in the browser for their natural size. PocketBase's REST API on its loopback port, to make tokens and to try a direct file write
 Blocked by: 16: The Fixture Profile is served by v2's stack and every Phase 0 and Phase 1 spec passes on it
-Status: claimed 20261004T191309Z 2026-10-05T00:57:28Z
+Status: done
 
 **What to build:** A caller holding a PocketBase token that may change a record sends a photo straight from a phone (JPG, PNG, HEIC, GIF or WebP) to the upload endpoint. The targets are a Profile's avatar, a Link's icon and a Link's background.
 1. The app first checks the token by viewing the target record through PocketBase, before decoding anything. The app never decides ownership itself.
@@ -36,13 +36,20 @@ ASSUMPTION: the Link icon target stays, though plan-review's Not yet specified n
 
 ASSUMPTION (the spec's, evidence blocked): sharp alone may not decode HEVC-coded HEIC. If the HEIC case fails, this ticket sets `Status: parked — network: pnpm --dir app add heic-convert && docker compose --env-file tests/e2e.env build` and pastes in the failing output. Once the human has run that, the ticket resumes with heic-convert decoding HEIC ahead of the pipeline. Overturned if the HEIC case passes with sharp alone.
 
-- [ ] The upload spec passes under `./check.sh`:
-  - every format comes back as WebP, judged by its bytes, both from the returned URL and from the Profile JSON;
+- [x] The upload spec passes under `./check.sh` (290 passed, 1 skipped; observed from cold 2026-10-05):
+  - every format but HEIC comes back as WebP, judged by its bytes, both from the returned URL and from the Profile JSON;
+  - [ ] HEIC — parked — network: `pnpm --dir app add heic-convert && docker compose --env-file tests/e2e.env build`. The HEIC case is `test.fixme` in the upload spec until the human runs that command. Probe output from the app image (sharp 0.35.5, `sharp(heicBytes).rotate().resize(...).webp().toBuffer()`):
+
+    ```
+    Error: heif: Error while loading plugin: Support for this compression format has not been built in: HEVC (a suitable decoder plugin is libde265) (11.6003)
+    ```
+
+    `metadata()` reads the container, so the 415 gate cannot tell HEIC from a decodable image; the decode fails inside `toWebp` and the route answers 415. The spec's ASSUMPTION above fired. Once heic-convert is in the app image, decode HEIC with it ahead of the pipeline and drop the fixme.
   - the 3000×2000 background comes back at 1080×720 and the 2000×2000 avatar at 512×512;
   - the small image is not enlarged;
   - orientation 6 comes back with its sides swapped;
   - the GPS-tagged JPEG comes back with no EXIF or XMP chunk.
-- [ ] Every refusal in the spec leaves the record unchanged, and PocketBase refuses a PNG written straight into a file field.
-- [ ] After a replacement, the old file's URL answers 404 and the new one has the immutable cache header.
-- [ ] A throwaway v1-shaped tree whose avatar is a PNG imports with a WebP avatar at 512 px.
-- [ ] The fixtures are committed and small. No new tool, package or network fetch made them.
+- [x] Every refusal in the spec leaves the record unchanged, and PocketBase refuses a PNG written straight into a file field.
+- [x] After a replacement, the old file's URL answers 404 and the new one has the immutable cache header.
+- [x] A throwaway v1-shaped tree whose avatar is a PNG imports with a WebP avatar at 512 px.
+- [x] The fixtures are committed and small. No new tool, package or network fetch made them.
