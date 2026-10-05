@@ -57,7 +57,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 | 27 | [A Creator changes their Profile in the Editor and its default Mode reaches the page](issues/27-editor-profile-and-mode.md) | phase-03 | 26 | done |
 | 28 | [A Creator manages their Links in the Editor and a refused save keeps what they typed](issues/28-editor-links.md) | phase-03 | 26 | done |
 | 29 | [Log-in lands a Creator where they left off and a handed-over Profile opens in the Editor](issues/29-log-in-lands-where-left.md) | phase-03 | 26 | done |
-| 30 | [Only a Profile's owner and the Operator can read or change it through PocketBase's API](issues/30-owner-rules-over-http.md) | phase-03 | 26 | ready-for-agent |
+| 30 | [Only a Profile's owner and the Operator can read or change it through PocketBase's API](issues/30-owner-rules-over-http.md) | phase-03 | 26 | claimed 20261005T084628Z |
 | 31 | [Verification and reset emails reach the local mail catcher and their links work](issues/31-mail-links.md) | phase-03 | 24, 22, 27, 28, 29, 30 | ready-for-agent |
 | 32 | [Sign-up runs on the VPS with the Operator's mail and nightly backups](issues/32-vps-sign-up-live.md) | phase-03 | 31, 23 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 33 | [A Page View and a Click through /r reach the Creator's Stats page](issues/33-page-view-and-click-reach-stats.md) | phase-04 | 01, 10, 18, 20, 27, 29 | ready-for-agent |

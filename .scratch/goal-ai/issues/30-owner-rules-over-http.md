@@ -4,7 +4,7 @@ Spec: docs/spec/phase-03-auth-and-editor.md
 Covers: user stories 42, 43, 44, 45, 46, 47, 48, 49, 55, 56
 Seams: the `request` fixture at the public origin, calling the proxy exactly as the Editor does, as two signed-in Creators and an anonymous caller; Phase 2's upload endpoint at the same origin. Operator steps at PocketBase's loopback port, as a superuser, arrange state and stand in for the admin UI, which calls the same API
 Blocked by: 26: A verified Creator goes through Onboarding to a live Profile whose Links act like imported ones
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T10:06:51Z
 
 **What to build:** Proof that one Creator's Profile, Links and images are theirs alone, and that a Visitor gets a Destination only through Reveal or the redirect. The rules offer no screen on which a non-owner could even try, so HTTP is the highest seam that reaches them. 25 and 26 wrote the auth-and-ownership rules. Wherever a probe here gets through, this ticket closes it in the migration, to the spec's Schema and with no new rule. After every refused write, the owner reads the record back unchanged.
 
