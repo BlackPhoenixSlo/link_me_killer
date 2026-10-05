@@ -77,7 +77,14 @@ export function drawProfileStep(profile) {
     profileForm(profile, { button: 'Continue', done: () => onboard() }));
 }
 
-// "Quick Settings" on the Editor's home: the Profile's default Mode, saved on its own button (saveProfile).
+// Pop out timing (popOutTiming, docs/spec/phase-01-link-modes-and-escape.md): when an Escape or Deeplink default leaves the
+// Instagram or TikTok browser. Empty reads as "On tap", as the page reads it.
+const POP_OUT_HELP = {
+  open: 'At open pops the visitor out to Safari or Chrome as soon as the page opens in Instagram or TikTok.',
+  tap: 'On tap shows the "Open in System Browser" screen first and pops out when the visitor taps.',
+};
+
+// "Quick Settings" on the Editor's home: the Profile's default Mode and Pop out timing, saved on one button (saveProfile).
 // ASSUMPTION: the default Mode has its own form and Save button in "Quick Settings" rather than saving when the select
 // changes (rung 2: the spec's Contracts, "Each form saves on its own Save button, with no autosave"). Overturned if the
 // Operator wants the Template's toggle that acts at once.
@@ -85,14 +92,23 @@ export function drawProfileStep(profile) {
 export function quickSettings(profile) {
   const mode = select('mode', Object.entries(MODE_NAMES), profile.mode || 'escape_ig');
   const modeSaved = message();
+  const popOut = select('popOutTiming', [['open', 'At open'], ['tap', 'On tap']], profile.popOutTiming || 'tap');
+  popOut.id = 'pop-out';
+  const popOutHelp = el('p', { className: 'hint', id: 'pop-out-help', 'aria-live': 'polite' }, POP_OUT_HELP[popOut.value]);
+  popOut.addEventListener('change', () => {
+    popOutHelp.textContent = POP_OUT_HELP[popOut.value];
+    modeSaved.textContent = '';
+  });
   const settings = el('form', {
     onsubmit: async (event) => {
       event.preventDefault();
-      if (await saveProfile(profile, settings, modeSaved, { mode: mode.value })) say(modeSaved, 'Default Mode saved.', 'ok');
+      if (await saveProfile(profile, settings, modeSaved, { mode: mode.value, popOutTiming: popOut.value })) say(modeSaved, 'Default Mode saved.', 'ok');
     },
   },
   el('label', {}, 'Default Mode', mode),
   el('p', { className: 'hint' }, 'Escape helps visitors switch to Safari/Chrome from Instagram or TikTok. Every Link left on “Profile default” follows this Mode.'),
+  el('label', { htmlFor: 'pop-out' }, 'Pop out', popOut),
+  popOutHelp,
   modeSaved,
   el('button', { type: 'submit', className: 'secondary' }, 'Save default Mode'));
   return settings;

@@ -17,6 +17,8 @@ function toPublicProfile(profile, links, origin) {
       avatarUrl: fileUrl('profiles', profile, 'avatar'),
       verified: profile.verified,
       mode: profileMode,
+      // Pop out timing for an Escape or Deeplink default: `open` pops out as soon as the page opens; anything else is `tap`.
+      popOutTiming: profile.popOutTiming === 'open' ? 'open' : 'tap',
     },
     links: links.map((link) => {
       const mode = MODES.has(link.mode) ? link.mode : profileMode;

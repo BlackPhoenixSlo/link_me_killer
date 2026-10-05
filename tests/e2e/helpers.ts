@@ -274,7 +274,7 @@ export async function verifiedCreator(request: APIRequestContext, links: [string
 }
 
 export type Served = {
-  profile: { displayName: string; bio: string; avatarUrl: string; mode: string };
+  profile: { displayName: string; bio: string; avatarUrl: string; mode: string; popOutTiming: string };
   links: { title: string; mode: string; icon: string; backgroundImage: string; isAdult: boolean; tracking: boolean; default_tracknumber?: string }[];
 };
 export const servedProfile = async (request: APIRequestContext, username: string): Promise<Served> => {
@@ -339,6 +339,15 @@ export async function reach(request: APIRequestContext, stage: string) {
 
 // "Featured Links": one row per Link, its title the row's only text; Edit is the title, Up, Down and Delete are named buttons.
 export const featured = (page: Page) => page.getByRole('list', { name: 'Links' }).getByRole('listitem');
+
+// The Link form's "Tracking and Geo Rule" disclosure (OnlyFans tracking, Default Tracking Code, Geo Rule): closed on a Link with
+// none of them set, open on one with a value. Opened here unless it is open already, since a click on an open one closes it.
+export const trackingAndGeo = (page: Page) => page.locator('details').filter({ has: page.locator('summary', { hasText: 'Tracking and Geo Rule' }) });
+export async function openTracking(page: Page) {
+  const more = trackingAndGeo(page);
+  if ((await more.getAttribute('open')) === null) await more.locator('summary').click();
+  await expect(more).toHaveAttribute('open');
+}
 
 // The next load of the public Profile, in a fresh context: its Link titles in the order Visitors see them.
 export async function visitorSees(browser: Browser, origin: string, username: string, titles: string[]) {

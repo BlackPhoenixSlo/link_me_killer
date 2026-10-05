@@ -176,7 +176,9 @@ test.describe('Profile JSON', () => {
     const text = await res.text();
     const json: Served = JSON.parse(text);
     // `id` is the Profile's record id, added by Phase 4 as its per-Profile Tracking Code key (Phase 2 spec, Contracts).
-    expect(Object.keys(json.profile).sort()).toEqual(['avatarUrl', 'bio', 'displayName', 'id', 'mode', 'username', 'verified']);
+    // `popOutTiming` is the Pop out timing, `tap` unless the Profile chose `open` (Phase 1 spec, Schema).
+    expect(Object.keys(json.profile).sort()).toEqual(['avatarUrl', 'bio', 'displayName', 'id', 'mode', 'popOutTiming', 'username', 'verified']);
+    expect(json.profile.popOutTiming).toBe('tap'); // the Fixture, like every imported Profile, has none stored
     expect(json.profile.username).toBe('fixture');
     expect(json.links.map((l) => l.title)).toEqual(fixture.links.map((l) => l.title)); // in order
     for (const [i, link] of json.links.entries()) {

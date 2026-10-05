@@ -55,15 +55,18 @@
         </div>
         <div class="overlay-content"
             style="background-color: transparent; border: none; box-shadow: none; color: white; margin-top: 20px;">
+            <!-- v1's icon and copy (linkme_clone3/index.html), shown as v1 shows them to Instagram; other apps read "This app" -->
+            <i id="igIcon" class="fab fa-instagram" style="display: none; font-size: 4rem; margin-bottom: 20px; color: #E1306C;"></i>
             <h2 style="font-size: 1.5rem; margin-bottom: 15px; font-weight: bold;">Open in System Browser</h2>
-            <a id="igOpenBtn" class="continue-btn" href="#">Open in browser</a>
-            <a id="igAltBtn" class="continue-btn" href="#" hidden>Try another way</a>
-            <p style="font-size: 1.1rem; color: #ddd; margin: 20px 0; line-height: 1.6;">
-                This app restricts some links. Please tap the <strong>&middot;&middot;&middot;</strong> menu in the top
+            <p style="font-size: 1.1rem; color: #ddd; margin-bottom: 20px; line-height: 1.6;">
+                <span id="igAppName">This app</span> restricts some links. Please tap the <strong>&middot;&middot;&middot;</strong> menu in the top
                 right corner and select <strong>"Open in External Browser"</strong> or <strong>"Open in System
                     Browser"</strong> to view this page.
             </p>
-            <p id="igTarget" style="color: #ddd; margin-bottom: 10px; word-break: break-all;"></p>
+            <!-- v2's ways out, below v1's copy -->
+            <a id="igOpenBtn" class="continue-btn" href="#">Open in browser</a>
+            <a id="igAltBtn" class="continue-btn" href="#" hidden>Try another way</a>
+            <p id="igTarget" style="color: #ddd; margin: 20px 0 10px; word-break: break-all;"></p>
             <button id="igCopyBtn" class="continue-btn">Copy link</button>
             <button id="igCloseBtn" class="continue-btn" hidden>Close</button>
         </div>

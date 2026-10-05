@@ -7,8 +7,8 @@ import { withoutBootstrap } from './domains-helpers';
 import {
   account, CLAIM, createOwnerlessProfile, EDITOR, expectServedWebp, expectVerifyScreen, featured, forgotPassword, fresh, furnishedCreator,
   heading, holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN, logIn, logInToHandedOver, mailedLink, mailedLinks, markVerified, onLocalStack,
-  openProfile, operator, ownerOf, passAgeGate, PHONE, phoneContext, pngFile, probe, proxy, reach, readBack, recordIds, refused, servedProfile,
-  setOwner, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees,
+  openProfile, openTracking, operator, ownerOf, passAgeGate, PHONE, phoneContext, pngFile, probe, proxy, reach, readBack, recordIds, refused,
+  recordNavigations, servedProfile, setOwner, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees, xSafari,
 } from './helpers';
 
 // Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL.
@@ -106,12 +106,15 @@ test.describe('sign-up and the claim', () => {
   });
 });
 
-test('in a fresh context the landing page\'s "Create Your Own Page" opens the sign-up screen, and no n8n Form link remains', async ({ page }) => {
+test('in a fresh context the landing page\'s "Create your page" opens the sign-up screen, and no n8n Form link remains', async ({ page }) => {
   await page.goto('/landing.html');
+  await expect(page.getByRole('heading', { name: 'One link for your bio', exact: true, level: 1 })).toBeVisible();
   const hrefs = await page.locator('a').evaluateAll((as) => as.map((a) => a.getAttribute('href') || ''));
   expect(hrefs.some((h) => h.includes('n8n'))).toBe(false);
-  await expect(page.getByText('Powered by n8n & Git & Netlify')).toBeVisible();
-  await page.getByRole('link', { name: /Create Your Own Page/ }).click();
+  expect(hrefs.filter((h) => /n8n|netlify/i.test(h)), 'links to n8n or Netlify').toEqual([]);
+  await expect(page.locator('body')).not.toContainText(/n8n/i);
+  await page.getByRole('link', { name: 'Create your page', exact: true }).click();
+  await expect(page).toHaveURL(/\/edit\/signup$/);
   await expect(heading(page, SIGN_UP)).toBeVisible();
   await expect(page.getByLabel('Username')).toBeVisible();
 });
@@ -272,6 +275,7 @@ test.describe('Onboarding after verification', () => {
     await page.getByLabel('Background image').setInputFiles(pngFile('background.png', [40, 40, 200]));
     await page.getByLabel('18+ Age Gate').check();
     await mode.selectOption({ label: 'Escape' });
+    await openTracking(page);
     await page.getByLabel('OnlyFans tracking').check();
     await page.getByLabel('Default Tracking Code').fill('7');
     await page.getByRole('button', { name: 'Save link' }).click();
@@ -497,6 +501,40 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     expect(served.profile.mode).toBe('direct');
     expect(served.links.map((l) => [l.title, l.mode])).toEqual([['Default card', 'direct'], ['Escape card', 'escape_ig']]);
   });
+
+  test('"Pop out" in Quick Settings starts "On tap" and, set to "At open", pops an Instagram Visitor out on open', async ({ page, browser, request, baseURL }) => {
+    test.setTimeout(120_000);
+    const origin = new URL(baseURL!).origin;
+    const { creator } = await verifiedCreator(request, [['Escape card', 'escape_ig']]);
+    // An Instagram Visitor's pop-outs on open: the Escape Overlay shows either way, once the Profile has rendered.
+    const popsOnOpen = async () => {
+      const context = await phoneContext(browser, { origin, userAgent: INSTAGRAM_UA });
+      const visitor = await context.newPage();
+      const navigations = await recordNavigations(visitor);
+      await visitor.goto(`/${creator.username}`);
+      await expect(visitor.locator('#igOverlay')).toBeVisible();
+      await visitor.waitForLoadState('networkidle');
+      const popped = xSafari(navigations);
+      await context.close();
+      return popped;
+    };
+    expect((await servedProfile(request, creator.username)).profile.popOutTiming).toBe('tap');
+    expect(await popsOnOpen()).toEqual([]);
+
+    await logIn(page, creator);
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    const popOut = page.getByLabel('Pop out');
+    await expect(popOut).toHaveValue('tap');
+    await expect(popOut.locator('option')).toHaveText(['At open', 'On tap']);
+    await popOut.selectOption({ label: 'At open' });
+    await expect(page.locator('#pop-out-help')).toContainText('as soon as the page opens');
+    await page.getByRole('button', { name: 'Save default Mode' }).click();
+    await expect(page.getByText('Default Mode saved.', { exact: true })).toBeVisible();
+
+    const served = await servedProfile(request, creator.username);
+    expect([served.profile.mode, served.profile.popOutTiming]).toEqual(['escape_ig', 'open']);
+    expect(await popsOnOpen()).toEqual([`x-safari-https://${new URL(origin).host}/${creator.username}`]);
+  });
 });
 
 // ---- Ticket 28: the Editor's Featured Links and the Link form ---------------------------------------------------------------
@@ -568,19 +606,19 @@ test.describe('the Editor\'s Links', () => {
     await page.reload();
     await expect(featured(page)).toHaveText(['Edited card', 'Third card', 'Second card']);
 
-    // Delete asks first: cancelling keeps the Link, confirming removes it.
-    const asked: string[] = [];
-    page.once('dialog', (dialog) => {
-      asked.push(dialog.message());
-      return dialog.dismiss();
-    });
+    // Delete asks first, in the page's dialog naming the Link: "Keep it" keeps the Link, "Delete link" removes it.
+    const asked = page.getByRole('alertdialog', { name: 'Delete this link?' });
     await page.getByRole('button', { name: 'Delete Second card' }).click();
-    await expect.poll(() => asked.length).toBe(1);
-    expect(asked[0]).toContain('Second card');
+    await expect(asked).toBeVisible();
+    await expect(asked).toContainText('Second card');
+    await asked.getByRole('button', { name: 'Keep it', exact: true }).click();
+    await expect(asked).toBeHidden();
     await expect(featured(page)).toHaveText(['Edited card', 'Third card', 'Second card']);
     await visitorSees(browser, origin, creator.username, ['Edited card', 'Third card', 'Second card']);
-    page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Delete Second card' }).click();
+    await expect(asked).toContainText('Second card');
+    await asked.getByRole('button', { name: 'Delete link', exact: true }).click();
+    await expect(asked).toBeHidden();
     await expect(featured(page)).toHaveText(['Edited card', 'Third card']);
     await visitorSees(browser, origin, creator.username, ['Edited card', 'Third card']);
   });
@@ -644,6 +682,7 @@ test.describe('the Editor\'s Links', () => {
     await expect(page.getByLabel('Icon').locator('option:checked')).toHaveText('Current icon');
     await page.getByLabel('18+ Age Gate').check();
     await page.getByLabel('Mode').selectOption({ label: 'Direct' });
+    await openTracking(page);
     await page.getByLabel('OnlyFans tracking').check();
     await page.getByLabel('Default Tracking Code').fill('42');
     await page.getByRole('button', { name: 'Save link' }).click();
@@ -689,6 +728,7 @@ test.describe('the Editor\'s Links', () => {
     await page.getByRole('button', { name: 'Geo card', exact: true }).click();
     const geo = page.getByLabel('Geo Rule');
     await expect(geo).toHaveValue('');
+    await openTracking(page);
     // Not JSON, and JSON that is not an object: each blocks the save with a message, and the Link is unchanged.
     for (const typed of ['{"US": "5",', '["US", "5"]', '"5"']) {
       await page.getByLabel('Title').fill('Not saved');
@@ -731,6 +771,7 @@ test.describe('the Editor\'s Links', () => {
       await page.getByLabel('Icon').selectOption({ label: 'Twitch' });
       await page.getByLabel('18+ Age Gate').check();
       await page.getByLabel('Mode').selectOption({ label: 'Deeplink' });
+      await openTracking(page);
       await page.getByLabel('OnlyFans tracking').check();
       await page.getByLabel('Default Tracking Code').fill(typed.code);
       await page.getByLabel('Geo Rule').fill(typed.geo);

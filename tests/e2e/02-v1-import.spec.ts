@@ -461,7 +461,7 @@ test.describe('on the test stack', () => {
     type Field = { name: string; type: string; system?: boolean; [k: string]: unknown };
     const field = (c: { fields: Field[] }, name: string) => c.fields.find((f) => f.name === name) || ({} as Field);
     const shape = (c: { fields: Field[] }) => c.fields.filter((f) => !f.system).map((f) => `${f.name}:${f.type}`).join(' ');
-    expect(shape(profiles)).toBe('username:text displayName:text bio:text verified:bool avatar:file mode:select owner:relation v1Key:text customDomain:text');
+    expect(shape(profiles)).toBe('username:text displayName:text bio:text verified:bool avatar:file mode:select owner:relation v1Key:text customDomain:text popOutTiming:select');
     expect(shape(links)).toBe(
       'profile:relation linkId:text title:text order:number isAdult:bool mode:select destination:text tracking:bool defaultTrackingCode:text geo:json icon:file backgroundImage:file v1Key:text',
     );
@@ -488,6 +488,10 @@ test.describe('on the test stack', () => {
       expect(field(c, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink']);
       expect(field(c, 'mode').required).toBe(false);
     }
+    // Pop out timing: empty reads as `tap`; the owner may update it, the claim may not set it.
+    expect(field(profiles, 'popOutTiming').values).toEqual(['open', 'tap']);
+    expect(field(profiles, 'popOutTiming').required === false && field(profiles, 'popOutTiming').maxSelect === 1).toBe(true);
+    expect(profiles.createRule.endsWith(' && @request.body.popOutTiming:isset = false'), 'the claim does not set the Pop out timing').toBe(true);
     const files = [users, profiles, links].flatMap((c) => c.fields.filter((f: Field) => f.type === 'file'));
     expect(files.length).toBe(4);
     for (const f of files) {

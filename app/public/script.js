@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const igAltBtn = document.getElementById('igAltBtn');
     const igTarget = document.getElementById('igTarget');
     const igCopyBtn = document.getElementById('igCopyBtn');
+    const igIcon = document.getElementById('igIcon');
+    const igAppName = document.getElementById('igAppName');
 
     // Store links data to simulate API fetching
     let linksData = [];
@@ -26,6 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const isInAppBrowser = IN_APP_BROWSER.test(navigator.userAgent || '');
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent || '');
     const isIOSInstagram = isIOS && /Instagram/i.test(navigator.userAgent || '');
+    // v1's own Instagram check (linkme_clone3/index.html): the Escape Overlay then reads exactly as v1's, icon and "Instagram" included
+    const isInstagram = (navigator.userAgent || '').indexOf('Instagram') > -1;
     const isAndroid = /Android/.test(navigator.userAgent || '');
     const canPopOut = isIOS || isAndroid; // the platforms with an escape link
 
@@ -84,30 +88,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (isInAppBrowser && shortcutMode === 'escape_ig') {
                 // In an In-App Browser an Escape Mode Link Shortcut is v1's `?link=`: Reveal, then bounce straight to the
-                // Destination, once per tab. The Escape Overlay, aimed at that Link's escape target and with Close, is the fallback
+                // Destination, on every load as v1 did, whatever the Pop out timing. The Escape Overlay, aimed at that Link's
+                // escape target and with Close, is the fallback
                 const target = escapeTarget(shortcutLink.id);
                 pointAddressAt(target);
                 openEscapeOverlay(target, true);
-                if (canPopOut) popOutOnLoad(() => revealAndGo(shortcutLink, bounceOnLoad));
+                if (canPopOut) revealAndGo(shortcutLink, popOut);
                 return;
             }
 
-            // Pop out on open (v1's "at start"), once per tab: In-App Browser and a Profile default of Escape or Deeplink Mode.
-            // Escape Mode also shows the Escape Overlay as the fallback; Deeplink Mode leaves the page usable
+            // Escape Overlay on open: In-App Browser and a Profile default of Escape Mode, as v1 shows it to Instagram. With
+            // Pop out "At open" (popOutTiming `open`) an Escape or Deeplink default also pops out on open, once per tab;
+            // with "On tap" (the default) the pop-out waits for the Visitor's tap: "Open in browser", or a Link
             if (isInAppBrowser && defaultMode() === 'escape_ig') {
                 const target = escapeTarget(null);
                 pointAddressAt(target);
                 openEscapeOverlay(target, !linksData.every(link => effectiveMode(link) === 'escape_ig'));
-                if (!shortcutLink) popOutOnLoad(() => bounceOnLoad(target.url));
-            } else if (isInAppBrowser && defaultMode() === 'deeplink' && !shortcutLink) {
-                popOutOnLoad(() => bounceOnLoad(escapeTarget(null).url));
+                if (!shortcutLink && popOutAtOpen()) popOutOnLoad(() => popOut(target.url));
+            } else if (isInAppBrowser && defaultMode() === 'deeplink' && !shortcutLink && popOutAtOpen()) {
+                popOutOnLoad(() => popOut(escapeTarget(null).url));
             }
 
             // Link Shortcut, with no Age Gate (v1's Link Shortcut has none). A Deeplink Mode one in an In-App Browser is v1's
-            // `?link=`: Reveal, then bounce straight to the Destination, once per tab. Any other gets the Destination as a tap
+            // `?link=`: Reveal, then bounce straight to the Destination, on every load. Any other gets the Destination as a tap
             // gets it, then travels by Mode
             if (shortcutLink && isInAppBrowser && canPopOut && shortcutMode === 'deeplink') {
-                popOutOnLoad(() => revealAndGo(shortcutLink, bounceOnLoad));
+                revealAndGo(shortcutLink, popOut);
             } else if (shortcutLink) {
                 goToDestination(shortcutLink);
             }
@@ -218,6 +224,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return MODES.includes(link.mode) ? link.mode : defaultMode();
     }
 
+    // Pop out timing: `open` pops an Escape or Deeplink default out on open; anything else, absent included, is `tap`
+    function popOutAtOpen() {
+        return Boolean(currentProfile) && currentProfile.popOutTiming === 'open';
+    }
+
     // Tracking Code key (Phase 4): one per Profile, by the record id the Profile JSON carries, so a code that arrived on one
     // Profile never reaches another, even one that later holds its Username. v1's global `linkme_tracking_id` is never read
     // or written: at Cutover it may hold another Creator's code.
@@ -293,24 +304,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const fallbackTo = url => 'S.browser_fallback_url=' + encodeURIComponent(asHttps(url)) + ';';
 
-    // Escape link, per platform: v1's x-safari-https:// on iOS and its Chrome intent on Android; anything else has none.
-    // A tap's Android intent falls back to the address itself, for a phone without Chrome. The load-time pop-out's has no
-    // fallback, as v1's had none: an In-App Browser that loads the fallback in place would reload this page inside the app
-    function escapeLink(url, withFallback = true) {
+    // Escape link, per platform, exactly v1's performBounce strings (linkme_clone3/script.js): x-safari-https:// on iOS and the
+    // Chrome intent with no fallback on Android; anything else has none
+    function escapeLink(url) {
         if (isIOS) return 'x-safari-' + asHttps(url);
-        if (isAndroid) return httpsIntent(url, 'package=com.android.chrome;' + (withFallback ? fallbackTo(url) : ''));
+        if (isAndroid) return httpsIntent(url, 'package=com.android.chrome;');
         return null;
     }
 
     // Pop out of the In-App Browser, where the platform has an escape link
-    function popOut(url, withFallback = true) {
-        const href = escapeLink(url, withFallback);
+    function popOut(url) {
+        const href = escapeLink(url);
         if (href) window.location.href = href;
     }
-    const bounceOnLoad = url => popOut(url, false);
 
-    // The load-time pop-out runs at most once per tab: if an In-App Browser loads the target in place instead of leaving,
-    // the reloaded page does not pop out again. Taps are never held back
+    // The load-time pop-out to this Profile ("At open") runs at most once per tab: if an In-App Browser loads the target in
+    // place instead of leaving, the reloaded page does not pop out again. Taps and `?link=` are never held back
     function popOutOnLoad(fire) {
         try {
             if (sessionStorage.getItem('popOut')) return;
@@ -355,6 +364,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Escape Overlay: every way out aimed at the escape target; blocks scrolling while it shows
     function openEscapeOverlay(target, closeable) {
+        igIcon.style.display = isInstagram ? '' : 'none';
+        igAppName.textContent = isInstagram ? 'Instagram' : 'This app';
         igOpenBtn.href = escapeLink(target.url) || target.url;
         igAltBtn.hidden = !isIOSInstagram;
         if (isIOSInstagram) igAltBtn.href = 'instagram://extbrowser/?url=' + encodeURIComponent(target.url);

@@ -86,12 +86,16 @@ Plain navigation to the Destination, with no Escape and no Escape Overlay.
 _Avoid_: normal, none, "nothing from above"
 
 **Escape Mode**:
-Attempts an Escape on tap, with the Escape Overlay as the fallback. As a Profile's default Mode it also attempts an Escape as soon as the page opens in an In-App Browser, once per tab (v1's "pop out at start").
+Attempts an Escape on tap, with the Escape Overlay as the fallback. As a Profile's default Mode it also shows the Escape Overlay as soon as the page opens in an In-App Browser, as v1 does in Instagram, and with a Pop Out Timing of "At open" attempts an Escape then too, once per tab.
 _Avoid_: escape_ig (outside stored data), IG mode, bounce mode
 
 **Deeplink Mode**:
-Pops the Visitor out of the In-App Browser into the System Browser with the Destination, as v1's bounce did; outside an In-App Browser, Android hands the Destination's https link to the app that owns it. As a Profile's default Mode it also pops out as soon as the page opens in an In-App Browser, once per tab.
+Pops the Visitor out of the In-App Browser into the System Browser with the Destination, as v1's bounce did; outside an In-App Browser, Android hands the Destination's https link to the app that owns it. As a Profile's default Mode with a Pop Out Timing of "At open" it also pops out as soon as the page opens in an In-App Browser, once per tab.
 _Avoid_: app-link mode, deep link (for anything else)
+
+**Pop Out Timing**:
+A Profile's choice of when its Escape or Deeplink default pops the Visitor out of an In-App Browser: "At open" (`open`), as soon as the page opens, once per tab; or "On tap" (`tap`), only from the Visitor's own tap, on "Open in browser" or on a Link. "On tap" is the default, so every existing and v1-imported Profile behaves as v1 does: Escape Overlay first, pop-out after a tap. A Link Shortcut pops out on load whatever it says, as v1's `?link=` did. It is a Profile setting, never a Link's (ADR 0003).
+_Avoid_: pop-out setting, at start, after click, bounce timing
 
 ## Attribution and Stats
 
@@ -170,7 +174,7 @@ The Docker Compose stack, built entirely in this repo and run on the Operator's 
 _Avoid_: VPS version, new site
 
 **v1 Import**:
-The re-runnable copy (v1 wins, until Cutover) of the v1 Snapshot's Profiles, Destinations and images into v2, repairing v1's broken data on the way and minting a fresh Link Id for every Link. Imported Profiles take Escape Mode as their default Mode until a Creator changes it in the Editor.
+The re-runnable copy (v1 wins, until Cutover) of the v1 Snapshot's Profiles, Destinations and images into v2, repairing v1's broken data on the way and minting a fresh Link Id for every Link. Imported Profiles take Escape Mode as their default Mode and "On tap" as their Pop Out Timing until a Creator changes them in the Editor.
 _Avoid_: migration, sync, port
 ASSUMPTION: renamed from the plan's "migration script" so that "migration" keeps its database-schema meaning; overturned if the plan author prefers the original word.
 
