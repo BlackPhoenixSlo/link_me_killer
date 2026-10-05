@@ -4,7 +4,7 @@ Spec: docs/spec/phase-04-stats.md
 Covers: user stories 6, 7, 31, 32
 Seams: locally, the running v2 stack at Playwright's baseURL through `./check.sh`, with the Visitor's country set through the `CF-IPCountry` header in `extraHTTPHeaders` (plan §11: Cloudflare). In production, after Phase 5's switch, the Operator's terminal, PocketBase's admin UI through an SSH tunnel and a phone on mobile data. The spec's Acceptance block
 Blocked by: 36: Only the owner reads a Profile's Stats and recording never blocks a Click or a deletion, 42: Visitor location trusts only the production country source and ofl.ink's DNS is ready for a one-record switch
-Status: claimed 20261005T084628Z 2026-10-05T17:00:15Z
+Status: done
 
 **What to build:** Every Event carries the Visitor's real country in production. Unknown stays "Unknown", never US. This ticket holds everything about Phase 4 that depends on where the country comes from. Events, the ping, `dailyStats`, the Stats page, the Tracking Code key and the owner rules are built in 33–36 and do not wait for it.
 
@@ -29,7 +29,11 @@ ASSUMPTION: the post-switch check waits for Phase 5's switch, which is not ticke
 ASSUMPTION (the spec's): every production Event records `XX` until the switch, because v2 has no live traffic before Cutover and nothing proxies it (rung 5). Overturned if the Operator wants real countries on v2's VPS host before Cutover. That host then needs its own Proxied record.
 
 - [x] The human's answer is recorded here with the output that settled it: Cloudflare (plan §11, 2026-10-04; `dig +short NS ofl.ink` → `dns1/dns2.registrar-servers.com`, no DS record).
-- [ ] Test 4 passes with its four Visitors. The Countries table shows "Unknown" +2, `DE` +1 and `US` +1, and `SI` and `T1` gain none.
-- [ ] No Event records US for an unknown country, and the Event Recorder never calls Phase 2's Visitor location lookup.
-- [ ] The spec's whole local Acceptance block exits 0 under `set -e`, test 4 complete.
+- [x] Test 4 passes with its four Visitors. The Countries table shows "Unknown" +2, `DE` +1 and `US` +1, and `SI` and `T1` gain none.
+- [x] No Event records US for an unknown country, and the Event Recorder never calls Phase 2's Visitor location lookup.
+- [x] The spec's whole local Acceptance block exits 0 under `set -e`, test 4 complete.
 - [ ] `# manual:` (the Operator) After Phase 5's switch, a Page View from a phone on mobile data appears in that Creator's Stats under its real country. The `ZZ` probe also answers 204 and its Event shows this machine's real country.
+
+## Landed
+
+Run 20261005T084628Z. Agent part only: test 4 in tests/e2e/04-stats.spec.ts gains the other three Visitors (CF-IPCountry T1 passed through; x-country SI + CF-IPCountry DE → DE wins; US → US), each asserted on the Stats page's Country filter; box 5 (the post-switch ZZ probe) is # manual: and stays unticked. Reviewer APPROVE round 2 of 3 (round 1: a source-reading test was deleted as a duplicate of test 4 that pinned implementation text). No app change. Cold full suite on the final tree: 358 passed, 1 skipped (HEIC fixme), exit 0. ASSUMPTION at test 4: its four Visitors fully observe 'never calls Phase 2's lookup' (rung 5).

@@ -18,6 +18,7 @@ import { withoutBootstrap } from './domains-helpers';
 // Ticket 35: the Profile JSON's `profile.id` and test 8.
 // Ticket 36: tests 7, 9, 10, 11 and 12. Test 7's expand=link check as the Other Creator meets an expanded Link only because test 1
 // gave the Other Profile a Click; test 11 removes its temporary events field in `finally`, so the tests after it write Events.
+// Ticket 37: test 4's other three Visitors.
 // A run that straddles 00:00 UTC can fail a daily-row assertion; rerun it.
 const SCREENSHOT = join(__dirname, '..', '..', '.scratch', 'goal_ai', 'shots', '04-stats.png');
 const today = () => new Date().toISOString().slice(0, 10); // the UTC day
@@ -36,10 +37,14 @@ const withPassword = <C extends { passwordVar: string }>(c: C) => ({ ...c, passw
 const stats = withPassword(CREATORS.stats);
 const other = withPassword(CREATORS.other);
 
-// A Visitor in a fresh phone context loads `/{username}`, with `country` sent as `CF-IPCountry` and an optional User-Agent, and
-// the spec waits for the Page View Ping's 204 before the Visitor acts. The caller closes the page's context.
-async function countedVisit(browser: Browser, origin: string, username: string, { country, userAgent }: { country?: string; userAgent?: string } = {}) {
-  const context = await phoneContext(browser, { origin, userAgent, headers: country ? { 'CF-IPCountry': country } : undefined });
+// A Visitor in a fresh phone context loads `/{username}`, with `country` sent as `CF-IPCountry`, any other `headers` sent as
+// given and an optional User-Agent, and the spec waits for the Page View Ping's 204 before the Visitor acts. The caller closes
+// the page's context.
+async function countedVisit(
+  browser: Browser, origin: string, username: string,
+  { country, headers, userAgent }: { country?: string; headers?: Record<string, string>; userAgent?: string } = {},
+) {
+  const context = await phoneContext(browser, { origin, userAgent, headers: { ...(country ? { 'CF-IPCountry': country } : {}), ...headers } });
   const visitor = await context.newPage();
   const ping = visitor.waitForResponse((res) => res.request().method() === 'POST' && new URL(res.url()).pathname === `/v/${username}`);
   await visitor.goto(`/${username}`);
@@ -357,16 +362,25 @@ test('3. Link Shortcuts count through /r and through Reveal; an unknown Link Id 
   await page.context().close();
 });
 
-// Test 4's first Visitor only. Its other three, each with a country header, wait for the production country source (ticket 37).
-test('4. a Visitor with no country header counts as "Unknown", never as US, in the Countries table and the Country filter', async ({ browser, baseURL }) => {
+// Test 4's four Visitors: no country header (ticket 34); `CF-IPCountry: T1`, Cloudflare's Tor code; `x-country: SI` beside
+// `CF-IPCountry: DE`, where Phase 2's lookup would let SI win; and a real `US`. Earlier tests leave SI rows, so SI is read by
+// delta; no Event ever records T1, so its row stays absent.
+// ASSUMPTION: test 4's four Visitors fully observe 'never calls Phase 2's lookup' (rung 5: the lookup's telltales are US for
+// no header, T1 passed through and x-country winning, all asserted here; no unit-test seam is added). Overturned if a lookup call with no effect on
+// Events must be caught; a source check then follows server.js's arguments to recordPageView and recordClick.
+const COUNTRY_VISITORS: { country?: string; headers?: Record<string, string> }[] = [
+  {}, { country: 'T1' }, { country: 'DE', headers: { 'x-country': 'SI' } }, { country: 'US' },
+];
+test('4. the country comes from CF-IPCountry only: no header and T1 count as "Unknown", never US, and x-country never wins', async ({ browser, baseURL }) => {
   const origin = new URL(baseURL!).origin;
   const { page, events } = await creatorOnStats(browser, origin);
   const before = await readStats(page);
-  await (await countedVisit(browser, origin, stats.username)).context().close();
+  for (const visitor of COUNTRY_VISITORS) await (await countedVisit(browser, origin, stats.username, visitor)).context().close();
   await page.reload();
   const after = await readStats(page);
-  const views = (read: StatsRead) => ({ Unknown: count(read.countries.Unknown?.['Page Views']), US: count(read.countries.US?.['Page Views']) });
-  expect(rise(views(before), views(after)), 'Countries: Page Views').toEqual({ Unknown: 1, US: 0 });
+  const views = (read: StatsRead) => Object.fromEntries(['Unknown', 'DE', 'US', 'SI', 'T1'].map((c) => [c, count(read.countries[c]?.['Page Views'])]));
+  expect(rise(views(before), views(after)), 'Countries: Page Views').toEqual({ Unknown: 2, DE: 1, US: 1, SI: 0, T1: 0 });
+  expect(Object.keys(after.countries).filter((c) => c === 'T1' || c === 'XX'), 'Countries rows named T1 or XX').toEqual([]);
   const offered = await page.getByRole('combobox', { name: 'Country', exact: true }).getByRole('option').allTextContents();
   expect(offered.includes('Unknown') && !offered.includes('XX'), `the Country filter offers "Unknown", not XX: ${offered}`).toBe(true);
   expect(events, 'requests to the events collection').toEqual([]);
