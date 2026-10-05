@@ -4,7 +4,7 @@ Spec: docs/spec/phase-04-stats.md
 Covers: user stories 25, 26, 27, 28
 Seams: the running v2 stack at Playwright's baseURL through `./check.sh`. Visitors in fresh browser contexts whose `localStorage` starts with v1's global key, with desktop and Instagram User-Agents; Reveal requests and answers observed with `waitForRequest` and `waitForResponse`, and every navigation to a host other than baseURL fulfilled with the stub page. The `request` fixture for Profile JSON. Operator steps at PocketBase's loopback port, as a superuser
 Blocked by: 33: A Page View and a Click through /r reach the Creator's Stats page, 01: The test loop serves the Page Copy, 10: The escaped Link opens by itself in the System Browser credited to the same Tracking Code, 18: Every Click on a v1 Link ends at v1's Destination for the same Tracking Code and Visitor location
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T13:26:50Z
 
 **What to build:** A Tracking Code that arrives in one Creator's Profile URL can no longer reach another Creator's Destination or escape target (D5). The `/c{code}` suffix keeps working on the Profile the code arrived on.
 
