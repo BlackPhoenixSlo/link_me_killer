@@ -4,7 +4,7 @@ Spec: docs/spec/phase-03-auth-and-editor.md
 Covers: user stories 5, 11, 12, 13, 20, 21, 51, 52, 53, 54
 Seams: the running v2 stack at Playwright's baseURL: the Creator in the browser at 390×844; the Visitor in a fresh context. Operator steps arrange state at PocketBase's loopback port, as a superuser: creating an ownerless Profile the way the v1 Import does, setting its owner, marking its new owner verified
 Blocked by: 26: A verified Creator goes through Onboarding to a live Profile whose Links act like imported ones
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T09:34:41Z
 
 **What to build:** A Creator's session lasts until they end it, and log-in always lands them in the right place.
 - **Staying logged in.** The Editor keeps the auth token in `localStorage` and sends it as the `Authorization` header. Each time the Editor opens it refreshes the token, so a Creator who comes back within the token's lifetime is still logged in.
