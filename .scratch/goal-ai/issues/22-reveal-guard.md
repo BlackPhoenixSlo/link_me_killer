@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 14, 25, 35, 57, 59
 Seams: the running stack's public HTTP surface at baseURL through `./check.sh`, with the `request` fixture setting `Origin`, `Sec-Fetch-Site` and `X-Forwarded-For` and repeating calls; the limit is read from the committed test env. The spec's Acceptance block
 Blocked by: 18: Every Click on a v1 Link ends at v1's Destination for the same Tracking Code and Visitor location, 19: Re-running the v1 Import keeps every Link Id and refuses a broken v1 tree without writing, 20: A PocketBase admin edit shows on the next page load while PocketBase's API stays closed, 21: A photo uploaded in any D4 format is stored upright and resized as WebP
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-05T01:30:19Z
 
 **What to build:** Bulk harvesting of Destinations is slowed (D8).
 - **Origin.** Reveal answers 403, with no Destination, when `Origin` names another origin than the one the request came to, or when `Sec-Fetch-Site` is cross-site or same-site. A request carrying neither header passes, and the page's own Reveals still pass.
