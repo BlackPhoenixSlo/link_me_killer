@@ -797,13 +797,21 @@ test.describe('on the test stack', () => {
   });
 
   // Ticket 20: last in the last project, so after every other spec. Only a migration made the events collection: it was created
-  // and last changed before the first request PocketBase logged on this stack's empty volume, so no API call made or altered
-  // it. Migrations run before PocketBase serves. The check needs at least one request log by the end of the run, and asserts it.
+  // before the first request PocketBase logged on this stack's empty volume, so no API call made it. Migrations run before
+  // PocketBase serves. The check needs at least one request log by the end of the run, and asserts it.
   // Ticket 33 dropped the check that it holds no record: from Phase 4 on every Profile load and `/r` Click writes an Event.
-  test('after every spec: only a migration created and changed the events collection', async () => {
+  // Ticket 36 dropped the check that it was also last changed before that request: Phase 4's test 11 (tests/e2e/04-stats.spec.ts)
+  // has the Operator add a temporary required field to it through the API and remove it again, as the Phase 4 spec requires,
+  // which moves its `updated` time. The schema check above, which also runs after every other spec, still finds the
+  // migrations' fields and closed rules.
+  // ASSUMPTION: an API change that is undone before the run ends is allowed, as long as the schema check finds the migrations'
+  // shape (rung 3: ticket 33 narrowed this check when Phase 4 made it untrue; rung 2: the Phase 4 spec's test 11 makes the change).
+  // Overturned if the events collection must never be changed through the API, even for a test; test 11 then needs a way to fail
+  // every Event write that leaves the collection alone.
+  test('after every spec: only a migration created the events collection', async () => {
     const events = await (await pb('/api/collections/events', { token })).json();
     const first = await (await pb(`/api/logs?perPage=1&sort=created&filter=${encodeURIComponent("data.type='request'")}`, { token })).json();
     expect(first.totalItems).toBeGreaterThan(0);
-    expect(events.created <= events.updated && events.updated < first.items[0].created, 'events made and last changed before the first logged request').toBe(true);
+    expect(events.created < first.items[0].created, 'events made before the first logged request').toBe(true);
   });
 });

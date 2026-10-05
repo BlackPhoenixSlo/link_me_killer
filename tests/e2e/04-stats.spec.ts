@@ -1,8 +1,8 @@
-import { devices, expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import { devices, expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { join } from 'node:path';
 import { CREATORS } from '../stats-seed';
 import {
-  asSuperuser, createOwnerlessProfile, ENV, heading, INSTAGRAM_UA, logIn, only, onLocalStack, operator, phoneContext, proxy, recordIds, superuserToken,
+  asSuperuser, callsTo429, createOwnerlessProfile, ENV, heading, INSTAGRAM_UA, logIn, only, onLocalStack, operator, phoneContext, proxy, recordIds, refused, superuserToken,
 } from './helpers';
 
 // Phase 4 (docs/spec/phase-04-stats.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL. Every Visitor
@@ -15,6 +15,8 @@ import {
 // Ticket 34: tests 2, 3 and 5, and test 4's first Visitor; a Destination handed out by Reveal is a fresh navigation, fulfilled
 // with the same stub page (throughReveal, below).
 // Ticket 35: the Profile JSON's `profile.id` and test 8.
+// Ticket 36: tests 7, 9, 10, 11 and 12. Test 7's expand=link check as the Other Creator meets an expanded Link only because test 1
+// gave the Other Profile a Click; test 11 removes its temporary events field in `finally`, so the tests after it write Events.
 // A run that straddles 00:00 UTC can fail a daily-row assertion; rerun it.
 const SCREENSHOT = join(__dirname, '..', '..', '.scratch', 'goal_ai', 'shots', '04-stats.png');
 const today = () => new Date().toISOString().slice(0, 10); // the UTC day
@@ -105,10 +107,13 @@ async function openStats(page: Page) {
   await expect(heading(page, 'Stats')).toBeVisible();
 }
 
-// The Stats Creator signed in at 390×844 and on the Stats page, with every request the page sends to the events collection
-// (it must send none: spec, Testing Decisions) and every `dailyStats` list request it sends, in order.
+// A seeded Creator, the Stats Creator unless `creator` names the other, signed in at 390×844 and on the Stats page, with every
+// request the page sends to the events collection (it must send none: spec, Testing Decisions) and every `dailyStats` list
+// request it sends, in order.
 // `timezoneId` and `time` (ms since the epoch) set the browser's time zone and fix its clock before the Creator logs in.
-async function statsCreatorOnStats(browser: Browser, origin: string, { timezoneId, time }: { timezoneId?: string; time?: number } = {}) {
+async function creatorOnStats(
+  browser: Browser, origin: string, { creator = stats, timezoneId, time }: { creator?: typeof stats; timezoneId?: string; time?: number } = {},
+) {
   const page = await (await phoneContext(browser, { origin, timezoneId })).newPage();
   if (time !== undefined) await page.clock.setFixedTime(time);
   const events = watchEvents(page);
@@ -117,7 +122,7 @@ async function statsCreatorOnStats(browser: Browser, origin: string, { timezoneI
     const url = new URL(req.url());
     if (url.pathname === '/api/collections/dailyStats/records') statsRequests.push(url);
   });
-  await logIn(page, stats);
+  await logIn(page, creator);
   await expect(heading(page, 'Edit Profile')).toBeVisible();
   await openStats(page);
   return { page, events, statsRequests };
@@ -179,10 +184,10 @@ async function eventCount(filter: string): Promise<number> {
   const query = `perPage=1&filter=${encodeURIComponent(filter)}`;
   return (await (await asSuperuser(await superuserToken(), `/api/collections/events/records?${query}`)).json()).totalItems;
 }
-async function eventFields(): Promise<string[]> {
-  const events = await (await asSuperuser(await superuserToken(), '/api/collections/events')).json();
-  return events.fields.map((f: { name: string }) => f.name);
-}
+// The events collection's fields as the admin UI holds them, and their names.
+type EventField = { name: string };
+const eventSchemaFields = async (): Promise<EventField[]> => (await (await asSuperuser(await superuserToken(), '/api/collections/events')).json()).fields;
+const eventFields = async () => (await eventSchemaFields()).map((f) => f.name);
 
 test.describe.configure({ mode: 'serial' });
 test.skip(!onLocalStack(), 'the seeded Creators and the Operator\'s PocketBase port are on the local test stack only');
@@ -197,7 +202,7 @@ function expectCtrs(read: StatsRead) {
 
 test('1. a Page View and a Click through /r reach the Stats page, paged at any size, with no horizontal overflow at 390×844', async ({ browser, baseURL }) => {
   const origin = new URL(baseURL!).origin;
-  const { page, events, statsRequests } = await statsCreatorOnStats(browser, origin);
+  const { page, events, statsRequests } = await creatorOnStats(browser, origin);
   const before = await readStats(page);
 
   // Left out of the Stats Creator's numbers: the Other Profile's own Page View and Click, from the same country.
@@ -268,7 +273,7 @@ async function dailyRows(request: APIRequestContext, linkTitle: string, country:
 
 test('2. Adult Link Clicks through the Age Gate count, and the Link and Country filters narrow every panel', async ({ browser, baseURL, request }) => {
   const origin = new URL(baseURL!).origin;
-  const { page, events } = await statsCreatorOnStats(browser, origin);
+  const { page, events } = await creatorOnStats(browser, origin);
   const day = today();
   const before = await readStats(page);
   const beforeAdult = await readFiltered(page, stats.adult.title, ALL_COUNTRIES);
@@ -323,7 +328,7 @@ test('2. Adult Link Clicks through the Age Gate count, and the Link and Country 
 
 test('3. Link Shortcuts count through /r and through Reveal; an unknown Link Id and a refused Reveal count nothing', async ({ browser, baseURL, request }) => {
   const origin = new URL(baseURL!).origin;
-  const { page, events } = await statsCreatorOnStats(browser, origin);
+  const { page, events } = await creatorOnStats(browser, origin);
   const before = await readStats(page);
   const directId = await servedLinkId(request, stats.username, stats.direct.title);
   const adultId = await servedLinkId(request, stats.username, stats.adult.title);
@@ -359,7 +364,7 @@ test('3. Link Shortcuts count through /r and through Reveal; an unknown Link Id 
 // Test 4's first Visitor only. Its other three, each with a country header, wait for the production country source (ticket 37).
 test('4. a Visitor with no country header counts as "Unknown", never as US, in the Countries table and the Country filter', async ({ browser, baseURL }) => {
   const origin = new URL(baseURL!).origin;
-  const { page, events } = await statsCreatorOnStats(browser, origin);
+  const { page, events } = await creatorOnStats(browser, origin);
   const before = await readStats(page);
   await (await countedVisit(browser, origin, stats.username)).context().close();
   await page.reload();
@@ -377,7 +382,7 @@ test('5. Today, 7D and 30D read their own UTC days from the browser\'s clock, an
   // The browser at noon UTC in UTC+14, where the local date is already tomorrow, so a page counting local days shows the wrong span.
   const day = today();
   const noon = Date.parse(`${day}T12:00:00Z`);
-  const { page, events, statsRequests } = await statsCreatorOnStats(browser, origin, { timezoneId: 'Pacific/Kiritimati', time: noon });
+  const { page, events, statsRequests } = await creatorOnStats(browser, origin, { timezoneId: 'Pacific/Kiritimati', time: noon });
   const tab = async (name: string) => {
     await page.getByRole('button', { name, exact: true }).click();
     await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -448,13 +453,20 @@ test('6. each load records its In-App Browser, and an Event holds nothing but it
   expect((await eventFields()).sort()).toEqual(['country', 'created', 'id', 'inAppBrowser', 'kind', 'link', 'profile']);
 });
 
+// Every key anywhere in a JSON body, nested ones included.
+function keysIn(body: string) {
+  const keys: string[] = [];
+  JSON.parse(body, (key, value) => { keys.push(key); return value; });
+  return keys;
+}
+
 test('the Stats Profile\'s and the Other Profile\'s JSON each carry profile.id, their record id, and no private key', async ({ request }) => {
   for (const { username } of [stats, other]) {
     const res = await request.get(`/api/profiles/${username}.json`);
     expect(res.status(), username).toBe(200);
-    const keys: string[] = [];
-    const json = JSON.parse(await res.text(), (key, value) => { keys.push(key); return value; });
-    expect(json.profile.id, `${username}: profile.id`).toBe((await recordIds(username)).profileId);
+    const body = await res.text();
+    const keys = keysIn(body);
+    expect(JSON.parse(body).profile.id, `${username}: profile.id`).toBe((await recordIds(username)).profileId);
     for (const key of ['destination', 'geo', 'owner', 'v1Key']) expect(keys.includes(key), `${username}: ${key}`).toBe(false);
   }
 });
@@ -465,6 +477,96 @@ const v1GlobalCode = (origin: string) => ({ cookies: [], origins: [{ origin, loc
 // The Operator deletes the Profile at `username`; its Links and Events go with it (cascade).
 const deleteProfile = async (username: string) =>
   expect(await operator('DELETE', `/api/collections/profiles/records/${(await recordIds(username)).profileId}`), `delete ${username}`).toBe(204);
+
+// PocketBase itself, at its loopback port, where its rules are the boundary (spec, Testing Decisions): the proxy's calls
+// (helpers.ts, proxy) sent there rather than through the app, whose allow-list would refuse events before any rule ran.
+const atPocketBase = () => playwrightRequest.newContext({ baseURL: `http://127.0.0.1:${ENV.PB_PORT}` });
+
+test('7. only a Profile\'s signed-in owner reads its dailyStats rows, and nobody reads or writes an Event, through PocketBase itself', async ({ browser, baseURL }) => {
+  const origin = new URL(baseURL!).origin;
+  // Each Creator's own Page View, and one on an ownerless throwaway Profile, as the v1 Import leaves Profiles.
+  const ownerless = `ownerless_${Date.now().toString(36)}`;
+  await createOwnerlessProfile(ownerless, 'Ownerless Profile', { title: 'Ownerless Direct', destination: 'https://ownerless-direct.test/' });
+  for (const username of [stats.username, other.username, ownerless]) await (await countedVisit(browser, origin, username)).context().close();
+
+  // A dailyStats row of each Profile, by id, and the newest Event of the Stats Profile, as the Operator reads them.
+  const superuser = await superuserToken();
+  const profileIds = { stats: (await recordIds(stats.username)).profileId, other: (await recordIds(other.username)).profileId, ownerless: (await recordIds(ownerless)).profileId };
+  const rowOf = async (profileId: string) => {
+    const query = `perPage=1&filter=${encodeURIComponent(`profile='${profileId}'`)}`;
+    return (await (await asSuperuser(superuser, `/api/collections/dailyStats/records?${query}`)).json()).items[0].id as string;
+  };
+  const rows = { stats: await rowOf(profileIds.stats), other: await rowOf(profileIds.other), ownerless: await rowOf(profileIds.ownerless) };
+  const eventId = (await newestEvent(stats.username)).id as string;
+
+  const pb = await atPocketBase();
+  const tokenOf = async (creator: typeof stats) => {
+    const auth = await proxy(pb).post('users/auth-with-password', { identity: creator.email, password: creator.password });
+    expect(auth.status(), `${creator.email} signs in at PocketBase`).toBe(200);
+    return (await auth.json()).token as string;
+  };
+  const tokens = { stats: await tokenOf(stats), other: await tokenOf(other) };
+
+  // Each Creator lists only their own Profile's rows and cannot view the other's row by its id.
+  for (const [reader, own, foreign] of [['stats', 'stats', 'other'], ['other', 'other', 'stats']] as const) {
+    const as = proxy(pb, tokens[reader]);
+    const listed: { items: { profile: string }[]; totalItems: number } = await (await as.get('dailyStats/records?perPage=500')).json();
+    expect(listed.items.length, `${reader}: every row listed on one page`).toBe(listed.totalItems);
+    expect([...new Set(listed.items.map((row) => row.profile))], `${reader}: the Profiles of the rows listed`).toEqual([profileIds[own]]);
+    expect((await as.get(`dailyStats/records/${rows[foreign]}`)).status(), `${reader}: the ${foreign} Profile's row by id`).toBe(404);
+  }
+
+  // Events: neither Creator, nor anyone signed out, lists or views one, and every create, update and delete is refused. The
+  // country ZP no other request sends shows whether a create or update got through.
+  const marker = 'ZP';
+  for (const [who, token] of [['the Stats Creator', tokens.stats], ['the Other Creator', tokens.other], ['signed out', undefined]] as const) {
+    const as = proxy(pb, token);
+    const listed = await as.get('events/records');
+    expect(listed.ok() ? (await listed.json()).items : [], `${who}: events listed`).toEqual([]);
+    const viewed = await as.get(`events/records/${eventId}`);
+    expect(viewed.ok(), `${who}: an Event viewed by its id`).toBe(false);
+    refused(await as.post('events/records', { kind: 'page_view', profile: profileIds.stats, country: marker }));
+    refused(await as.patch(`events/records/${eventId}`, { country: marker }));
+    refused(await as.delete(`events/records/${eventId}`));
+  }
+  expect(await eventCount(`country='${marker}'`), 'Events created or updated by a caller who is not the Operator').toBe(0);
+  expect(await eventCount(`id='${eventId}'`), 'the Event a caller who is not the Operator tried to delete').toBe(1);
+
+  // Signed out: no dailyStats row is listed, and the ownerless Profile's row, whose owner is as empty as the caller's id, is not
+  // viewed by its id either.
+  const signedOut = proxy(pb);
+  expect((await (await signedOut.get('dailyStats/records?perPage=500')).json()).items, 'signed out: dailyStats listed').toEqual([]);
+  expect((await signedOut.get(`dailyStats/records/${rows.ownerless}`)).status(), 'signed out: the ownerless Profile\'s row by id').toBe(404);
+
+  // With the Link expanded, signed out and as the Other Creator: no Stats Profile row, no expanded Link but the caller's own (so
+  // none signed out), and no destination key once those are set aside.
+  // ASSUMPTION: the spec's "no response body holds a destination key" is read, for the Other Creator, as no key outside their own
+  // Links, because PocketBase expands the Other Creator's own Link with its Destination (observed for this ticket: their Click
+  // row's expand.link carries `destination`), which Phase 3's owner rule on links lets them read anyway and the Editor needs,
+  // and the Schema keeps dailyStats.link a relation (rung 1 for the observation; rung 3: Phase 3's links list/view rule already
+  // shows the owner their own Destination (1791140005_content_rules.js)). Overturned if Stats must never expand a Destination even to its owner; that then needs a
+  // Schema change, since only hiding links.destination or a dailyStats.link that is not a relation would close it.
+  for (const [who, token, ownLinksOf] of [['signed out', undefined, null], ['the Other Creator', tokens.other, profileIds.other]] as const) {
+    const res = await proxy(pb, token).get('dailyStats/records?perPage=500&expand=link');
+    expect(res.status(), `${who}: dailyStats listed with expand=link`).toBe(200);
+    const listed: { items: { profile: string; expand?: { link?: { profile: string } } }[] } = await res.json();
+    expect(listed.items.filter((row) => row.profile === profileIds.stats), `${who}: Stats Profile rows`).toEqual([]);
+    const expanded = listed.items.flatMap((row) => (row.expand?.link ? [row.expand.link] : []));
+    if (ownLinksOf) expect(expanded.length, `${who}: Links expanded (test 1 gave the Other Profile a Click)`).toBeGreaterThan(0);
+    expect(expanded.every((link) => link.profile === ownLinksOf), `${who}: every expanded Link is their own`).toBe(true);
+    const outsideOwnLinks = JSON.stringify(listed.items.map(({ expand, ...row }) => row));
+    expect(keysIn(outsideOwnLinks).includes('destination'), `${who}: a destination key outside their own Links`).toBe(false);
+  }
+  await pb.dispose();
+
+  // Once the throwaway Profile is gone, the Other Creator's Stats page names none of the Stats Profile's Links.
+  await deleteProfile(ownerless);
+  const { page, events } = await creatorOnStats(browser, origin, { creator: other });
+  const shown = (await page.locator('body').textContent()) || '';
+  for (const title of [stats.direct.title, stats.adult.title]) expect(shown.includes(title), `the Other Creator's Stats page names ${title}`).toBe(false);
+  expect(events, 'requests to the events collection').toEqual([]);
+  await page.context().close();
+});
 
 test('8. a Tracking Code stays with the Profile it arrived on: never v1\'s global code, another Profile\'s, or a reused Username\'s', async ({ browser, baseURL, request }) => {
   const origin = new URL(baseURL!).origin;
@@ -515,6 +617,87 @@ test('8. a Tracking Code stays with the Profile it arrived on: never v1\'s globa
   expect(await passGateToStub(onSecond, origin, adult.title, adult.destination), 'the new Profile\'s Reveal').toBeNull();
   await third.close();
   await deleteProfile(reused);
+});
+
+test('9. a deleted Link keeps its Clicks in the totals, under "Deleted link"', async ({ browser, baseURL }) => {
+  const origin = new URL(baseURL!).origin;
+  const { page, events } = await creatorOnStats(browser, origin);
+  const before = await readStats(page);
+
+  // The Operator adds a Link with a stub Destination, a Visitor opens its `/r`, and another follows the Direct Mode Link, a Click
+  // that must not move to "Deleted link".
+  const doomed = { title: 'Stats Doomed', destination: 'https://stats-doomed.test/' };
+  const { profileId } = await recordIds(stats.username);
+  expect(await operator('POST', '/api/collections/links/records', { ...doomed, profile: profileId, order: 2, mode: 'direct' }), 'the Operator adds a Link').toBe(200);
+  const link = await only(await superuserToken(), 'links', `profile='${profileId}' && title='${doomed.title}'`);
+  const opener = await (await phoneContext(browser, { origin })).newPage();
+  await throughR(opener, doomed.destination, () => opener.goto(`/r/${link.linkId}`));
+  await opener.context().close();
+  const visitor = await countedVisit(browser, origin, stats.username, { country: 'SI' });
+  await followThroughR(visitor, stats.direct.title, stats.direct.destination);
+  await visitor.context().close();
+
+  await page.reload();
+  const beforeDelete = await readStats(page);
+  expect(await operator('DELETE', `/api/collections/links/records/${link.id}`), 'the Operator deletes the Link').toBe(204);
+  await page.reload();
+  const after = await readStats(page);
+  const deleted = (read: StatsRead) => count(read.links['Deleted link']?.Clicks);
+  expect(deleted(after) - deleted(before), '"Deleted link" Clicks').toBe(1);
+  expect(after.cards.Clicks, 'the Clicks card, as just before the delete').toBe(beforeDelete.cards.Clicks);
+  expect(Object.keys(after.links).includes(doomed.title), 'the deleted Link listed by its title').toBe(false);
+  expectCtrs(after);
+  expect(events, 'requests to the events collection').toEqual([]);
+  await page.context().close();
+});
+
+test('10. a deleted Profile takes its Events with it, and its delete succeeds', async ({ browser, baseURL }) => {
+  const origin = new URL(baseURL!).origin;
+  const doomed = `doomed_${Date.now().toString(36)}`;
+  await createOwnerlessProfile(doomed, 'Doomed Profile', { title: 'Doomed Direct', destination: 'https://doomed-direct.test/' });
+  const { profileId } = await recordIds(doomed);
+  await (await countedVisit(browser, origin, doomed)).context().close();
+  expect(await eventCount(`profile='${profileId}'`), 'its Events before the delete').toBe(1);
+  await deleteProfile(doomed);
+  expect(await eventCount(`profile='${profileId}'`), 'its Events after the delete').toBe(0);
+});
+
+test('11. while every Event write fails, /r still redirects and Reveal still answers, both to their Destinations', async ({ browser, baseURL }) => {
+  const origin = new URL(baseURL!).origin;
+  const { profileId } = await recordIds(stats.username);
+  const written = () => eventCount(`profile='${profileId}'`);
+  // The Operator adds a required field the app never sends, so PocketBase refuses every Event write, and removes it in `finally`.
+  const fields = await eventSchemaFields();
+  const setFields = (to: object[]) => operator('PATCH', '/api/collections/events', { fields: to });
+  expect(await setFields([...fields, { name: 'writeBlocker', type: 'text', required: true }]), 'the Operator adds a required field').toBe(200);
+  try {
+    const was = await written();
+    // The ping's write fails too, and is swallowed like the Clicks' writes, so the Visitor is still told 204.
+    const direct = await countedVisit(browser, origin, stats.username, { country: 'SI' });
+    await followThroughR(direct, stats.direct.title, stats.direct.destination);
+    await direct.context().close();
+    const adult = await countedVisit(browser, origin, stats.username, { country: 'SI' });
+    await passGateToStub(adult, origin, stats.adult.title, stats.adult.destination);
+    await adult.context().close();
+    expect(await written(), 'Events written while every write fails').toBe(was);
+  } finally {
+    expect(await setFields(fields), 'the Operator removes the field').toBe(200);
+  }
+  expect(await eventFields(), 'the events fields once the field is gone').toEqual(fields.map((f) => f.name));
+});
+
+test('12. the Page View Ping meets its own limit per client and Username, apart from other Profiles\' pings and from /r', async ({ request }) => {
+  // A Username unique to this run, so a window an earlier run used up cannot leak in.
+  const flooded = `flood_${Date.now().toString(36)}`;
+  await createOwnerlessProfile(flooded, 'Flood Profile', { title: 'Flood Direct', destination: 'https://flood-direct.test/' });
+  expect(await callsTo429(() => request.post(`/v/${flooded}`), [204]), '429 within the Reveal threshold + 1 pings').toBeGreaterThan(0);
+  const over = await request.post(`/v/${flooded}`);
+  expect({ status: over.status(), body: await over.json() }, 'a ping over the limit, as Reveal answers one').toEqual({ status: 429, body: { error: 'Too many requests' } });
+  // Right after: the Stats Profile's ping and its Direct Mode Link's `/r`, each with a window of its own.
+  expect((await request.post(`/v/${stats.username}`)).status(), 'a ping for the Stats Profile').toBe(204);
+  const viaR = await request.get(`/r/${await servedLinkId(request, stats.username, stats.direct.title)}`, { maxRedirects: 0 });
+  expect({ status: viaR.status(), location: viaR.headers().location }, '/r for the Direct Mode Link').toEqual({ status: 302, location: stats.direct.destination });
+  await deleteProfile(flooded);
 });
 
 test('the Page View Ping: an unknown Username is 404 and records nothing, and a GET under /v/ reaches the Profile route', async ({ request }) => {

@@ -90,3 +90,11 @@ The matrix needs a public https host, because every escape link is https and the
 | 62 | Android phone | Chrome (Android) | Escape, Adult | Tap the Adult Escape Mode Link: the Age Gate shows; "Continue (18+)" opens the Destination in place, and the final address ends in /c{code}. |  |  |  | pending |
 | 63 | Android phone | Chrome (Android) | Deeplink, app installed | Tap the Deeplink Mode Link with the Destination's app installed: the app opens. |  |  |  | pending |
 | 64 | Android phone | Chrome (Android) | Deeplink, app absent | Tap the Deeplink Mode Link with the Destination's app not installed: the web page opens. |  |  |  | pending |
+
+## Phase 4 real-device row (docs/spec/phase-04-stats.md, story 33)
+
+The automated Acceptance cannot prove that a real phone inside Instagram is recorded as Instagram, because its User-Agent is faked there. This row is pending until someone runs it (ticket 38) on v2's VPS host, and is filled in as the Phase 1 rows are (How to fill a row, above). Open any Profile there; a throwaway Profile made by the recipe above will do.
+
+| # | Phone | Browser | Check | Expected | Device model | OS version | App version | Pass/fail |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Any phone | Instagram | In-App Browser recorded | Open a Profile on v2's VPS host. In PocketBase's admin UI the newest Event for that Profile shows inAppBrowser = instagram (and country XX until Cutover). |  |  |  | pending |

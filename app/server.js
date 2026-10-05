@@ -15,7 +15,7 @@ const { toPublicProfile } = require('./src/public-profile');
 const { resolveDestination } = require('./src/destination');
 const { visitorLocation } = require('./src/visitor-location');
 const { toWebp, TARGETS } = require('./src/image');
-const { allow, clientIp, originOf, sameOrigin } = require('./src/click-guard');
+const { allow, allowPing, clientIp, originOf, sameOrigin } = require('./src/click-guard');
 const { createEventRecorder } = require('./src/event-recorder');
 
 const PUBLIC = path.join(__dirname, 'public');
@@ -80,10 +80,15 @@ app.get('/r/:linkId', async (c) => {
 });
 
 // The Page View Ping (Phase 4 spec, Contracts): POST only, so a GET under /v/ still reaches the Profile route below and no
-// Username is reserved. 204 once the Page View is recorded; an unknown Username is 404 and records nothing. Its rate limit is
-// ticket 36's.
+// Username is reserved. 204 once the Event Recorder has returned; an unknown Username is 404 and records nothing. Over its own
+// limit per client IP and Username (the Click guard's allowPing, Reveal's threshold) it answers 429 as Reveal does, before the
+// Profile lookup, so a refused ping costs no PocketBase read.
+// ASSUMPTION: a failed Page View write still answers 204, since the Event Recorder logs and swallows it and tells its caller
+// nothing (rung 2: the spec's Write path and Interfaces, "never throws"; rung 5: one answer whatever the write did). Overturned
+// if the ping must tell the page its Page View was lost; the recorder then returns the write's outcome.
 app.post('/v/:username', async (c) => {
   c.header('Cache-Control', 'no-store');
+  if (!allowPing(clientIp(c.req.raw), c.req.param('username'))) return c.json(TOO_MANY, 429);
   const profile = await gateway.findProfile(c.req.param('username'));
   if (!profile) return c.json({ error: 'Profile not found' }, 404);
   await events.recordPageView(c.req.raw, profile.id);

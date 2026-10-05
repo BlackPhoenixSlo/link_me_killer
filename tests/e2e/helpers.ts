@@ -5,10 +5,11 @@ import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 
 // Plumbing for tests/e2e/03-auth-and-editor.spec.ts (and, from ticket 33, the Operator and log-in steps tests/e2e/04-stats.spec.ts imports) that is not itself a test: the Operator steps, an in-memory PNG and (moved
-// here by ticket 29) the Creator, Visitor and proxy drivers the spec's tests share. Not a
+// here by ticket 29) the Creator, Visitor and proxy drivers the spec's tests share; from ticket 36 also 02-reveal-guard's flood,
+// callsTo429, which 04-stats floods the Page View Ping with. Not a
 // spec file (Playwright's default testMatch skips it), so the Phase 3 suite stays one spec (docs/spec/phase-03-auth-and-editor.md,
 // Testing Decisions).
-// ASSUMPTION: a helper module beside the spec rather than more lines in it, though every other spec keeps its own plumbing
+// ASSUMPTION: a helper module beside the spec rather than more lines in it; 04-stats and 02-reveal-guard import from it too
 // (rung 5: the one spec file stays under 1000 lines without dropping a test). Overturned if helpers must live in the spec.
 const ROOT = join(__dirname, '..', '..');
 
@@ -402,4 +403,25 @@ export async function recordIds(username: string) {
   const profile = await only(token, 'profiles', `username='${username}'`);
   const links = await (await asSuperuser(token, `/api/collections/links/records?fields=id&filter=${encodeURIComponent(`profile='${profile.id}'`)}`)).json();
   return { profileId: profile.id as string, linkIds: links.items.map((l: { id: string }) => l.id) as string[] };
+}
+
+// ---- Ticket 22's flood, shared with ticket 36's Page View Ping ---------------------------------------------------------------
+
+// Sends up to the Reveal limit (tests/e2e.env) + 1 calls and answers how many it took to meet the first 429, or 0 if none came;
+// every call before it must answer one of `answered`. The window is a fixed minute that earlier specs may have half used, so a
+// 429 can come early; a minute boundary inside the burst restarts the count, so a burst with no 429 is sent once more: a burst
+// takes seconds, and no two in a row can both straddle a boundary.
+// ASSUMPTION: one repeated burst, rather than waiting for a fresh window, keeps "within the limit plus one" exact and the run
+// fast (rung 5: the app exposes no window clock, and waiting would add up to a minute). Overturned if a burst ever takes
+// longer than half a minute; the spec then waits for a fresh window first.
+export async function callsTo429(send: (i: number) => Promise<APIResponse>, answered: number[]) {
+  const limit = Number(ENV.REVEAL_LIMIT_PER_MINUTE);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (let i = 1; i <= limit + 1; i++) {
+      const res = await send(i);
+      if (res.status() === 429) return i;
+      expect(answered, `call ${i}`).toContain(res.status());
+    }
+  }
+  return 0;
 }

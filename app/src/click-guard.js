@@ -1,6 +1,8 @@
 'use strict';
 // Click guard (docs/spec/phase-02-vps-foundation.md, Reveal hardening (D8)): the same-origin check for Reveal, and the
-// in-memory, fixed-window limit per client IP that Reveal and `/r` share. Nothing here logs an address or a header.
+// in-memory, fixed-window limit per client IP that Reveal and `/r` share. From Phase 4 on the Page View Ping has a counter of
+// its own from the same code and threshold, keyed by client IP and Username (docs/spec/phase-04-stats.md, Contracts, Page View
+// Ping), so Page Views never use up a Visitor's Reveals. Nothing here logs an address or a header.
 // ASSUMPTION: the window is the wall-clock minute, the same for every client, and the whole table is dropped when a new minute
 // starts (rung 5: a fixed window with memory bounded by one minute's clients and no timer). Overturned if bursts across a
 // minute boundary (up to twice the limit in a few seconds) must be refused; the window then moves to a sliding log.
@@ -10,21 +12,30 @@ const WINDOW_MS = 60_000;
 const LIMIT = Number(process.env.REVEAL_LIMIT_PER_MINUTE);
 if (!(LIMIT > 0)) throw new Error('REVEAL_LIMIT_PER_MINUTE must be a number above 0');
 
-let windowStart = 0;
-let counts = new Map();
-
-// True while `clientIp` has made at most the limit of calls in this minute; every call counts, refused ones too.
-function allow(clientIp) {
-  const now = Date.now();
-  const start = now - (now % WINDOW_MS);
-  if (start !== windowStart) {
-    windowStart = start;
-    counts = new Map();
-  }
-  const count = (counts.get(clientIp) || 0) + 1;
-  counts.set(clientIp, count);
-  return count <= LIMIT;
+// A counter of its own: a function answering true while `key` has made at most the limit of calls in this minute; every call
+// counts, refused ones too.
+function fixedWindow() {
+  let windowStart = 0;
+  let counts = new Map();
+  return (key) => {
+    const now = Date.now();
+    const start = now - (now % WINDOW_MS);
+    if (start !== windowStart) {
+      windowStart = start;
+      counts = new Map();
+    }
+    const count = (counts.get(key) || 0) + 1;
+    counts.set(key, count);
+    return count <= LIMIT;
+  };
 }
+
+// Reveal's and `/r`'s counter, keyed by client IP.
+const allow = fixedWindow();
+// The Page View Ping's counter, keyed by client IP and the Username as it matches a Profile, lower-cased (Usernames match
+// case-insensitively), so another spelling of one Username shares its window.
+const pingWindow = fixedWindow();
+const allowPing = (clientIp, username) => pingWindow(`${clientIp} ${username.toLowerCase()}`);
 
 // The client IP is the last X-Forwarded-For entry, the one Caddy writes; any entry before it is a claim Caddy passed on.
 // ASSUMPTION: the last-entry rule is proven only by inspection: Caddy trusting no proxy replaces a client-set header with
@@ -38,10 +49,10 @@ function allow(clientIp) {
 // Destination (rung 4: a loud 500 shows a changed proxy at once, where one key shared by every header-less call would hide
 // it until load turned it into 429s for every Visitor). Every request reaches the app through Caddy, which always writes
 // the header, and the app publishes no port (spec, Reveal hardening (D8)), so this fires only when that is no longer true.
-// Overturned if something other than Caddy must reach Reveal or `/r`; it then needs a client address of its own.
+// Overturned if something other than Caddy must reach Reveal, `/r` or the ping; it then needs a client address of its own.
 function clientIp(request) {
   const forwarded = request.headers.get('x-forwarded-for');
-  if (!forwarded) throw new Error('X-Forwarded-For missing: Reveal and /r are reached only through Caddy');
+  if (!forwarded) throw new Error('X-Forwarded-For missing: Reveal, /r and the ping are reached only through Caddy');
   return forwarded.split(',').pop().trim();
 }
 
@@ -67,4 +78,4 @@ function sameOrigin(request) {
   }
 }
 
-module.exports = { allow, clientIp, originOf, sameOrigin };
+module.exports = { allow, allowPing, clientIp, originOf, sameOrigin };

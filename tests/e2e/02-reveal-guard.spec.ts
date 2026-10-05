@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext, type APIResponse } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { callsTo429, ENV } from './helpers';
 
 // Ticket 22 (spec, Testing Decisions, 02-reveal-guard; Reveal hardening (D8)): Reveal answers only v2's own origin, and Reveal
 // and `/r` share one per-client limit. Runs in the last project (playwright.config.ts), after every other spec, because it uses
@@ -17,12 +18,6 @@ const FIXTURES = join(ROOT, 'tests', 'fixtures');
 const PROFILE_JSON = '/api/profiles/fixture.json';
 const REVEAL_PATH = '/.netlify/functions/reveal';
 
-const ENV: Record<string, string> = Object.fromEntries(
-  readFileSync(join(ROOT, 'tests', 'e2e.env'), 'utf8')
-    .split('\n')
-    .filter((l) => /^[A-Z_]+=/.test(l))
-    .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]),
-);
 const LIMIT = Number(ENV.REVEAL_LIMIT_PER_MINUTE);
 
 type FixtureLink = { id: string; title: string; url: string };
@@ -110,27 +105,10 @@ test.describe('Reveal answers only its own origin', () => {
 });
 
 test.describe('Reveal and /r share one limit per client', () => {
-  // Sends up to LIMIT + 1 calls and answers how many it took to meet the first 429, or 0 if none came. The window is a fixed
-  // minute that earlier specs may have half used, so a 429 can come early; a minute boundary inside the burst restarts the count,
-  // so a burst with no 429 is sent once more: a burst takes seconds, and no two in a row can both straddle a boundary.
-  // ASSUMPTION: one repeated burst, rather than waiting for a fresh window, keeps "within the limit plus one" exact and the run
-  // fast (rung 5: the app exposes no window clock, and waiting would add up to a minute). Overturned if a burst ever takes
-  // longer than half a minute; the spec then waits for a fresh window first.
-  async function callsTo429(send: (i: number) => Promise<APIResponse>) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      for (let i = 1; i <= LIMIT + 1; i++) {
-        const res = await send(i);
-        if (res.status() === 429) return i;
-        expect([200, 302], `call ${i}`).toContain(res.status());
-      }
-    }
-    return 0;
-  }
-
   test(`repeated Reveal and /r calls, half through each, reach 429 within ${LIMIT} + 1, and no 429 holds a Destination`, async ({ request }) => {
     expect(LIMIT, 'REVEAL_LIMIT_PER_MINUTE in tests/e2e.env').toBeGreaterThan(0);
     // Alternating: with a window per door, neither would count more than half of these calls.
-    const calls = await callsTo429((i) => (i % 2 ? reveal(request, { Origin: origin }) : click(request)));
+    const calls = await callsTo429((i) => (i % 2 ? reveal(request, { Origin: origin }) : click(request)), [200, 302]);
     expect(calls, '429 within the limit plus one').toBeGreaterThan(0);
     // Both doors are now over the limit, with fixed bodies and no Location.
     await expectRefused(await reveal(request, { Origin: origin }), 429, 'Reveal over the limit');
@@ -142,7 +120,7 @@ test.describe('Reveal and /r share one limit per client', () => {
   test('a client-set first X-Forwarded-For entry neither resets nor escapes the limit', async ({ request }) => {
     const forwardedAs = (i: number) => ({ 'X-Forwarded-For': `203.0.113.${i % 250}, 198.51.100.${i % 200}` });
     // Each call claims a fresh address of its own; counted by any of them, every call would pass.
-    const calls = await callsTo429((i) => (i % 2 ? reveal(request, forwardedAs(i)) : click(request, forwardedAs(i))));
+    const calls = await callsTo429((i) => (i % 2 ? reveal(request, forwardedAs(i)) : click(request, forwardedAs(i))), [200, 302]);
     expect(calls, '429 within the limit plus one, whatever the first entry').toBeGreaterThan(0);
     // Once refused, a new claimed address does not start a fresh count.
     for (let i = 1; i <= 5; i++) {
