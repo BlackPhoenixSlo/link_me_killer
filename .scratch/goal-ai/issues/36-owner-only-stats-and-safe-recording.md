@@ -4,7 +4,7 @@ Spec: docs/spec/phase-04-stats.md
 Covers: user stories 10, 20, 23, 24, 29, 30, 33
 Seams: PocketBase's records API on its loopback port, with each Creator's token and with none, for the rule checks; the same port as a superuser for Operator steps and reads. The running v2 stack at Playwright's baseURL through `./check.sh`: Visitors in fresh browser contexts, both Creators' Stats pages in the browser, and the `request` fixture for pings and `/r`, the rate limit read from the committed test env. The spec's Acceptance block
 Blocked by: 34: Reveals and Link Shortcuts count as Clicks and Stats read per Link per day per country, 35: A Tracking Code stays with the Profile it arrived on, 22: Reveal and /r answer only v2's own origin within a per-client limit, 31: Verification and reset emails reach the local mail catcher and their links work
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T13:56:01Z
 
 **What to build:** A Creator's numbers are theirs alone, they keep their history when Links go, and the Event store can neither cost a Visitor a Click nor be flooded. This ticket closes the Phase's local Acceptance.
 
