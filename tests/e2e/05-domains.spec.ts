@@ -365,35 +365,40 @@ test('with an iOS Instagram User-Agent, creator.test/ shows the Escape Overlay e
   expect(shown, 'the Escape Overlay with the stored default, then with Direct Mode').toEqual([true, false]);
 });
 
-// The one Escape a tap on the Escape Link fires at `origin` + `path` with `userAgent`, after closing the Escape Overlay the Profile's
-// Escape Mode default shows on load: an `x-safari-` or `intent://` URL, as Phase 1 captures it.
-async function escapeFired(browser: Browser, origin: string, path: string, userAgent: string) {
+// The Escapes fired at `origin` + `path` with `userAgent`, each an `x-safari-` or `intent://` URL as Phase 1 captures it: first the
+// load-time pop-out the Profile's Escape Mode default fires on open, then, after closing the Escape Overlay that default shows,
+// the one a tap on the Escape Link fires.
+async function escapesFired(browser: Browser, origin: string, path: string, userAgent: string) {
   const context = await phoneContext(browser, { origin, userAgent });
   const visitor = await context.newPage();
   const navigations = await recordNavigations(visitor);
+  const fired = () => [...xSafari(navigations), ...intents(navigations)];
   await visitor.goto(origin + path);
   await showsFixture(visitor, `${origin}${path}`);
+  await expect.poll(fired, `the load-time pop-out on ${origin}${path}`).toHaveLength(1);
   await escapeOverlay(visitor).getByRole('button', { name: 'Close' }).click();
   await card(visitor, 'Escape Link').click();
-  const fired = () => [...xSafari(navigations), ...intents(navigations)];
-  await expect.poll(fired, `the Escapes fired on ${origin}${path}`).toHaveLength(1);
+  await expect.poll(fired, `the Escapes fired on ${origin}${path}`).toHaveLength(2);
   await context.close();
-  return fired()[0];
+  return fired();
 }
 
 test('an Escape from creator.test/{code} targets creator.test and /{code}, with no Username segment, on iOS and as the Android intent', async ({ browser, request }) => {
   const linkId = await fixtureLinkId(request, 'Escape Link');
   const target = `https://${CUSTOM}:${PORT}/111?link=${linkId}`; // the escape target, spelled out as the Phase 1 spec spells it
-  expect(await escapeFired(browser, at(CUSTOM), '/111', UA.iosInstagram), `the iOS Escape for Link ${linkId} on ${CUSTOM}/111`)
-    .toBe(`x-safari-${target}`);
-  expect(await escapeFired(browser, at(CUSTOM), '/111', UA.androidInstagram), `the Android Escape for Link ${linkId} on ${CUSTOM}/111`)
-    .toBe(`intent://${CUSTOM}:${PORT}/111?link=${linkId}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(target)};end`);
+  expect(await escapesFired(browser, at(CUSTOM), '/111', UA.iosInstagram), `the iOS pop-out and Escape for Link ${linkId} on ${CUSTOM}/111`)
+    .toEqual([`x-safari-https://${CUSTOM}:${PORT}/111`, `x-safari-${target}`]);
+  expect(await escapesFired(browser, at(CUSTOM), '/111', UA.androidInstagram), `the Android pop-out and Escape for Link ${linkId} on ${CUSTOM}/111`)
+    .toEqual([
+      `intent://${CUSTOM}:${PORT}/111#Intent;scheme=https;package=com.android.chrome;end`,
+      `intent://${CUSTOM}:${PORT}/111?link=${linkId}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(target)};end`,
+    ]);
 });
 
 test('an Escape from spare.test/{username}/{code} keeps /{username}/{code}', async ({ browser, request }) => {
   const linkId = await fixtureLinkId(request, 'Escape Link');
-  expect(await escapeFired(browser, at(SPARE), '/fixture/222', UA.iosInstagram), `the iOS Escape for Link ${linkId} on ${SPARE}/fixture/222`)
-    .toBe(`x-safari-https://${SPARE}:${PORT}/fixture/222?link=${linkId}`);
+  expect(await escapesFired(browser, at(SPARE), '/fixture/222', UA.iosInstagram), `the iOS pop-out and Escape for Link ${linkId} on ${SPARE}/fixture/222`)
+    .toEqual([`x-safari-https://${SPARE}:${PORT}/fixture/222`, `x-safari-https://${SPARE}:${PORT}/fixture/222?link=${linkId}`]);
 });
 
 // Events this spec's Visitors make carry their own country, which no other spec sends, so other workers' Fixture traffic is left

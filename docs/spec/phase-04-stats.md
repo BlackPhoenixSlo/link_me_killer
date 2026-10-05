@@ -390,6 +390,8 @@ ASSUMPTION (evidence blocked): Cloudflare overwrites any `CF-IPCountry` a client
 
 ASSUMPTION: until Cutover every production Event records `XX`, because v2 has no live traffic before then and nothing proxies it. This costs nothing (rung 5). Overturned if the Operator wants real country numbers on v2's VPS host before Cutover; that host then needs its own Proxied record.
 
+Known effect (Phase 1's load-time pop-out, real-device report 2026-10): a Profile whose default Mode is Escape or Deeplink pops an In-App Browser Visitor out to the System Browser on open, so that Visitor counts two Page Views: the in-app ping, with its In-App Browser, then the System Browser's ping, with none. Not corrected; Page Views from such Profiles read high, and the In-App Browser share reads low.
+
 ## Review
 
 Reviewer: **codex** (codex-cli 0.155.0-alpha.9, `model_reasoning_effort=high`, read-only sandbox on a workspace holding the plan, CONTEXT.md, ADRs 0001–0005 and the harness only), 2026-10-02. Two calls: a blind call without this spec, and a draft call with it. Both exited 0 within the 900 s bound with fresh, non-empty output.

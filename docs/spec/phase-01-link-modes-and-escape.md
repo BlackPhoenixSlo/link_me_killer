@@ -28,9 +28,9 @@ Each Link has one Mode, and each Profile has a default Mode that its Links inher
   - the address itself, with "Copy link"
 
   No Reveal happens inside the In-App Browser. Outside one, Escape Mode behaves as Direct Mode.
-- **Deeplink Mode.** A tap reveals the Destination and hands its https link to the phone, so the Destination's app opens if it is installed, and the web page opens if not.
+- **Deeplink Mode.** A tap reveals the Destination and pops the Visitor out of the In-App Browser into Safari or Chrome with it, as v1's bounce did. Outside an In-App Browser, Android hands the Destination's https link to the app that owns it; elsewhere the Destination opens plainly.
 
-The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose default Mode is Escape Mode shows the Escape Overlay as soon as it opens in an In-App Browser, as v1 does for Instagram. That overlay can be closed whenever the Profile holds a Link that does not escape. Escapes use the host that served the page, so they keep working on a Spare Domain or a Custom Domain.
+The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose default Mode is Escape Mode pops the Visitor out to the System Browser as soon as it opens in an In-App Browser, once per tab (v1's "at start"), and shows the Escape Overlay as the fallback. A Profile whose default Mode is Deeplink Mode pops out on open too, with no overlay. That overlay can be closed whenever the Profile holds a Link that does not escape. Escapes use the host that served the page, so they keep working on a Spare Domain or a Custom Domain.
 
 ## User Stories
 
@@ -42,8 +42,8 @@ The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose d
 6. As an Operator, I want the Mode to live in the Profile JSON the page already reads, so that Phase 2 can serve it from PocketBase and the Editor can set it with no further page change.
 7. As an Operator, I want the Adult flag to stay independent of the Mode, so that an Adult Link can be Direct, Escape or Deeplink.
 8. As a Visitor in Instagram, Facebook, Threads or TikTok, I want the page to recognise my In-App Browser, so that Escape Mode helps me in every one of those apps and not only in Instagram.
-9. As a Visitor in an In-App Browser on a Profile whose default Mode is Escape Mode, I want the Escape Overlay as soon as the page opens, so that I can move to my System Browser before I tap anything.
-10. As a Visitor in an In-App Browser on a Profile whose default Mode is Direct or Deeplink, I want no Escape Overlay when the page opens, so that I can use the Profile right away.
+9. As a Visitor in an In-App Browser on a Profile whose default Mode is Escape Mode, I want the page to pop me out to my System Browser as soon as it opens, once per tab, with the Escape Overlay as the fallback, so that I can move to my System Browser before I tap anything.
+10. As a Visitor in an In-App Browser on a Profile whose default Mode is Direct or Deeplink, I want no Escape Overlay when the page opens, so that I can use the Profile right away; a Deeplink default still pops me out on open, once per tab.
 11. As a Visitor in a System Browser, I never want to see the Escape Overlay, so that nothing gets between me and the Links.
 12. As a Visitor in an In-App Browser on an Escape-default Profile that also holds a Direct or Deeplink Link, I want to close the overlay shown on open, so that I can still reach those Links in place.
 13. As an Operator, I want the overlay shown on open to stay uncloseable on a Profile whose Links all escape, so that such a Profile, every untouched v1 Profile included, keeps v1's overlay.
@@ -66,10 +66,10 @@ The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose d
 30. As an Operator, I want the address bar cleaned of the Tracking Code in a System Browser, as v1 does, so that nothing changes where no Escape is needed.
 31. As a Visitor arriving at `/{username}/{code}?link={Link Id}`, I want that Link to open with that Tracking Code, so that an Escape lands where it was aimed and is credited to the right source.
 32. As a Visitor arriving in a System Browser with a Link Shortcut, I want it to get the Link's Destination the way a tap would, with no Age Gate, and then travel by the Link's Mode, so that an escaped Link lands where its tap would have.
-33. As a Visitor arriving in an In-App Browser with a Link Shortcut to an Escape Mode Link, I want the Escape Overlay aimed at that Link's escape target, with no Reveal and no Escape until I tap, so that the Escape still comes from a tap.
+33. As a Visitor arriving in an In-App Browser with a Link Shortcut to an Escape or Deeplink Mode Link, I want the page to reveal it and pop me out straight to its Destination, once per tab, as v1's `?link=` did, with the Escape Overlay aimed at that Link's escape target as the fallback for an Escape Mode Link.
 34. As a Visitor arriving with a Link Shortcut whose Link Id is not on this Profile, I want the Profile to load as a plain visit, so that a stale or foreign id does nothing.
-35. As a Visitor tapping a Deeplink Mode Link on Android, I want the phone to open the app that owns the Destination's https link, falling back to the web page, so that I land in the app when I have it.
-36. As a Visitor tapping a Deeplink Mode Link on iOS or a computer, I want the Destination's https address opened directly, so that iOS can hand it to its app and everyone else gets the web page.
+35. As a Visitor tapping a Deeplink Mode Link in an In-App Browser, I want the Destination opened in my System Browser (`x-safari-https://` on iOS, the Chrome intent on Android, as v1 did), so that the deeplink pops me out of the app.
+36. As a Visitor tapping a Deeplink Mode Link outside an In-App Browser, I want Android to hand the Destination's https link to the app that owns it, falling back to the web page, and every other browser to open the Destination directly.
 37. As a Visitor tapping an Adult Deeplink Mode Link, I want the Age Gate first and then the deeplink, so that the gate behaves the same in every Mode.
 38. As an Operator, I want a Deeplink Mode Link always to get its Destination from Reveal, so that the phone is handed the Destination's own https link and not v2's click path.
 39. As an Operator, I want the page to need no Destination in the Profile JSON, with a Link whose `url` is absent or empty getting its Destination from Reveal at the moment of the Click, so that v2's server can keep every Destination out of public payloads (ADR 0004, plan section 9).
@@ -142,22 +142,21 @@ The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose d
     |---|---|
     | iOS | `x-safari-` + escape target |
     | iOS Instagram, second option ("Try another way") | `instagram://extbrowser/?url=` + encoded escape target |
-    | Android | `intent://{host}/{path}[?query]#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=` + encoded escape target + `;end` |
+    | Android | `intent://{host}/{path}[?query]#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=` + encoded escape target + `;end` (a tap's escape); the load-time pop-out drops `S.browser_fallback_url=…;`, as v1 did |
     | anything else | none; "Open in browser" carries the escape target itself |
 
     ASSUMPTION: "Try another way" is offered only in Instagram's In-App Browser on iOS, because an `instagram://` link would push Facebook, Threads or TikTok Visitors into the Instagram app (rung 5). Overturned if the real-device matrix shows it escaping correctly from the other apps.
 
     ASSUMPTION: in an In-App Browser on a platform that is neither iOS nor Android, an Escape Mode tap fires no link. It only shows the overlay, whose "Open in browser" is the plain escape target, since no escape link is known there (rung 5). Overturned if such a platform shows up in real traffic and needs its own link.
-  - **Deeplink link.** It applies only to an absolute https Destination (D3: "via its https app link"). Any other Destination is navigated to plainly.
-    - Android, in any browser: `intent://{host}/{path}[?query]#Intent;scheme=https;S.browser_fallback_url=` + encoded Destination + `;end`. No package is named, so Android picks the app that owns the link.
+  - **Deeplink link.** What the Operator calls a deeplink is v1's bounce: it pops the Visitor out of the In-App Browser with the Destination.
+    - In an In-App Browser on iOS or Android: the escape link above, built from the Destination instead of the escape target, with the Destination forced to https as v1 forced it (`http://` becomes `https://`).
+    - Android outside an In-App Browser, for an absolute https Destination: `intent://{host}/{path}[?query]#Intent;scheme=https;S.browser_fallback_url=` + encoded Destination + `;end`. No package is named, so Android picks the app that owns the link.
     - Everywhere else: a top-level navigation to the Destination.
-
-    On iOS and computers, Deeplink Mode therefore navigates as Direct Mode does once the Destination is in hand. Only the real-device matrix's app-installed and app-absent rows can tell them apart there.
 
     ASSUMPTION: a Deeplink Mode Link always gets its Destination from Reveal, whatever its `url` holds, and navigates from Reveal's answer. A server-side `url` such as v2's `/r/{Link Id}` would hand the phone ofl.ink's address, not the Destination's own app link (rung 5). The cost is that the navigation leaves the tap's call stack: Chrome keeps a short-lived user activation across the request, and iOS Universal Links in In-App Browsers are not guaranteed either way. Overturned if the real-device matrix shows dead Deeplink Links (then Reveal starts when the tap lands, or when the Age Gate opens), or shows that a redirect through `/r/` hands off to the app just as well.
 - **When the Escape Overlay shows.**
-  - **On page open,** when the visit is in an In-App Browser and the Profile's default Mode is Escape Mode (CONTEXT.md, Mode, flagged there). This overlay blocks scrolling. Nothing escapes by itself on open, because Escapes fire only from taps (plan section 4).
-  - **Also on page open,** for a Link Shortcut to an Escape Mode Link opened in an In-App Browser.
+  - **On page open,** when the visit is in an In-App Browser and the Profile's default Mode is Escape Mode (CONTEXT.md, Mode, flagged there). This overlay blocks scrolling. Only the guarded load-time pop-out escapes by itself on open: once per tab (sessionStorage), with no fallback in its Android intent, so an In-App Browser that loads the target in place cannot loop.
+  - **Also on page open,** for a Link Shortcut to an Escape Mode Link opened in an In-App Browser, as the fallback for its load-time pop-out.
   - **After a tap,** in an In-App Browser, once an Escape Mode tap has fired its Escape.
   - **Close.** Every Escape Overlay has "Close" except the one shown on page open on a Profile whose Links all resolve to Escape Mode. That overlay stays uncloseable, as v1's is. Close releases the scroll lock.
 
@@ -172,11 +171,11 @@ The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose d
     - For an Adult Link, the Age Gate opens first, and "Continue (18+)" is the tap that escapes.
     - No Reveal happens.
   - **Escape Mode outside an In-App Browser** behaves as Direct Mode.
-  - **Deeplink Mode.** The page reveals, then uses the Deeplink link. An Adult Link passes the Age Gate first, and Reveal runs after "Continue (18+)".
+  - **Deeplink Mode.** The page reveals, then uses the Deeplink link: in an In-App Browser it pops out to the Destination in the System Browser. An Adult Link passes the Age Gate first, and Reveal runs after "Continue (18+)".
 
   ASSUMPTION: an Adult Escape Mode Link shows the Age Gate in the In-App Browser, and the Link Shortcut then reveals without a second gate in the System Browser. That is the existing Link Shortcut behaviour (rung 3). Overturned if the Operator wants the gate shown in the System Browser instead.
 - **Link Shortcut.** It is read on page load, before the address bar is touched, so `/{username}/{code}?link={Link Id}` reveals with that code. It then follows the Link's effective Mode.
-  - In an In-App Browser, an Escape Mode Link shows the Escape Overlay aimed at that Link's escape target, with no Reveal and no Escape until a tap.
+  - In an In-App Browser on iOS or Android, an Escape or Deeplink Mode Link is v1's `?link=`: the page reveals it and pops out straight to the Destination (the load-time pop-out, once per tab, no Android fallback). An Escape Mode Link also shows the Escape Overlay aimed at that Link's escape target as the fallback. This is the one Reveal an Escape Mode Link makes inside an In-App Browser (story 24 holds for taps).
   - Anywhere else, the Link gets its Destination as a tap does (Taps by Mode, Destination) and travels by its Mode, with no Age Gate, since v1's Link Shortcut has none (Out of Scope). Escape Mode outside an In-App Browser is Direct Mode.
   - A Link Id that is not on this Profile is ignored, and the page loads as a plain visit.
 
@@ -239,16 +238,17 @@ Behaviours covered. `{p}` is the Fixture Profile's Username, and `TC` is a numer
     - "Close" hides the overlay and puts the address back to `/{p}/TC`.
   - After an earlier visit to `/{p}/TC` in the same browser context, a tap on the Escape Mode Link from `/{p}` carries `TC` in both the recorded target and the address bar.
   - The hop itself: the recorded target with `x-safari-` stripped, opened in a fresh browser context with a desktop UA (fresh storage, as in a System Browser), lands where a tap on that Link would. For the Adult Link set to Escape Mode with tracking on, that Reveal carries `TC`.
-  - `/{p}/TC?link={Escape Mode Link Id}` shows the overlay aimed at that address, with "Close", no Reveal request and nothing `x-safari-` recorded.
+  - `/{p}/TC?link={Escape Mode Link Id}` reveals that Link, records `x-safari-https://` + the Destination, and shows the overlay aimed at that address, with "Close".
   - The Adult Link, set to Escape Mode, shows the Age Gate. "Continue (18+)" records the `x-safari-` Escape in its own task, and no Reveal request is ever made. Closing the Age Gate instead records no navigation and makes no Reveal request.
-  - The Deeplink Link reveals, then navigates plainly to the answer.
+  - The Deeplink Link reveals, then records `x-safari-https://` + the answer.
   - Variants:
     - A Link given an unrecognised Mode follows the Profile default: it navigates plainly, and nothing `x-safari-` is recorded.
     - A Link with its `mode` removed follows the Profile default: under `direct` it navigates plainly with nothing `x-safari-` recorded, and under `deeplink` it makes a Reveal request.
-    - A default of `escape_ig`, or an unrecognised default, on a Profile that still holds the Direct and Deeplink Links shows the overlay on open, with "Close". After "Close" the Direct Link navigates plainly.
+    - A default of `escape_ig`, or an unrecognised default, on a Profile that still holds the Direct and Deeplink Links records the load-time pop-out `x-safari-https://{host}/{p}` and shows the overlay on open, with "Close". After "Close" the Direct Link navigates plainly.
     - Every Link set to Escape Mode, with an `escape_ig` default, shows the overlay on open with no "Close".
     - After an earlier visit to `/{p}/TC` in the same browser context, opening `/{p}` with an `escape_ig` default shows the overlay on open, the address `/{p}/TC`, and "Open in browser" carrying `x-safari-https://{host}/{p}/TC`. "Close" puts the address back to `/{p}`.
-    - A default of `deeplink` shows no overlay on open.
+    - A default of `deeplink` records the load-time pop-out and shows no overlay on open.
+  - Per platform (iOS and Android TikTok, Android Instagram's load-time cases): the load-time pop-out with an Escape or Deeplink default and for an Escape Link Shortcut, none on a second load in the same tab, and none in iOS Safari or Android Chrome under either default.
     - The Adult Link set to Direct shows the Age Gate. "Continue (18+)" reveals and navigates plainly, and nothing `x-safari-` is recorded.
 - **Android Instagram UA.**
   - A tap on the Escape Mode Link records `intent://{host}/{p}/TC?link={id}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url={encoded target};end`. "Open in browser" carries the same `href` and records it when tapped, and there is no "Try another way".
@@ -314,7 +314,6 @@ test -s .scratch/goal_ai/shots/01-link-modes-and-escape.png
 - **Serving, deploying or tunnelling the page to a public https host for phones.** This is Phase 2's deploy or a human step. A tunnel is a new dependency and a network fetch (floor 2).
 - **An Age Gate on Link Shortcuts.** It is existing v1 behaviour, kept, and nobody asked for it.
 - **Starting Reveal before the Deeplink tap or when the Age Gate opens,** to keep user activation. YAGNI until the real-device matrix shows a dead Link.
-- **Escaping by itself on page open, without a tap.** Plan section 4 says Escapes fire from a tap.
 - **Detecting In-App Browsers beyond the plan's pattern** (Snapchat, LinkedIn and so on). They are not in the plan.
 - **Translated overlay copy or per-app artwork.** Not asked for.
 - **Protecting ofl.ink from being Flagged.** The plan's riskiest assumption (section 4) is answered by Spare Domains (D6, Phase 5). This Phase only makes Escapes follow whichever host served the page.
@@ -355,7 +354,7 @@ Blind call (before the spec):
 - **reject** (B6) Deeplink through `/r`, or Reveal followed by a fresh tap. `/r` would hand the phone ofl.ink's address, which no app owns. A second tap costs every Visitor a step against a failure nobody has seen. The single-tap Reveal is already flagged (Deeplink link ASSUMPTION), with the matrix as its falsifier (rung 5).
 - **reject** (B7) Undefined handling of an absent, null or unknown Mode, of overrides, or of a changed default. Covered: the Schema's effective Mode rule treats anything unrecognised as missing (stories 4–5), and Links resolve against the current default.
 - **partial** (B8) The Adult × Mode × Shortcut sequence. Already set: the gate comes before the Escape (story 23), and a Shortcut has no gate (v1 behaviour, Out of Scope). Accepted: "resolved as a tap resolves it" could be read as gating, so the Link Shortcut bullet and story 32 now say "with no Age Gate". A gate-cancel test was added (closing the Age Gate records no navigation and makes no Reveal).
-- **reject** (B9) No protocol for escape completion, return or loop avoidance. Covered: the tap fires the first link and the overlay offers the rest (Escape Mode in an In-App Browser). An Escape never fires on load, and a Link Shortcut in an In-App Browser waits for a tap, so a fallback that loads in-app cannot loop.
+- **reject** (B9) No protocol for escape completion, return or loop avoidance. Covered: the tap fires the first link and the overlay offers the rest (Escape Mode in an In-App Browser). Superseded (real-device report, 2026-10): the load-time pop-out now fires on open, so it runs at most once per tab (sessionStorage) and its Android intent carries no fallback; a target that loads in-app therefore cannot loop.
 - **reject** (B10) An incomplete handoff URL contract. Covered by Contracts, Escape target (host, path, code precedence, `?link=`, https) and by the platform table's encoding. An unknown Link Id is ignored (Link Shortcut).
 - **partial** (B11) Unspecified disclosure boundaries and Reveal failure. Disclosure is Phase 2's (Out of Scope; ADR 0004). Accepted: the new Reveal callers now keep Phase 0's failure handling under a flagged ASSUMPTION, with no new error UI.
 - **reject** (B12) A fuller outcome contract: Chrome or the app absent, detection misses, copy failures, focus and retry. The matrix rows define the Chrome-absent and app-absent outcomes, and the address shown as text is the manual copy route (story 19). Detection beyond the pattern, focus and retry are not in the plan (YAGNI).

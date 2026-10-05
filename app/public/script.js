@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent || '');
     const isIOSInstagram = isIOS && /Instagram/i.test(navigator.userAgent || '');
     const isAndroid = /Android/.test(navigator.userAgent || '');
+    const canPopOut = isIOS || isAndroid; // the platforms with an escape link
 
     // The Profile this page is for, as the app resolved it from the host and the path (Phase 5): its Username, the Tracking Code
     // the path carried, and the Profile path every URL the page builds for itself starts from (`/{username}`, or `/` on a
@@ -79,24 +80,37 @@ document.addEventListener('DOMContentLoaded', () => {
             // A Link Shortcut whose Link Id is not on this Profile is ignored: the page loads as a plain visit
             const shortcutLink = linkShortcut ? linksData.find(link => link.id === linkShortcut) : null;
 
-            if (isInAppBrowser && shortcutLink && effectiveMode(shortcutLink) === 'escape_ig') {
-                // In an In-App Browser an Escape Mode Link Shortcut shows the Escape Overlay aimed at that Link's escape target,
-                // with Close; nothing is revealed and no Escape fires until the Visitor taps
+            const shortcutMode = shortcutLink ? effectiveMode(shortcutLink) : null;
+
+            if (isInAppBrowser && shortcutMode === 'escape_ig') {
+                // In an In-App Browser an Escape Mode Link Shortcut is v1's `?link=`: Reveal, then bounce straight to the
+                // Destination, once per tab. The Escape Overlay, aimed at that Link's escape target and with Close, is the fallback
                 const target = escapeTarget(shortcutLink.id);
                 pointAddressAt(target);
                 openEscapeOverlay(target, true);
+                if (canPopOut) popOutOnLoad(() => revealAndGo(shortcutLink, bounceOnLoad));
                 return;
             }
 
-            // Escape Overlay on open: In-App Browser and a Profile default that resolves to Escape Mode
+            // Pop out on open (v1's "at start"), once per tab: In-App Browser and a Profile default of Escape or Deeplink Mode.
+            // Escape Mode also shows the Escape Overlay as the fallback; Deeplink Mode leaves the page usable
             if (isInAppBrowser && defaultMode() === 'escape_ig') {
                 const target = escapeTarget(null);
                 pointAddressAt(target);
                 openEscapeOverlay(target, !linksData.every(link => effectiveMode(link) === 'escape_ig'));
+                if (!shortcutLink) popOutOnLoad(() => bounceOnLoad(target.url));
+            } else if (isInAppBrowser && defaultMode() === 'deeplink' && !shortcutLink) {
+                popOutOnLoad(() => bounceOnLoad(escapeTarget(null).url));
             }
 
-            // Link Shortcut: the Destination as a tap gets it, then travel by Mode, with no Age Gate (v1's Link Shortcut has none)
-            if (shortcutLink) goToDestination(shortcutLink);
+            // Link Shortcut, with no Age Gate (v1's Link Shortcut has none). A Deeplink Mode one in an In-App Browser is v1's
+            // `?link=`: Reveal, then bounce straight to the Destination, once per tab. Any other gets the Destination as a tap
+            // gets it, then travels by Mode
+            if (shortcutLink && isInAppBrowser && canPopOut && shortcutMode === 'deeplink') {
+                popOutOnLoad(() => revealAndGo(shortcutLink, bounceOnLoad));
+            } else if (shortcutLink) {
+                goToDestination(shortcutLink);
+            }
         })
         .catch(error => {
             console.error('Error fetching profile:', error);
@@ -247,7 +261,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function revealAndGo(link) {
+    // Reveal, then `go` to the answer (by default, travel by the Link's Mode)
+    function revealAndGo(link, go = url => travel(link, url)) {
         fetch(revealUrl(link.id))
             .then(res => {
                 if (!res.ok) throw new Error('Network response was not ok');
@@ -255,7 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then(data => {
                 if (data.realUrl) {
-                    travel(link, data.realUrl);
+                    go(data.realUrl);
                 }
             })
             .catch(err => console.error('Error revealing link:', err));
@@ -269,34 +284,64 @@ document.addEventListener('DOMContentLoaded', () => {
         return { path, url: `https://${window.location.host}${path}` };
     }
 
-    // Escape link, per platform: iOS hands the target to Safari, Android to Chrome with the target as fallback; anything else has none
-    function escapeLink(targetUrl) {
-        if (isIOS) return 'x-safari-' + targetUrl;
-        if (isAndroid) return httpsIntent(targetUrl, 'package=com.android.chrome;');
+    // An address as https, whatever scheme it had, as v1's performBounce forced it
+    const asHttps = url => 'https://' + url.replace(/^https?:\/\//i, '');
+
+    // Android intent for an address: intent://{host}/{path}[?query] opened as https, with `extra` (package, fallback)
+    function httpsIntent(url, extra) {
+        return 'intent://' + asHttps(url).slice('https://'.length) + '#Intent;scheme=https;' + extra + 'end';
+    }
+    const fallbackTo = url => 'S.browser_fallback_url=' + encodeURIComponent(asHttps(url)) + ';';
+
+    // Escape link, per platform: v1's x-safari-https:// on iOS and its Chrome intent on Android; anything else has none.
+    // A tap's Android intent falls back to the address itself, for a phone without Chrome. The load-time pop-out's has no
+    // fallback, as v1's had none: an In-App Browser that loads the fallback in place would reload this page inside the app
+    function escapeLink(url, withFallback = true) {
+        if (isIOS) return 'x-safari-' + asHttps(url);
+        if (isAndroid) return httpsIntent(url, 'package=com.android.chrome;' + (withFallback ? fallbackTo(url) : ''));
         return null;
     }
 
-    // Android intent for an https address: intent://{host}/{path}[?query], falling back to the address itself
-    function httpsIntent(url, pkg) {
-        return 'intent://' + url.replace(/^https:\/\//i, '') + '#Intent;scheme=https;' + pkg +
-            'S.browser_fallback_url=' + encodeURIComponent(url) + ';end';
+    // Pop out of the In-App Browser, where the platform has an escape link
+    function popOut(url, withFallback = true) {
+        const href = escapeLink(url, withFallback);
+        if (href) window.location.href = href;
+    }
+    const bounceOnLoad = url => popOut(url, false);
+
+    // The load-time pop-out runs at most once per tab: if an In-App Browser loads the target in place instead of leaving,
+    // the reloaded page does not pop out again. Taps are never held back
+    function popOutOnLoad(fire) {
+        try {
+            if (sessionStorage.getItem('popOut')) return;
+            sessionStorage.setItem('popOut', '1');
+        } catch (err) {
+            return; // no storage, no guard: no load-time pop-out
+        }
+        fire();
     }
 
     // An Escape Mode tap in an In-App Browser: fired from the tap itself, with no request before it
     function escapeOnTap(link) {
         const target = escapeTarget(link.id);
         pointAddressAt(target);
-        const href = escapeLink(target.url);
-        if (href) window.location.href = href;
+        popOut(target.url);
         openEscapeOverlay(target, true);
     }
 
-    // After a Reveal: on Android a Deeplink Mode Link with an absolute https Destination hands off by a package-less intent;
-    // everything else navigates plainly (Escape Mode outside an In-App Browser behaves as Direct Mode)
+    // After a Reveal, a Deeplink Mode Link pops out: in an In-App Browser straight to the Destination in Safari or Chrome, as
+    // v1's performBounce did after its Reveal; on Android outside one, an https Destination by a package-less app-link intent,
+    // so Android picks the app that owns it. Everything else navigates plainly (Escape Mode outside an In-App Browser behaves
+    // as Direct Mode)
     function travel(link, url) {
-        if (isAndroid && effectiveMode(link) === 'deeplink' && /^https:\/\//i.test(url)) {
-            window.location.href = httpsIntent(url, '');
-            return;
+        if (effectiveMode(link) === 'deeplink') {
+            let href = null;
+            if (isInAppBrowser && /^https?:\/\//i.test(url)) href = escapeLink(url);
+            else if (!isInAppBrowser && isAndroid && /^https:\/\//i.test(url)) href = httpsIntent(url, fallbackTo(url));
+            if (href) {
+                window.location.href = href;
+                return;
+            }
         }
         window.location.href = url;
     }

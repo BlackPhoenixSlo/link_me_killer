@@ -86,11 +86,11 @@ Plain navigation to the Destination, with no Escape and no Escape Overlay.
 _Avoid_: normal, none, "nothing from above"
 
 **Escape Mode**:
-Attempts an Escape on tap, with the Escape Overlay as the fallback.
+Attempts an Escape on tap, with the Escape Overlay as the fallback. As a Profile's default Mode it also attempts an Escape as soon as the page opens in an In-App Browser, once per tab (v1's "pop out at start").
 _Avoid_: escape_ig (outside stored data), IG mode, bounce mode
 
 **Deeplink Mode**:
-Opens the Destination's own app through its https app link, falling back to the web page.
+Pops the Visitor out of the In-App Browser into the System Browser with the Destination, as v1's bounce did; outside an In-App Browser, Android hands the Destination's https link to the app that owns it. As a Profile's default Mode it also pops out as soon as the page opens in an In-App Browser, once per tab.
 _Avoid_: app-link mode, deep link (for anything else)
 
 ## Attribution and Stats
@@ -107,6 +107,7 @@ _Avoid_: geo, geo config, geo-targeting
 **Page View**:
 A Visitor loading a Profile.
 _Avoid_: visit, view, impression, hit
+Known effect: a load-time pop-out out of an In-App Browser counts two Page Views for one Visitor, one in the app and one when the System Browser loads the Profile (with no In-App Browser).
 
 **Click**:
 A Visitor following a Link to its Destination, whether the Destination came by Reveal or by server redirect.
