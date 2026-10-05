@@ -54,7 +54,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 | 24 | [The Operator pulls the local mail catcher's image](issues/24-mail-catcher-image.md) | phase-03 | None | done |
 | 25 | [Anyone with the sign-up link creates an account and claims a Username](issues/25-sign-up-and-claim.md) | phase-03 | 20 | done |
 | 26 | [A verified Creator goes through Onboarding to a live Profile whose Links act like imported ones](issues/26-onboarding-to-live-profile.md) | phase-03 | 25, 18, 21 | done |
-| 27 | [A Creator changes their Profile in the Editor and its default Mode reaches the page](issues/27-editor-profile-and-mode.md) | phase-03 | 26 | ready-for-agent |
+| 27 | [A Creator changes their Profile in the Editor and its default Mode reaches the page](issues/27-editor-profile-and-mode.md) | phase-03 | 26 | claimed 20261004T191309Z |
 | 28 | [A Creator manages their Links in the Editor and a refused save keeps what they typed](issues/28-editor-links.md) | phase-03 | 26 | ready-for-agent |
 | 29 | [Log-in lands a Creator where they left off and a handed-over Profile opens in the Editor](issues/29-log-in-lands-where-left.md) | phase-03 | 26 | ready-for-agent |
 | 30 | [Only a Profile's owner and the Operator can read or change it through PocketBase's API](issues/30-owner-rules-over-http.md) | phase-03 | 26 | ready-for-agent |

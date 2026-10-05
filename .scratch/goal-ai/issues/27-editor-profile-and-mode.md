@@ -4,7 +4,7 @@ Spec: docs/spec/phase-03-auth-and-editor.md
 Covers: user stories 22, 23, 24, 25, 31, 39, 41, 50
 Seams: the running v2 stack at Playwright's baseURL: the Creator in the browser at 390×844; the Visitor in a fresh context, with an Instagram User-Agent for the Escape Overlay, reading the page and its Profile JSON
 Blocked by: 26: A verified Creator goes through Onboarding to a live Profile whose Links act like imported ones
-Status: ready-for-agent
+Status: claimed 20261004T191309Z 2026-10-05T03:29:58Z
 
 **What to build:** The top of the Editor, laid out like the link.me Template's "Edit Profile" screen, phone-first:
 - **"Your Bio Link".** The Profile's public address, with a copy button.
