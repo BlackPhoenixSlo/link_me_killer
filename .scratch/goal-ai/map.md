@@ -24,7 +24,7 @@ ofl.ink v2: a Docker Compose link-in-bio service (Caddy, Hono on Node, PocketBas
 
 ## Tickets
 
-Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (2026-10-04) answered ports (Traefik fronts Caddy) and country source (Cloudflare) and closed the network gate: 24 done by the Operator, 13/37/42 ready-for-agent, 11/23/32/38/43 parked only as Operator VPS steps, 44 parked needs-human.
+Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 45 tickets (45 added 2026-10-05 by the coordinator as a prefactoring ticket before Phase 4, at the Operator's instruction). Plan §11 (2026-10-04) answered ports (Traefik fronts Caddy) and country source (Cloudflare) and closed the network gate: 24 done by the Operator, 13/37/42 ready-for-agent, 11/23/32/38/43 parked only as Operator VPS steps, 44 parked needs-human.
 
 | NN | Ticket | Spec | Blocked by | Status |
 |---|---|---|---|---|
@@ -72,6 +72,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 | 42 | [Visitor location trusts only the production country source and ofl.ink's DNS is ready for a one-record switch](issues/42-country-source-and-dns-ready.md) | phase-05 | 41 | ready-for-agent |
 | 43 | [The Operator switches ofl.ink to v2 by one DNS change while v1 stays live](issues/43-cutover-runbook.md) | phase-05 | 41, 42, 23, 32, 38 | parked — VPS step: the Operator runs the commands (plan §11) |
 | 44 | [Bio links move to a warmed Spare Domain the day ofl.ink is Flagged](issues/44-spare-domain-rotation.md) | phase-05 | 43 | parked — needs-human: Spare Domain vs Meta Flag |
+| 45 | [Caddy accepts PROXY protocol from Traefik behind an env flag and the Reveal/r client key stays per Visitor](issues/45-caddy-proxy-protocol-flag.md) | phase-02, phase-05 | 22 | ready-for-agent |
 
 ## Decisions so far
 
