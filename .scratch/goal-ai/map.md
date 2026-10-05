@@ -24,7 +24,7 @@ ofl.ink v2: a Docker Compose link-in-bio service (Caddy, Hono on Node, PocketBas
 
 ## Tickets
 
-Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 45 tickets (45 added 2026-10-05 by the coordinator as a prefactoring ticket before Phase 4, at the Operator's instruction). Plan §11 (2026-10-04) answered ports (Traefik fronts Caddy) and country source (Cloudflare) and closed the network gate: 24 done by the Operator, 13/37/42 ready-for-agent, 11/23/32/38/43 parked only as Operator VPS steps, 44 parked needs-human.
+Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 45 tickets (45 added 2026-10-05 by the coordinator as a prefactoring ticket before Phase 4, at the Operator's instruction). Plan §11 (2026-10-04) answered ports (Traefik fronts Caddy) and country source (Cloudflare) and closed the network gate: 24 done by the Operator; 13/37/42 were ready-for-agent and are done as of execute run 2 (2026-10-05, 14 tickets, frontier empty); 11/23/32/38/43 parked only as Operator VPS steps, 44 parked needs-human.
 
 | NN | Ticket | Spec | Blocked by | Status |
 |---|---|---|---|---|
