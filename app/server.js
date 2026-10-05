@@ -263,6 +263,12 @@ app.get('*', async (c) => {
   const file = fileUnder(PUBLIC, c.req.path);
   if (file && file !== INDEX) return serveFile(c, file);
   const request = await hosts.resolveProfileRequest(c.req.header('host'), new URL(c.req.url).pathname);
+  // The root of ofl.ink, and of any host that is not a Custom Domain, is the landing page (Operator's ask, 2026-10-06), not
+  // v1's default Profile. A Custom Domain's root stays its Profile (resolveProfileRequest names it). The page script's
+  // empty-Username fallback stays for Page Copy parity but is never reached from here.
+  if (request && request.username === '' && request.trackingCode === null) {
+    return c.body(pageCopy('landing.html'), 200, { 'Content-Type': TYPES['.html'], 'Cache-Control': MUST_REVALIDATE });
+  }
   const block = `<script type="application/json" id="profile-bootstrap">${asScriptJson(request)}</script>\n    `;
   const page = pageCopy('index.html').toString('utf8').replace(BOOTSTRAP_BEFORE, () => block + BOOTSTRAP_BEFORE);
   return c.body(page, 200, { 'Content-Type': TYPES['.html'], 'Cache-Control': MUST_REVALIDATE });

@@ -1,5 +1,5 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
-import { featured, heading, logIn, onLocalStack, PHONE, proxy, servedProfile, trackingAndGeo, verifiedCreator } from './helpers';
+import { account, featured, fresh, heading, logIn, mailedLink, onLocalStack, PHONE, proxy, servedProfile, trackingAndGeo, verifiedCreator } from './helpers';
 
 // The Editor's redesign (docs/spec/editor-redesign.md, section 11's rulings) at its seams, at 390×844: the in-page delete dialog,
 // the "Tracking and Geo Rule" disclosure, the Default Mode helper, the Creator nav, the Sections jump chips and the landing page.
@@ -147,4 +147,31 @@ test('the landing page has one h1, one "Create your page" and one "Log in" link,
   await expect(logInLink).toHaveAttribute('href', '/edit/login');
   await expect(page.getByText('Followed a link here? That page doesn\'t exist.')).toBeInViewport();
   await expect(page.locator('script')).toHaveCount(0);
+});
+
+// The demo Creator: the Operator claims the Username `demo` on the VPS, and the landing's "See a demo" opens that Profile. Here
+// a throwaway Creator signs up as `demo` (not a reserved name) and is verified, named and given one Link through the proxy, as
+// verifiedCreator arranges its Creators.
+test.describe('the landing page\'s demo', () => {
+  test.skip(!onLocalStack(), 'the mail catcher is on the local test stack only');
+
+  test('"See a demo" on / opens the Profile at /demo, which shows the demo Creator\'s display name and Link', async ({ page, request }) => {
+    const { creator, token, id } = await account(request, { ...fresh(), username: 'demo' });
+    const as = proxy(request, token);
+    const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig' });
+    expect(claimed.status()).toBe(200);
+    const profileId = (await claimed.json()).id as string;
+    expect((await proxy(request).post('users/request-verification', { email: creator.email })).status()).toBe(204);
+    const verification = new URL(await mailedLink(creator.email, '/edit/verify')).searchParams.get('token');
+    expect((await proxy(request).post('users/confirm-verification', { token: verification })).status()).toBe(204);
+    expect((await as.patch(`profiles/records/${profileId}`, { displayName: 'Demo Creator' })).status()).toBe(200);
+    const link = { profile: profileId, title: 'Demo card', order: 0, mode: '', destination: 'https://example.com/demo/0' };
+    expect((await as.post('links/records', link)).status()).toBe(200);
+
+    await page.goto('/');
+    await page.getByRole('link', { name: 'See a demo', exact: true }).click();
+    await expect(page).toHaveURL(/\/demo$/);
+    await expect(page.locator('#displayName')).toHaveText('Demo Creator');
+    await expect(page.locator('.link-card .link-title')).toHaveText(['Demo card']);
+  });
 });

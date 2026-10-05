@@ -71,6 +71,8 @@
     .l-btn:active { transform: scale(0.98); }
     .l-btn--primary { background: var(--e-color-primary); color: var(--e-color-text-inverse); }
     .l-btn--primary:hover { background: var(--e-color-primary-hover); }
+    .l-btn--secondary { border-color: var(--e-color-border-strong); background: var(--e-color-surface); color: var(--e-color-text); }
+    .l-btn--secondary:hover { background: var(--e-color-surface-hover); }
     .l-btn--ghost { min-height: var(--e-tap); padding: 0 var(--e-space-4); color: var(--e-color-primary); }
     .l-btn--ghost:hover { background: var(--e-color-primary-soft); }
 
@@ -132,7 +134,7 @@
     }
     .l-hero .l-lead { margin-top: var(--e-space-4); }
     .l-actions { display: flex; flex-wrap: wrap; gap: var(--e-space-3); margin-top: var(--e-space-6); }
-    .l-actions .l-btn--primary { flex: 1 1 auto; }
+    .l-actions .l-btn { flex: 1 1 auto; }
     .l-note {
       margin-top: var(--e-space-6);
       padding: var(--e-space-3) var(--e-space-4);
@@ -229,7 +231,7 @@
       .l-wrap { --l-pad: var(--e-space-8); }
       .l-section { padding-block: var(--e-space-16); }
       .l-h2 { font-size: var(--e-text-3xl); line-height: var(--e-leading-3xl); }
-      .l-actions .l-btn--primary { flex: 0 0 auto; }
+      .l-actions .l-btn { flex: 0 0 auto; }
       .l-card { padding: var(--e-space-6); }
 
       .l-steps__list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--e-space-8); }
@@ -278,6 +280,7 @@
           <p class="l-lead">Put all your Links on one page. Help Visitors get out of the Instagram and TikTok browser, so your Links open in Safari or Chrome. See what they tap.</p>
           <div class="l-actions">
             <a class="l-btn l-btn--primary" href="/edit/signup">Create your page</a>
+            <a class="l-btn l-btn--secondary" href="/demo">See a demo</a>
           </div>
           <p class="l-note">Followed a link here? That page doesn't exist. Check the address in the bio you came from.</p>
         </div>

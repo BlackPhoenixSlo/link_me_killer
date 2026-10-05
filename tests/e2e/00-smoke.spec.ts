@@ -50,6 +50,21 @@ test('a normal browser does not see the Instagram overlay', async ({ page }) => 
   await expect(page.locator('#igOverlay')).toBeHidden();
 });
 
+// The root is the landing page, served at `/` itself rather than through the Profile page's not-found redirect; a Username
+// path still shows its Profile.
+test('/ answers 200 with the landing page and its one "See a demo" link to /demo, and /fixture still shows the Fixture Profile', async ({ page }) => {
+  const root = await page.goto('/');
+  expect(root!.status()).toBe(200);
+  await expect(page.getByRole('heading', { level: 1, name: 'One link for your bio', exact: true })).toBeVisible();
+  expect(new URL(page.url()).pathname, 'the landing page at / itself, not reached through a redirect').toBe('/');
+  const demo = page.getByRole('link', { name: 'See a demo', exact: true });
+  await expect(demo).toHaveCount(1);
+  await expect(demo).toHaveAttribute('href', '/demo');
+
+  await page.goto(PROFILE);
+  await expect(page.locator('#displayName')).toHaveText('Fixture Profile');
+});
+
 // The Reveal id comes from the page's own served Profile JSON, never the fixture file or a literal.
 // Phase 2 (ticket 16): served ids are fresh on v2, so the Test Secret is found through the fixture file's card of the same title.
 // Destinations are compared as booleans so a failure never prints one.
