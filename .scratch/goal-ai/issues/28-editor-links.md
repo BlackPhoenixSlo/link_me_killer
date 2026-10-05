@@ -4,7 +4,7 @@ Spec: docs/spec/phase-03-auth-and-editor.md
 Covers: user stories 26, 28, 30, 34, 35, 36, 37, 38, 39, 40, 48
 Seams: the running v2 stack at Playwright's baseURL: the Creator in the browser at 390×844; the Visitor in a fresh context, reading the page and Reveal's real answer with the navigation intercepted
 Blocked by: 26: A verified Creator goes through Onboarding to a live Profile whose Links act like imported ones
-Status: ready-for-agent
+Status: claimed 20261005T084628Z 2026-10-05T08:46:52Z
 
 **What to build:** The Editor's "Featured Links", laid out like the link.me Template's: one row per Link in the order Visitors see them, an up and a down button where the Template's drag handle sits, and a delete button.
 - **Edit.** Opening a Link fills the Link form with its current values, the Destination included, which the owner may read. Any field can change. A background can be replaced through Phase 2's upload endpoint (1080 px webp) or removed.

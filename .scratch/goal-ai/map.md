@@ -1,6 +1,6 @@
 # Map — goal-ai (run 2, under plan amendment §8)
 
-`--execute` — invoked 2026-10-04 as `/spec-auto goal_ai.txt --execute --tickets 24`; run id 20261004T191309Z; resumed at step 5 (steps 0–4 committed at 4e9e361). Plan §11 answers ports and country source.
+`--execute` — invoked 2026-10-05 as `/spec-auto goal_ai.txt --execute --tickets 14` (run id 20261005T084628Z, resumed at step 5 after 8faa1c2; build order 28–31, 33–37, 39–42, all local). Earlier: invoked 2026-10-04 as `/spec-auto goal_ai.txt --execute --tickets 24`; run id 20261004T191309Z; resumed at step 5 (steps 0–4 committed at 4e9e361). Plan §11 answers ports and country source.
 
 Run id: 20261002T174527Z. Mode: design-only (no `--execute`). Run 1 (64 tickets, Netlify-first) is superseded and kept at `.scratch/goal-ai-superseded-run1/` and `docs/spec-superseded-run1/`.
 
@@ -55,7 +55,7 @@ Waves are serial: Phase 0 → 1 → 2 → 3 → 4 → 5. 44 tickets. Plan §11 (
 | 25 | [Anyone with the sign-up link creates an account and claims a Username](issues/25-sign-up-and-claim.md) | phase-03 | 20 | done |
 | 26 | [A verified Creator goes through Onboarding to a live Profile whose Links act like imported ones](issues/26-onboarding-to-live-profile.md) | phase-03 | 25, 18, 21 | done |
 | 27 | [A Creator changes their Profile in the Editor and its default Mode reaches the page](issues/27-editor-profile-and-mode.md) | phase-03 | 26 | done |
-| 28 | [A Creator manages their Links in the Editor and a refused save keeps what they typed](issues/28-editor-links.md) | phase-03 | 26 | ready-for-agent |
+| 28 | [A Creator manages their Links in the Editor and a refused save keeps what they typed](issues/28-editor-links.md) | phase-03 | 26 | claimed 20261005T084628Z |
 | 29 | [Log-in lands a Creator where they left off and a handed-over Profile opens in the Editor](issues/29-log-in-lands-where-left.md) | phase-03 | 26 | ready-for-agent |
 | 30 | [Only a Profile's owner and the Operator can read or change it through PocketBase's API](issues/30-owner-rules-over-http.md) | phase-03 | 26 | ready-for-agent |
 | 31 | [Verification and reset emails reach the local mail catcher and their links work](issues/31-mail-links.md) | phase-03 | 24, 22, 27, 28, 29, 30 | ready-for-agent |
