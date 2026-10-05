@@ -4,7 +4,7 @@ Spec: docs/spec/phase-02-vps-foundation.md
 Covers: user stories 14, 29, 30, 31, 33, 34
 Seams: PocketBase's REST API on its loopback port, called as the admin UI calls it, to arrange state and to make anonymous calls; the running stack's public HTTP surface at baseURL through `./check.sh`, to see each edit
 Blocked by: 16: The Fixture Profile is served by v2's stack and every Phase 0 and Phase 1 spec passes on it
-Status: claimed 20261004T191309Z 2026-10-05T00:34:37Z
+Status: done
 
 **What to build:** An edit the Operator makes in PocketBase's admin UI shows on the next page load, with no build and no restart:
 - a Profile created with a Link shows on its page;

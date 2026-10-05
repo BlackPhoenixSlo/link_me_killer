@@ -371,13 +371,13 @@ test.describe('repairs, seen over HTTP on the seeded stack', () => {
 });
 
 // Ticket 16 (folded from ticket 15's tests/stack-import-check.mjs): the test stack, its schema and the v1 Import's write half,
-// checked through the Operator's three doors: PocketBase's REST API on its loopback port (as the superuser from tests/e2e.env,
-// and anonymously), the import through `docker compose run`, and Compose's own status and inspect output. The harness's seed (tests/stack.sh) is the import run whose
+// checked through the Operator's three doors: PocketBase's REST API on its loopback port (as the superuser from tests/e2e.env),
+// the import through `docker compose run`, and Compose's own status and inspect output. The harness's seed (tests/stack.sh) is the import run whose
 // records are checked here; the CLI runs again only where a check needs its printed lines, on a copy of the Fixture site
 // under another Username, which is removed afterwards, and in the re-runs at the end of this block. Destinations are compared as booleans and never printed.
-// ASSUMPTION: these checks live in 02-v1-import, the spec's import spec, schema and anonymous checks included, rather than in
-// 02-live-edit, which ticket 20 creates (rung 5: one file for what one script held). Overturned by ticket 20; the schema and
-// anonymous checks then move there.
+// ASSUMPTION: the schema check stays in 02-v1-import, the spec's import spec, while the anonymous calls moved to 02-live-edit,
+// where the spec's Testing Decisions place them (ticket 20; rung 2 for the move). Keeping the schema check here is rung 5: the
+// spec names no file for it and the move would gain nothing. Overturned if the spec places the schema check in 02-live-edit.
 // This file runs in the last Playwright project, `stack-import`, after every other spec (playwright.config.ts; spec, Spec
 // order): the re-auth check below resets the superuser's password, which turns away every token issued before it, and a
 // request another spec made at that moment could meet a second refusal after the app's one retry.
@@ -427,11 +427,12 @@ test.describe('on the test stack', () => {
 
   test('the schema: fields, patterns, relations, file fields, and every rule superuser-only', async () => {
     const collection = async (name: string) => (await pb(`/api/collections/${name}`, { token })).json();
-    const [users, profiles, links] = await Promise.all(['users', 'profiles', 'links'].map(collection));
+    const [users, profiles, links, events] = await Promise.all(['users', 'profiles', 'links', 'events'].map(collection));
     const rulesClosed = (c: Record<string, unknown>) => ['listRule', 'viewRule', 'createRule', 'updateRule', 'deleteRule'].every((r) => c[r] === null);
     expect(users.type === 'auth' && rulesClosed(users) && users.manageRule === null, 'users closed, sign-up included').toBe(true);
     expect(rulesClosed(profiles), 'profiles closed').toBe(true);
     expect(rulesClosed(links), 'links closed').toBe(true);
+    expect(events.type === 'base' && rulesClosed(events), 'events closed').toBe(true);
     type Field = { name: string; type: string; system?: boolean; [k: string]: unknown };
     const field = (c: { fields: Field[] }, name: string) => c.fields.find((f) => f.name === name) || ({} as Field);
     const shape = (c: { fields: Field[] }) => c.fields.filter((f) => !f.system).map((f) => `${f.name}:${f.type}`).join(' ');
@@ -439,6 +440,7 @@ test.describe('on the test stack', () => {
     expect(shape(links)).toBe(
       'profile:relation linkId:text title:text order:number isAdult:bool mode:select destination:text tracking:bool defaultTrackingCode:text geo:json icon:file backgroundImage:file v1Key:text',
     );
+    expect(shape(events)).toBe('profile:relation link:relation kind:select country:text inAppBrowser:text created:autodate');
     const username = field(profiles, 'username');
     expect(username.required && username.pattern === '^[a-z0-9_]+$').toBe(true);
     expect(profiles.indexes.some((i: string) => /UNIQUE INDEX .* \(username\)/.test(i))).toBe(true);
@@ -452,6 +454,11 @@ test.describe('on the test stack', () => {
     };
     expect(relation(links, 'profile', profiles.id, true) && field(links, 'profile').required).toBe(true);
     expect(relation(profiles, 'owner', users.id, false) && !field(profiles, 'owner').required).toBe(true);
+    expect(relation(events, 'profile', profiles.id, true) && field(events, 'profile').required).toBe(true);
+    expect(relation(events, 'link', links.id, false) && !field(events, 'link').required).toBe(true);
+    expect(field(events, 'kind').values).toEqual(['page_view', 'click']);
+    expect(field(events, 'kind').maxSelect).toBe(1);
+    expect(field(events, 'created').onCreate === true && field(events, 'created').onUpdate === false).toBe(true);
     for (const c of [profiles, links]) {
       expect(field(c, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink']);
       expect(field(c, 'mode').required).toBe(false);
@@ -463,13 +470,6 @@ test.describe('on the test stack', () => {
       expect(f.maxSelect).toBe(1);
       expect(f.maxSize).toBe(5 * 1024 * 1024);
     }
-  });
-
-  test('anonymous calls to PocketBase are refused', async () => {
-    expect((await pb('/api/collections/profiles/records')).status).toBeGreaterThanOrEqual(400);
-    expect((await pb('/api/collections/links/records')).status).toBeGreaterThanOrEqual(400);
-    const signUp = await pb('/api/collections/users/records', json({ email: 'signup-check@example.com', password: 'signup-check-1', passwordConfirm: 'signup-check-1' }));
-    expect(signUp.status).toBeGreaterThanOrEqual(400);
   });
 
   test('the seed wrote the Fixture Profile: fields, Links in order, fresh Link Ids, Destinations and image bytes', async () => {
@@ -756,5 +756,17 @@ test.describe('on the test stack', () => {
       expect(['app', 'caddy', 'pocketbase'].every((s) => ps.some((c) => c.Service === s && c.State === 'running'))).toBe(true);
       await signIn(); // the recreated PocketBase keeps its data; a fresh token for anything after this
     });
+  });
+
+  // Ticket 20: last in the last project, so after every other spec. The events collection holds no record (nothing writes
+  // one in Phase 2), and only a migration made it: it was created and last changed before the first request PocketBase
+  // logged on this stack's empty volume, so no API call made or altered it. Migrations run before PocketBase serves.
+  // The check needs at least one request log by the end of the run, and asserts it.
+  test('after every spec: the events collection holds no record and only a migration created it', async () => {
+    expect((await (await pb('/api/collections/events/records?perPage=1', { token })).json()).totalItems).toBe(0);
+    const events = await (await pb('/api/collections/events', { token })).json();
+    const first = await (await pb(`/api/logs?perPage=1&sort=created&filter=${encodeURIComponent("data.type='request'")}`, { token })).json();
+    expect(first.totalItems).toBeGreaterThan(0);
+    expect(events.created <= events.updated && events.updated < first.items[0].created, 'events made and last changed before the first logged request').toBe(true);
   });
 });
