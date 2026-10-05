@@ -8,7 +8,8 @@
 # Certificates: observed 2026-10-05 that Traefik's own `tlschallenge` resolver answers every acme-tls/1 handshake itself
 # ("unrecognized name"), so TLS-ALPN-01 can never reach Caddy, and that its port-80 redirect sends HTTP-01 to HTTPS, where
 # Caddy has no certificate yet. So the ACME path on port 80 gets its own HTTP router to Caddy's port 80 with priority
-# MaxInt32, above the redirect router Traefik generates at MaxInt32-1 (Traefik docs, EntryPoints, Redirection).
+# MaxInt64, above the redirect router Traefik v3 generates at MaxInt64-1 (observed: web-to-websecure@internal,
+# priority 9223372036854775806, in its API).
 # ASSUMPTION: Caddy's :80 listener accepts Traefik's plain connection without a PROXY header (rung 1 locally: the wrapper's
 # `allow` uses a header when present and tolerates its absence; tests/proxy-protocol.sh). Overturned if Caddy's log shows
 # the challenge request refused; the HTTP service then needs the header, which Traefik sends for TCP services only.
@@ -36,7 +37,7 @@ services:
       traefik.tcp.services.oflink.loadbalancer.proxyprotocol.version: "2"
       traefik.http.routers.oflink-acme.entrypoints: web
       traefik.http.routers.oflink-acme.rule: PathPrefix(`/.well-known/acme-challenge/`)
-      traefik.http.routers.oflink-acme.priority: "2147483647"
+      traefik.http.routers.oflink-acme.priority: "9223372036854775807"
       traefik.http.routers.oflink-acme.service: oflink-acme
       traefik.http.services.oflink-acme.loadbalancer.server.port: "80"
 networks:
