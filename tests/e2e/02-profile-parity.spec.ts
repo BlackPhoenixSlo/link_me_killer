@@ -77,9 +77,10 @@ async function clickCall(request: APIRequestContext, path: string, options: { pa
 const reveal = (request: APIRequestContext, query: Record<string, string>, headers?: Record<string, string>) =>
   clickCall(request, REVEAL_PATH, { params: query, headers });
 
-let served: Served;
+let served: Served | undefined;
 let origin: string;
-const linkBy = (pick: (l: ServedLink) => boolean) => served.links.find(pick)!;
+const linkBy = (pick: (l: ServedLink) => boolean) => served!.links.find(pick)!;
+const onlyFixture = () => test.beforeEach(() => test.skip(!served, `${PROFILE_JSON} is not served here: a VPS run`));
 const direct = () => linkBy((l) => !l.isAdult && l.mode === 'direct');
 const deeplink = () => linkBy((l) => !l.isAdult && l.mode === 'deeplink');
 const adult = () => linkBy((l) => l.isAdult);
@@ -89,12 +90,16 @@ test.beforeAll(async ({ playwright }) => {
   origin = new URL(baseURL).origin;
   const api = await playwright.request.newContext({ baseURL });
   const res = await api.get(PROFILE_JSON);
+  // A VPS run (PLAYWRIGHT_BASE_URL) serves the v1 Snapshot only: the Fixture Profile answers 404 there, and the three
+  // Fixture-only blocks below skip (onlyFixture). The test stack must serve it.
+  if (res.status() === 404 && process.env.PLAYWRIGHT_BASE_URL) { await api.dispose(); return; }
   if (!res.ok()) throw new Error(`Fixture Profile not served at ${PROFILE_JSON} (status ${res.status()})`);
   served = await res.json();
   await api.dispose();
 });
 
 test.describe('Fixture Profile journeys (desktop Chrome)', () => {
+  onlyFixture();
   test.use({ userAgent: devices['Desktop Chrome'].userAgent });
 
   // Every host but the one under test is answered here with an empty page; the requests are kept to be compared.
@@ -125,7 +130,7 @@ test.describe('Fixture Profile journeys (desktop Chrome)', () => {
   test('the Direct Link\'s Click goes through /r/{Link Id} and ends at its Test Secrets Destination', async ({ page }) => {
     const link = direct();
     await page.goto('/fixture');
-    await expect(page.locator('.link-card .link-title')).toHaveCount(served.links.length);
+    await expect(page.locator('.link-card .link-title')).toHaveCount(served!.links.length);
     const hop = hopFrom(page, link.id);
     await clickSlot();
     await page.locator('.link-card', { hasText: link.title }).click();
@@ -139,7 +144,7 @@ test.describe('Fixture Profile journeys (desktop Chrome)', () => {
     const link = deeplink();
     const destination = destinationOf(link);
     await page.goto('/fixture');
-    await expect(page.locator('.link-card .link-title')).toHaveCount(served.links.length);
+    await expect(page.locator('.link-card .link-title')).toHaveCount(served!.links.length);
     const reveal = page.waitForRequest((req) => new URL(req.url()).pathname === REVEAL_PATH);
     const landed = page.waitForRequest((req) => req.url() === destination);
     await clickSlot();
@@ -163,6 +168,7 @@ test.describe('Fixture Profile journeys (desktop Chrome)', () => {
 });
 
 test.describe('Profile JSON', () => {
+  onlyFixture();
   test('carries fresh Link Ids, the url rule, effective Modes and nothing private', async ({ request }) => {
     const res = await request.get(PROFILE_JSON);
     expect(res.status()).toBe(200);
@@ -195,7 +201,7 @@ test.describe('Profile JSON', () => {
   test('the Username is matched lower-cased', async ({ request }) => {
     const res = await request.get('/api/profiles/FixTure.json');
     expect(res.status()).toBe(200);
-    expect((await res.json()).links.map((l: ServedLink) => l.id)).toEqual(served.links.map((l) => l.id));
+    expect((await res.json()).links.map((l: ServedLink) => l.id)).toEqual(served!.links.map((l) => l.id));
   });
 
   test('an unknown Username answers 404 with the contract\'s body', async ({ request }) => {
@@ -205,8 +211,8 @@ test.describe('Profile JSON', () => {
   });
 
   test('every image URL returns the Fixture site\'s bytes with the immutable cache header', async ({ request }) => {
-    const images: [string, string | undefined][] = [[served.profile.avatarUrl, fixture.profile.avatarUrl]];
-    for (const link of served.links) {
+    const images: [string, string | undefined][] = [[served!.profile.avatarUrl, fixture.profile.avatarUrl]];
+    for (const link of served!.links) {
       images.push([link.icon, fileCard(link).icon], [link.backgroundImage, fileCard(link).backgroundImage]);
     }
     for (const [i, [url, v1Path]] of images.entries()) {
@@ -223,13 +229,13 @@ test.describe('Profile JSON', () => {
   });
 
   test('a file name that is not its record\'s current file answers 404', async ({ request }) => {
-    const res = await request.get(served.profile.avatarUrl.replace(/\/[^/]+$/, '/not_the_current_file.webp'));
+    const res = await request.get(served!.profile.avatarUrl.replace(/\/[^/]+$/, '/not_the_current_file.webp'));
     expect(res.status()).toBe(404);
   });
 
   test('a file path whose record id climbs out of the file route answers 404, not a PocketBase record', async ({ request }) => {
     // Without the record id check, this reads the Fixture Profile's own record as the superuser.
-    const recordId = served.profile.avatarUrl.split('/')[4];
+    const recordId = served!.profile.avatarUrl.split('/')[4];
     const res = await request.get(`/api/files/profiles/..%2F..%2Fcollections%2Fprofiles%2Frecords/${recordId}`);
     expect(res.status()).toBe(404);
     expect((await res.text()).includes('v1Key')).toBe(false);
@@ -237,6 +243,7 @@ test.describe('Profile JSON', () => {
 });
 
 test.describe('Reveal and /r', () => {
+  onlyFixture();
   const noCors = (headers: Record<string, string>) => !Object.keys(headers).some((h) => h.startsWith('access-control-'));
 
   for (const trackingId of [undefined, '4242', 'junk']) {
