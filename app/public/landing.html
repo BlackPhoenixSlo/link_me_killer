@@ -174,6 +174,12 @@
     /* 3. Modes and Reveal */
     .l-modes__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--e-space-10); margin-top: var(--e-space-8); }
     .l-modes__cards { display: grid; gap: var(--e-space-4); }
+    /* A responsive gallery of phone thumbnails under the Mode cards, each with a caption; images keep their own aspect ratio. */
+    .l-modes__shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--e-space-8); margin-top: var(--e-space-10); align-items: start; }
+    .l-modes__shot { display: flex; flex-direction: column; align-items: center; }
+    .l-modes__shots .l-shot { width: 100%; max-width: 280px; }
+    .l-modes__shots .l-shot__img { aspect-ratio: auto; object-fit: fill; }
+    .l-shot__cap { margin-top: var(--e-space-3); text-align: center; font-size: var(--e-text-sm); line-height: var(--e-leading-sm); color: var(--e-color-text-muted); }
     .l-card {
       padding: var(--e-space-4);
       background: var(--e-color-surface);
@@ -256,7 +262,8 @@
       .l-hero__inner { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--e-space-16); }
       .l-hero__title { font-size: var(--e-text-5xl); line-height: var(--e-leading-5xl); }
 
-      .l-modes__body { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--e-space-12); }
+      .l-modes__cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .l-card--wide { grid-column: 1 / -1; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -326,26 +333,63 @@
             </li>
             <li class="l-card">
               <h3 class="l-h3">Escape <span class="l-tag">Mode</span></h3>
-              <p class="l-text">Tries to move Visitors out of the Instagram or TikTok browser into Safari or Chrome. If the phone won't switch by itself, your page shows how.</p>
+              <p class="l-text">Inside Instagram or TikTok, Escape Mode shows a screen that gets the Visitor into Safari or Chrome: an "Open in browser" button, and if that doesn't take, the steps to tap the ··· menu and choose "Open in External Browser" or "Open in System Browser", with "Copy link" as a last resort. A Visitor already in a real browser never sees it.</p>
             </li>
             <li class="l-card">
               <h3 class="l-h3">Deeplink <span class="l-tag">Mode</span></h3>
-              <p class="l-text">Inside Instagram or TikTok, a tap goes straight to Safari or Chrome with no how-to screen. On Android it can open the Link's own app.</p>
+              <p class="l-text">The silent one — no screen of ours. Inside Instagram, TikTok and other apps the Visitor is sent straight to Safari or Chrome, the moment your page opens or when they tap a Link, depending on how you set it. On iPhone, Instagram shows one quick check first — "open outside Instagram?" — and the Visitor taps Open. On Android it can open the Link's own app instead. Deeplink applies to your whole page, not to a single Link.</p>
             </li>
             <li class="l-card">
               <h3 class="l-h3">18+ Age Gate</h3>
-              <p class="l-text">Turn it on for a Link and Visitors who tap it on your page confirm they are 18 or older first. It works with every Mode.</p>
+              <p class="l-text">Turn it on for a Link and Visitors who tap it confirm they are 18 or older first. It works with every Mode.</p>
             </li>
             <li class="l-card l-card--wide">
               <h3 class="l-h3">Your Destinations stay hidden</h3>
               <p class="l-text">Your page never contains the addresses your Links lead to. Each one is handed out only when a Visitor opens that Link, which keeps casual bots from collecting them.</p>
             </li>
           </ul>
-          <div class="l-shot">
-            <img class="l-shot__img" src="/images/landing/profile-mobile.webp" width="780" height="1688" loading="lazy"
-              alt="A Creator's page on a phone: photo, name and Link cards."
-              data-test="landing-shot-profile">
-          </div>
+          <ul class="l-modes__shots" role="list">
+            <li class="l-modes__shot">
+              <div class="l-shot">
+                <img class="l-shot__img" src="/images/landing/profile-mobile.webp" width="780" height="1688" loading="lazy"
+                  alt="A Creator's page on a phone: photo, name and Link cards."
+                  data-test="landing-shot-profile">
+              </div>
+              <p class="l-shot__cap">A Creator's page, as a Visitor sees it</p>
+            </li>
+            <li class="l-modes__shot">
+              <div class="l-shot">
+                <img class="l-shot__img" src="/images/landing/escape-overlay-mobile.webp" width="780" height="1192" loading="lazy"
+                  alt="Escape Mode's screen inside Instagram: an up-arrow to the ··· menu, 'Open in System Browser', an 'Open in browser' button and 'Copy link'."
+                  data-test="landing-shot-escape">
+              </div>
+              <p class="l-shot__cap">Escape Mode's screen inside Instagram or TikTok</p>
+            </li>
+            <li class="l-modes__shot">
+              <div class="l-shot">
+                <img class="l-shot__img" src="/images/landing/deeplink-setting-mobile.webp" width="716" height="840" loading="lazy"
+                  alt="The Editor's Quick Settings card with the default Mode set to Deeplink on tap, and its help text."
+                  data-test="landing-shot-deeplink">
+              </div>
+              <p class="l-shot__cap">Deeplink is your Profile's default Mode, set once in the Editor</p>
+            </li>
+            <li class="l-modes__shot">
+              <div class="l-shot">
+                <img class="l-shot__img" src="/images/landing/deeplink-popup-mobile.webp" width="780" height="1082" loading="lazy"
+                  alt="Inside Instagram on iPhone, an iOS dialog reads 'This web page is trying to open an app outside of Instagram. Are you sure you want to open it?' with Open and Cancel buttons."
+                  data-test="landing-shot-deeplink-popup">
+              </div>
+              <p class="l-shot__cap">On iPhone, Instagram asks before Deeplink opens the browser — tap Open</p>
+            </li>
+            <li class="l-modes__shot">
+              <div class="l-shot">
+                <img class="l-shot__img" src="/images/landing/age-gate-mobile.webp" width="780" height="622" loading="lazy"
+                  alt="The Mature Content Disclaimer: a Visitor confirms they are 18 or older before an adult Link opens."
+                  data-test="landing-shot-agegate">
+              </div>
+              <p class="l-shot__cap">The 18+ check before an adult Link opens</p>
+            </li>
+          </ul>
         </div>
       </div>
     </section>

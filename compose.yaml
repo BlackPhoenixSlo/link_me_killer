@@ -56,9 +56,11 @@ services:
       DNS_SERVERS: ${DNS_SERVERS:-}
 
   pocketbase:
-    # Context is pocketbase/. The pinned PocketBase release is downloaded by its Dockerfile at build time.
+    # Context is pocketbase/; vendor/ is a named extra context, so the repo root (and linkme_clone3/) is never sent.
     build:
       context: ./pocketbase
+      additional_contexts:
+        vendor: ./vendor
     restart: unless-stopped
     ports:
       - "127.0.0.1:${PB_PORT:-8090}:8090"   # loopback only; admin UI through an SSH tunnel

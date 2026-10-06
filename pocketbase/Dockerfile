@@ -1,11 +1,8 @@
-# The pinned PocketBase release is downloaded at build time (public deploy); pin PB_VERSION to change it.
+# Offline build (plan §11): the pinned release archive is COPYd from vendor/ (the "vendor" build context), never fetched.
 FROM alpine:3 AS unpack
 ARG TARGETARCH
-ARG PB_VERSION=0.40.4
-RUN apk add --no-cache wget unzip \
- && wget -O /tmp/pocketbase.zip \
-      "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_${TARGETARCH}.zip" \
- && unzip /tmp/pocketbase.zip pocketbase -d /usr/local/bin
+COPY --from=vendor pocketbase_0.40.4_linux_${TARGETARCH}.zip /tmp/pocketbase.zip
+RUN unzip /tmp/pocketbase.zip pocketbase -d /usr/local/bin
 
 FROM alpine:3
 COPY --from=unpack /usr/local/bin/pocketbase /usr/local/bin/pocketbase
