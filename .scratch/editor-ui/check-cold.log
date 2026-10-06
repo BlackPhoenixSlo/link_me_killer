@@ -1,0 +1,984 @@
+[1A[2K[WebServer]  Image oflinkv2-e2e-pocketbase Building 
+
+[1A[2K[WebServer]  Image oflinkv2-e2e-app Building 
+
+[1A[2K[WebServer] #1 [internal] load local bake definitions
+
+[1A[2K[WebServer] #1 reading from stdin 1.05kB done
+[WebServer] #1 DONE 0.0s
+
+[1A[2K[WebServer] 
+[WebServer] #2 [pocketbase internal] load build definition from Dockerfile
+[WebServer] #2 transferring dockerfile: 767B done
+[WebServer] #2 DONE 0.0s
+[WebServer] 
+[WebServer] #3 [app internal] load build definition from Dockerfile
+[WebServer] #3 transferring dockerfile: 333B done
+[WebServer] #3 DONE 0.0s
+[WebServer] 
+[WebServer] #4 [pocketbase context vendor] load .dockerignore
+[WebServer] #4 transferring vendor: 2B done
+[WebServer] #4 DONE 0.0s
+[WebServer] 
+[WebServer] #5 [app internal] load metadata for docker.io/library/node:22-alpine
+[WebServer] #5 DONE 0.0s
+[WebServer] 
+[WebServer] #6 [pocketbase internal] load metadata for docker.io/library/alpine:3
+[WebServer] #6 DONE 0.0s
+[WebServer] 
+[WebServer] #7 [pocketbase internal] load .dockerignore
+[WebServer] #7 transferring context: 2B done
+[WebServer] #7 DONE 0.0s
+[WebServer] 
+[WebServer] #8 [app internal] load .dockerignore
+
+[1A[2K[WebServer] #8 transferring context: 53B done
+[WebServer] #8 DONE 0.0s
+[WebServer] 
+[WebServer] #9 [pocketbase internal] load build context
+[WebServer] #9 transferring context: 613B done
+[WebServer] #9 DONE 0.0s
+[WebServer] 
+[WebServer] #10 [app 1/3] FROM docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+[WebServer] #10 resolve docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 0.0s done
+[WebServer] #10 DONE 0.0s
+[WebServer] 
+[WebServer] #11 [pocketbase unpack 1/3] FROM docker.io/library/alpine:3@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+[WebServer] #11 resolve docker.io/library/alpine:3@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 0.0s done
+[WebServer] #11 DONE 0.0s
+[WebServer] 
+[WebServer] #12 [pocketbase context vendor] load from client
+[WebServer] #12 transferring vendor: 57B done
+[WebServer] #12 DONE 0.0s
+[WebServer] 
+[WebServer] #13 [pocketbase unpack 3/3] RUN unzip /tmp/pocketbase.zip pocketbase -d /usr/local/bin
+[WebServer] #13 CACHED
+[WebServer] 
+[WebServer] #14 [pocketbase stage-1 2/3] COPY --from=unpack /usr/local/bin/pocketbase /usr/local/bin/pocketbase
+[WebServer] #14 CACHED
+[WebServer] 
+[WebServer] #15 [pocketbase unpack 2/3] COPY --from=vendor pocketbase_0.40.4_linux_arm64.zip /tmp/pocketbase.zip
+[WebServer] #15 CACHED
+[WebServer] 
+[WebServer] #16 [pocketbase stage-1 3/3] COPY pb_migrations /pb/pb_migrations
+[WebServer] #16 CACHED
+[WebServer] 
+[WebServer] #17 [app internal] load build context
+[WebServer] #17 transferring context: 221.43kB 0.0s done
+[WebServer] #17 DONE 0.0s
+[WebServer] 
+[WebServer] #18 [app 2/3] WORKDIR /app
+[WebServer] #18 CACHED
+[WebServer] 
+[WebServer] #19 [pocketbase] exporting to image
+[WebServer] #19 exporting layers done
+[WebServer] #19 exporting manifest sha256:1c5e9c31509a23b44546e6d200a4572ae7e0d71249affdd2deb3b06bba63c1ea done
+[WebServer] #19 exporting config sha256:4d0b593c83df70149a49da4935a2196a7fe33215fcb2df3448885e9458729849 done
+[WebServer] #19 exporting attestation manifest sha256:a1bd4c143edfb04e51aa3ff483a3f261da74389260dde870bb95a776c97c35f5 done
+[WebServer] #19 exporting manifest list sha256:3a19a62ca721450ebd29b9f29a483bf257b8f2d80737f567a26678d87eebb313 done
+[WebServer] #19 naming to docker.io/library/oflinkv2-e2e-pocketbase:latest done
+[WebServer] #19 unpacking to docker.io/library/oflinkv2-e2e-pocketbase:latest done
+[WebServer] #19 DONE 0.0s
+[WebServer] 
+[WebServer] #20 [app 3/3] COPY . .
+
+[1A[2K[WebServer] #20 DONE 0.2s
+
+[1A[2K[WebServer] 
+[WebServer] #21 [pocketbase] resolving provenance for metadata file
+[WebServer] #21 DONE 0.0s
+
+[1A[2K[WebServer] 
+[WebServer] #22 [app] exporting to image
+
+[1A[2K[WebServer] #22 exporting layers 2.4s done
+[WebServer] #22 exporting manifest sha256:a696e2d4ba3858846481246e85115f3a2debec1d507939232ee3259ac657dac1
+
+[1A[2K[WebServer] #22 exporting manifest sha256:a696e2d4ba3858846481246e85115f3a2debec1d507939232ee3259ac657dac1 done
+
+[1A[2K[WebServer] #22 exporting config sha256:1f5e1ddc83a2b5461a350fbc7f93b7f06865538f1a0cd3f9ac38db05dadd4454 done
+[WebServer] #22 exporting attestation manifest sha256:013c532f93d80cbdb97d3d7370510b9220333f514ecf4fee14eca114ddc3db56 done
+[WebServer] #22 exporting manifest list sha256:66bd650f5bbd8aa2f7d8edd0beeda71e2cc65b6dae89295dc1a17334c113db59 done
+[WebServer] #22 naming to docker.io/library/oflinkv2-e2e-app:latest done
+[WebServer] #22 unpacking to docker.io/library/oflinkv2-e2e-app:latest
+
+[1A[2K[WebServer] #22 unpacking to docker.io/library/oflinkv2-e2e-app:latest 0.4s done
+
+[1A[2K[WebServer] #22 DONE 2.8s
+[WebServer] 
+[WebServer] #23 [app] resolving provenance for metadata file
+[WebServer] #23 DONE 0.0s
+
+[1A[2K[WebServer]  Image oflinkv2-e2e-pocketbase Built 
+[WebServer]  Image oflinkv2-e2e-app Built 
+
+[1A[2K[WebServer]  Network oflinkv2-e2e_default Creating 
+
+[1A[2K[WebServer]  Network oflinkv2-e2e_default Created 
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_pb_data Creating 
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_pb_data Created 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-mailpit-1 Creating 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Creating 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Created 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-app-1 Creating 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-mailpit-1 Created 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-app-1 Created 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Starting 
+[WebServer]  Container oflinkv2-e2e-mailpit-1 Starting 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-mailpit-1 Started 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Started 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Waiting 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Healthy 
+[WebServer]  Container oflinkv2-e2e-app-1 Starting 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-app-1 Started 
+[WebServer]  Container oflinkv2-e2e-pocketbase-1 Waiting 
+[WebServer]  Container oflinkv2-e2e-mailpit-1 Waiting 
+[WebServer]  Container oflinkv2-e2e-app-1 Waiting 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-app-1 Healthy 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-mailpit-1 Healthy 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Healthy 
+
+[1A[2K[WebServer] local mail: PocketBase sends through mailpit; Application URL set
+
+[1A[2K[WebServer] Phase 4 seed: stats_profile, other_profile
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Running 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Waiting 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Healthy 
+[WebServer]  Container oflinkv2-e2e-app-run-ccdfb4dd1bb7 Creating 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-app-run-ccdfb4dd1bb7 Created 
+
+[1A[2K[WebServer] no destination: asdf card 1
+[WebServer] no destination: asdfasdf card 1
+[WebServer] missing image: /v1/api/profiles/bnjmklk.json: avatarUrl
+[WebServer] no destination: ja123 card 1
+
+[1A[2K[WebServer] missing image: /v1/api/profiles/ja123.json: avatarUrl
+[WebServer] no destination: jaka card 1
+[WebServer] missing image: /v1/api/profiles/jaka.json: avatarUrl
+
+[1A[2K[WebServer] no destination: jaka3 card 1
+
+[1A[2K[WebServer] missing image: /v1/api/profiles/jaka5.json: avatarUrl
+
+[1A[2K[WebServer] missing image: /v1/api/profiles/jaka6q.json: avatarUrl
+[WebServer] repaired: /v1/api/profiles/jaka7q.json: display name
+[WebServer] missing image: /v1/api/profiles/jaka7q.json: avatarUrl
+[WebServer] no destination: jakajaka card 1
+[WebServer] no destination: jakajaka card 2
+
+[1A[2K[WebServer] no destination: jakajakajaka card 1
+[WebServer] dropped: juliafilippo card 2: secrets entry 2 unused, a non-Adult Link keeps its own url
+
+[1A[2K[WebServer] dropped: juliafilippo_ card 3: secrets entry juliafilippo_juliafilippo_juliafilippo_1 unused, a non-Adult Link keeps its own url
+
+[1A[2K[WebServer] dropped: juliafilippo_ card 4: secrets entry juliafilippo_juliafilippo_juliafilippo_1 unused, a non-Adult Link keeps its own url
+[WebServer] repaired: /v1/api/profiles/weiwei.json: trailing comma
+[WebServer] dropped: weiwei card 2: secrets entry 2 unused, a non-Adult Link keeps its own url
+[WebServer] dropped: secrets entry juliafilippo_name1 has no Link
+
+[1A[2K[WebServer] dropped: secrets entry juliafilippo_1 has no Link
+[WebServer] dropped: secrets entry juliafilippo_2 has no Link
+[WebServer] dropped: secrets entry juliafilippo_juliafilippo_name1 has no Link
+[WebServer] dropped: secrets entry juliafilippo_juliafilippo_1 has no Link
+
+[1A[2K[WebServer] dropped: secrets entry juliafilippo_juliafilippo_2 has no Link
+[WebServer] dropped: secrets entry weiWEi1 has no Link
+[WebServer] dropped: secrets entry weiwei1 has no Link
+[WebServer] dropped: secrets entry weiweiweiwei1 has no Link
+[WebServer] dropped: secrets entry cgfakaweiweicgfakaweiwei691 has no Link
+
+[1A[2K[WebServer] dropped: fixture card 2: secrets entry iF3AZ1X2Ba6LFAbG unused, a non-Adult Link keeps its own url
+[WebServer] dropped: fixture card 3: secrets entry x1FC7NfyBolRNc5U unused, a non-Adult Link keeps its own url
+[WebServer] dropped: fixture card 4: secrets entry z5oIyUj3xHaLAqeY unused, a non-Adult Link keeps its own url
+
+[1A[2K[WebServer] imported: 28 Profiles, 42 Links, 62 images, 33 warnings
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_caddy_data Creating 
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_caddy_data Created 
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_caddy_config Creating 
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_caddy_config Created 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Running 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-app-1 Running 
+[WebServer]  Container oflinkv2-e2e-caddy-1 Creating 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-caddy-1 Created 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Waiting 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Healthy 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-caddy-1 Starting 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-caddy-1 Started 
+[WebServer]  Container oflinkv2-e2e-caddy-1 Waiting 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-app-1 Waiting 
+[WebServer]  Container oflinkv2-e2e-pocketbase-1 Waiting 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Healthy 
+[WebServer]  Container oflinkv2-e2e-app-1 Healthy 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-caddy-1 Healthy 
+
+[1A[2K[WebServer] caddy-1  | {"level":"info","ts":1791237496.70643,"msg":"maxprocs: Leaving GOMAXPROCS=16: CPU quota undefined"}
+[WebServer] caddy-1  | {"level":"info","ts":1791237496.7064424,"msg":"GOMEMLIMIT is updated","GOMEMLIMIT":7488781516,"previous":9223372036854775807}
+[WebServer] caddy-1  | {"level":"info","ts":1791237496.7064438,"msg":"using config from file","file":"/etc/caddy/Caddyfile"}
+[WebServer] caddy-1  | {"level":"info","ts":1791237496.7064447,"msg":"adapted config to JSON","adapter":"caddyfile"}
+[WebServer] caddy-1  | {"level":"info","ts":1791237496.7090638,"logger":"admin","msg":"admin endpoint started","address":"localhost:2019","enforce_origin":false,"origins":["//[::1]:2019","//127.0.0.1:2019","//localhost:2019"]}
+[WebServer] caddy-1  | {"level":"warn","ts":1791237496.709139,"logger":"http.auto_https","msg":"server is listening only on the HTTP port, so no automatic HTTPS will be applied to this server","server_name":"srv0","http_port":80}
+[WebServer] caddy-1  | {"level":"warn","ts":1791237496.7091963,"logger":"http","msg":"HTTP/2 skipped because it requires TLS","network":"tcp","addr":":80"}
+[WebServer] caddy-1  | {"level":"warn","ts":1791237496.7092023,"logger":"http","msg":"HTTP/3 skipped because it requires TLS","network":"tcp","addr":":80"}
+[WebServer] caddy-1  | {"level":"info","ts":1791237496.709203,"logger":"http.log","msg":"server running","name":"srv0","protocols":["h1","h2","h3"]}
+[WebServer] caddy-1  | {"level":"info","ts":1791237496.7091978,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0x440e585d3480"}
+[WebServer] caddy-1  | {"level":"info","ts":1791237496.7092464,"msg":"autosaved config (load with --resume flag)","file":"/config/caddy/autosave.json"}
+[WebServer] caddy-1  | {"level":"info","ts":1791237496.7092526,"msg":"serving initial configuration"}
+[WebServer] caddy-1  | {"level":"info","ts":1791237496.709972,"logger":"tls","msg":"cleaning storage unit","storage":"FileStorage:/data/caddy"}
+[WebServer] caddy-1  | {"level":"info","ts":1791237496.7104027,"logger":"tls","msg":"finished cleaning storage units"}
+[WebServer] pocketbase-1  | Successfully saved superuser "e2e-superuser@example.com"!
+[WebServer] pocketbase-1  | 2026/10/05 21:58:11 Server started at http://0.0.0.0:8090
+[WebServer] pocketbase-1  | ├─ REST API:  http://0.0.0.0:8090/api/
+[WebServer] pocketbase-1  | └─ Dashboard: http://0.0.0.0:8090/_/
+[WebServer] mailpit-1     | time="2026/10/05 21:58:11" level=info msg="[smtpd] starting on [::]:1025 (no encryption)"
+[WebServer] mailpit-1     | time="2026/10/05 21:58:11" level=warning msg="[http] listening on [::]:8025 without --ui-auth-file or --allowed-hosts; the API is reachable from any host that can route to this interface"
+[WebServer] mailpit-1     | time="2026/10/05 21:58:11" level=info msg="[http] starting on [::]:8025"
+[WebServer] mailpit-1     | time="2026/10/05 21:58:11" level=info msg="[http] accessible via http://localhost:8025/"
+
+
+Running 432 tests using 8 workers
+
+[1A[2K[1/432] [chromium] › tests/e2e/00-smoke.spec.ts:29:5 › profile page renders the display name and the four link cards
+[1A[2K[2/432] [chromium] › tests/e2e/06-editor-ui.spec.ts:17:7 › the Editor's home and Link form › Delete asks in the page: "Keep it" and Esc keep the Link and hand focus back, "Delete link" removes it
+[1A[2K[3/432] [chromium] › tests/e2e/04-stats.spec.ts:204:5 › 1. a Page View and a Click through /r reach the Stats page, paged at any size, with no horizontal overflow at 390×844
+[1A[2K[4/432] [chromium] › tests/e2e/02-image-upload.spec.ts:139:9 › image upload › a JPG photo comes back as WebP, from the returned URL and from the Profile JSON, not enlarged
+[1A[2K[5/432] [chromium] › tests/e2e/02-live-edit.spec.ts:88:7 › live edits through PocketBase's API › a Profile and Link created through the API show on the page
+[1A[2K[6/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:27:7 › sign-up and the claim › at 390×844 a stranger signs up with no invitation and lands signed in on "verify your email"; Continue keeps them there
+[1A[2K[7/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:130:7 › Fixture Profile journeys (desktop Chrome) › the Direct Link's Click goes through /r/{Link Id} and ends at its Test Secrets Destination
+[1A[2K[8/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:152:7 › System Browser (desktop Chrome) › the Deeplink Link makes a Reveal request even though it carries a url, then lands on the answer
+[1A[2K[9/432] [chromium] › tests/e2e/02-live-edit.spec.ts:98:7 › live edits through PocketBase's API › renaming the Profile shows on the next load
+[1A[2K[10/432] [chromium] › tests/e2e/00-smoke.spec.ts:40:7 › inside the Instagram in-app browser › shows the open-in-system-browser overlay
+[1A[2K[11/432] [chromium] › tests/e2e/02-live-edit.spec.ts:104:7 › live edits through PocketBase's API › retitling a Link shows on the next load
+[1A[2K[12/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:143:7 › Fixture Profile journeys (desktop Chrome) › the Deeplink Link's Click sends Reveal with its id, never requests /r, then requests its Test Secrets Destination
+[1A[2K[13/432] [chromium] › tests/e2e/02-live-edit.spec.ts:110:7 › live edits through PocketBase's API › adding a Link shows on the next load
+[1A[2K[14/432] [chromium] › tests/e2e/02-image-upload.spec.ts:139:9 › image upload › a PNG photo comes back as WebP, from the returned URL and from the Profile JSON, not enlarged
+[1A[2K[15/432] [chromium] › tests/e2e/02-live-edit.spec.ts:116:7 › live edits through PocketBase's API › reordering the Links shows on the next load
+[1A[2K[16/432] [chromium] › tests/e2e/00-smoke.spec.ts:47:5 › a normal browser does not see the Instagram overlay
+[1A[2K[17/432] [chromium] › tests/e2e/02-live-edit.spec.ts:123:7 › live edits through PocketBase's API › deleting a Link shows on the next load
+[1A[2K[18/432] [chromium] › tests/e2e/02-image-upload.spec.ts:139:9 › image upload › a GIF photo comes back as WebP, from the returned URL and from the Profile JSON, not enlarged
+[1A[2K[19/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:169:9 › System Browser (desktop Chrome) › a tap on the direct Link lands on its url and makes no Reveal request
+[1A[2K[20/432] [chromium] › tests/e2e/02-live-edit.spec.ts:130:7 › live edits through PocketBase's API › the Profile's Mode and a Link's Mode show as the effective Mode; a Deeplink Link's url is empty
+[1A[2K[21/432] [chromium] › tests/e2e/02-image-upload.spec.ts:139:9 › image upload › a WEBP photo comes back as WebP, from the returned URL and from the Profile JSON, not enlarged
+[1A[2K[22/432] [chromium] › tests/e2e/00-smoke.spec.ts:56:5 › tapping the adult link shows the age gate, then continue reveals and follows the destination
+[1A[2K[23/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:183:11 › System Browser (desktop Chrome) › with the direct Link's url absent, a tap reveals and lands on exactly what Reveal answered
+[1A[2K[24/432] [chromium] › tests/e2e/02-image-upload.spec.ts:139:9 › image upload › a HEIC photo comes back as WebP, from the returned URL and from the Profile JSON, not enlarged
+[1A[2K[25/432] [chromium] › tests/e2e/02-live-edit.spec.ts:151:7 › live edits through PocketBase's API › anonymous calls to PocketBase: sign-up succeeds, profiles and links show no record, the rest are refused, and no answer holds a Destination
+[1A[2K[26/432] [chromium] › tests/e2e/06-editor-ui.spec.ts:47:7 › the Editor's home and Link form › "Tracking and Geo Rule" is closed on a new Link and on one with none set, and open on a stored Link with a Tracking Code
+[1A[2K[27/432] [chromium] › tests/e2e/02-image-upload.spec.ts:162:7 › image upload › a 3000x2000 background comes back at 1080x720, a 2000x2000 avatar and icon at 512x512
+[1A[2K[28/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:42:7 › sign-up and the claim › "Julia" typed into the Username field shows as "julia"
+[1A[2K[29/432] [chromium] › tests/e2e/02-live-edit.spec.ts:176:7 › live edits through PocketBase's API › deleting the Profile sends its page to the landing page, all with no restart
+[1A[2K[30/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:52:7 › sign-up and the claim › fixture, edit, ab and bad.name are refused with their reason on the claim step, then a valid Username is claimed
+[1A[2K[31/432] [chromium] › tests/e2e/02-image-upload.spec.ts:177:7 › image upload › a JPEG tagged with EXIF orientation 6 comes back upright, its sides swapped
+[1A[2K[32/432] [chromium] › tests/e2e/02-image-upload.spec.ts:183:7 › image upload › a JPEG carrying GPS and camera tags comes back with no EXIF or XMP chunk
+[1A[2K[33/432] [chromium] › tests/e2e/04-stats.spec.ts:275:5 › 2. Adult Link Clicks through the Age Gate count, and the Link and Country filters narrow every panel
+[1A[2K[34/432] [chromium] › tests/e2e/02-image-upload.spec.ts:193:7 › image upload › after a replacement the old file's URL answers 404 and the new one carries the immutable cache header
+[1A[2K[35/432] [chromium] › tests/e2e/02-image-upload.spec.ts:219:9 › image upload › refusals leave the record unchanged › no token: 401
+[1A[2K[36/432] [chromium] › tests/e2e/02-image-upload.spec.ts:224:9 › image upload › refusals leave the record unchanged › a malformed token and a plain users record's token: 401, or PocketBase's own 403 or 404
+[1A[2K[37/432] [chromium] › tests/e2e/02-image-upload.spec.ts:240:9 › image upload › refusals leave the record unchanged › a target not in the list: 404
+[1A[2K[38/432] [chromium] › tests/e2e/02-image-upload.spec.ts:247:9 › image upload › refusals leave the record unchanged › over 20 MB: 413
+[1A[2K[39/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:159:7 › Fixture Profile journeys (desktop Chrome) › /fixture?link={Direct Link's id} ends at the Direct Link's Test Secrets Destination
+[1A[2K[40/432] [chromium] › tests/e2e/02-image-upload.spec.ts:254:9 › image upload › refusals leave the record unchanged › a text file, and an image over the decoder's default pixel limit: 415
+[1A[2K[41/432] [chromium] › tests/e2e/02-image-upload.spec.ts:284:9 › image upload › refusals leave the record unchanged › PocketBase itself refuses a PNG written straight into a file field
+[1A[2K[42/432] [chromium] › tests/e2e/02-image-upload.spec.ts:293:7 › image upload › a v1-shaped tree whose avatar is a PNG imports with a WebP avatar at 512 px
+[1A[2K[43/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:172:7 › Profile JSON › carries fresh Link Ids, the url rule, effective Modes and nothing private
+[1A[2K[44/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:203:7 › Profile JSON › the Username is matched lower-cased
+[1A[2K[45/432] [chromium] › tests/e2e/00-smoke.spec.ts:92:7 › /netlify/functions/secrets.json does not hand out the Test Secrets
+[1A[2K[46/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:209:7 › Profile JSON › an unknown Username answers 404 with the contract's body
+[1A[2K[47/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:215:7 › Profile JSON › every image URL returns the Fixture site's bytes with the immutable cache header
+[1A[2K[48/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:233:7 › Profile JSON › a file name that is not its record's current file answers 404
+[1A[2K[49/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:238:7 › Profile JSON › a file path whose record id climbs out of the file route answers 404, not a PocketBase record
+[1A[2K[50/432] [chromium] › tests/e2e/00-smoke.spec.ts:92:7 › /tests/fixtures/netlify/functions/secrets.json does not hand out the Test Secrets
+[1A[2K[51/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:252:9 › Reveal and /r › Reveal for the Adult Link with no Tracking Code answers what v1's handler answers
+[1A[2K[52/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:252:9 › Reveal and /r › Reveal for the Adult Link with trackingId=4242 answers what v1's handler answers
+[1A[2K[53/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:252:9 › Reveal and /r › Reveal for the Adult Link with trackingId=junk answers what v1's handler answers
+[1A[2K[54/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:264:7 › Reveal and /r › Reveal answers for a non-Adult Link too: the Deeplink Link gets its Destination
+[1A[2K[55/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:272:7 › Reveal and /r › Reveal for an unknown Link Id, or the Fixture file's v1 id, answers 404 with no-store and no CORS header
+[1A[2K[56/432] [chromium] › tests/e2e/05-domains.spec.ts:57:5 › the TLS Ask answers an empty 200 for a Custom Domain, a Spare Domain and a primary host, 404 for an unknown host, 400 without a domain
+[1A[2K[57/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:283:9 › Reveal and /r › /r/{Direct Link Id} answers 302 to its Destination with no-store
+[1A[2K[58/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:283:9 › Reveal and /r › /r/{Adult Link Id} answers 302 to its Destination with no-store
+[1A[2K[59/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:292:7 › Reveal and /r › /r for an unknown Link Id answers 404 with no-store
+[1A[2K[60/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:300:7 › Other paths › /netlify/functions/secrets.json answers 404 with the landing page as its body
+[1A[2K[61/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:307:9 › Other paths › /landing.html comes back byte-identical to the Page Copy
+[1A[2K[62/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:183:11 › System Browser (desktop Chrome) › with the direct Link's url empty, a tap reveals and lands on exactly what Reveal answered
+[1A[2K[63/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:307:9 › Other paths › /style.css comes back byte-identical to the Page Copy
+[1A[2K[64/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:307:9 › Other paths › /script.js comes back byte-identical to the Page Copy
+[1A[2K[65/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:321:7 › Other paths › an unknown Username lands on the landing page
+[1A[2K[66/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:329:9 › Other paths › /no/such/path gives the index page with 200
+[1A[2K[67/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:329:9 › Other paths › /secrets.json gives the index page with 200
+[1A[2K[68/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:329:9 › Other paths › /fixture gives the index page with 200
+[1A[2K[69/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:329:9 › Other paths › /linkme_clone3/netlify/functions/secrets.json gives the index page with 200
+[1A[2K[70/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:329:9 › Other paths › /..%2f..%2flinkme_clone3/netlify/functions/secrets.json gives the index page with 200
+[1A[2K[71/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:329:9 › Other paths › /README.md gives the index page with 200
+[1A[2K[72/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:329:9 › Other paths › /images/face.webp gives the index page with 200
+[1A[2K[73/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:337:5 › no Test Secrets value is in any Profile JSON, page or secrets path
+[1A[2K[74/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /annavalentyna › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[75/432] [chromium] › tests/e2e/05-domains.spec.ts:105:5 › on a Custom Domain, / and /{code} show its Profile, ?link= reveals that Link on load as on the baseURL, and a deeper path lands on the landing page
+[1A[2K[76/432] [chromium] › tests/e2e/06-editor-ui.spec.ts:74:7 › the Editor's home and Link form › the Default Mode helper follows the select, and "Default Mode saved." shows only once Save is pressed
+[1A[2K[77/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /annavalentyna › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[78/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /asdf › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[79/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:82:7 › sign-up and the claim › logging in again in a fresh context lands on the verify screen; after a failed claim, on the claim step
+[1A[2K[80/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /asdf › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[81/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /asdfasdf › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: annavalentyna
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: asdf
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: asdfasdf
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: bnjmklk
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: caseyrose
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: cgfakaweiwei
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: cleocash
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: f_wei13
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: hannah
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: hannahmoon
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: isaraee
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: ja123
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: jaka
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: jaka3
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: jaka5
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: jaka6q
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: jaka7q
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: jakajaka
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: jakajakajaka
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: juliafilippo
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: juliafilippo_
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: kihua
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: memory
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: motherfucker
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: tanja
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: timtom
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: weiwei
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | stale in v2: fixture
+[WebServer] oflinkv2-e2e-app-run-fc020f791bcc  | imported: 1 Profiles, 1 Links, 1 images, 28 warnings
+
+[1A[2K[82/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /asdfasdf › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[83/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /bnjmklk › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[WebServer] [Koflinkv2-e2e-app-run-fc020f791bcc exited with code 0
+
+[1A[2K[84/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:169:9 › System Browser (desktop Chrome) › a tap on the escape_ig Link lands on its url and makes no Reveal request
+[1A[2K[85/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /bnjmklk › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[86/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /caseyrose › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[87/432] [chromium] › tests/e2e/04-stats.spec.ts:330:5 › 3. Link Shortcuts count through /r and through Reveal; an unknown Link Id and a refused Reveal count nothing
+[1A[2K[88/432] [chromium] › tests/e2e/05-domains.spec.ts:131:5 › on a Spare Domain, /{username} shows that Profile and /{username}?link= reveals that Link on load
+[1A[2K[89/432] [chromium] › tests/e2e/06-editor-ui.spec.ts:98:7 › the Editor's home and Link form › the Creator nav holds exactly "Editor" and "Stats", the screen shown marked aria-current="page"
+[1A[2K[90/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:183:11 › System Browser (desktop Chrome) › with the escape_ig Link's url absent, a tap reveals and lands on exactly what Reveal answered
+[1A[2K[91/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /caseyrose › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[92/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /cgfakaweiwei › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[93/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /cgfakaweiwei › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[94/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:489:13 › v1 Snapshot › /cgfakaweiwei › with no Tracking Code in the address, the Age Gate's Reveal carries the card's default Tracking Code
+[1A[2K[95/432] [chromium] › tests/e2e/05-domains.spec.ts:146:5 › a changed Custom Domain serves on the next load with no restart, and the TLS Ask follows it
+[1A[2K[96/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /cleocash › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[97/432] [chromium] › tests/e2e/05-domains.spec.ts:160:5 › a Custom Domain belongs to one Profile, and a Spare Domain outranks a Custom Domain of the same name
+[1A[2K[98/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /cleocash › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[99/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:489:13 › v1 Snapshot › /cleocash › with no Tracking Code in the address, the Age Gate's Reveal carries the card's default Tracking Code
+[1A[2K[100/432] [chromium] › tests/e2e/04-stats.spec.ts:374:5 › 4. the country comes from CF-IPCountry only: no header and T1 count as "Unknown", never US, and x-country never wins
+[1A[2K[101/432] [chromium] › tests/e2e/06-editor-ui.spec.ts:117:7 › the Editor's home and Link form › a Sections jump chip scrolls to its card and keeps what was typed in Display name
+[1A[2K[102/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /f_wei13 › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[103/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:99:7 › sign-up and the claim › /edit with no session shows log-in, which links to sign-up
+[1A[2K[104/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:183:11 › System Browser (desktop Chrome) › with the escape_ig Link's url empty, a tap reveals and lands on exactly what Reveal answered
+[1A[2K[105/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /f_wei13 › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[106/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /hannah › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[107/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:109:5 › in a fresh context the landing page's "Create your page" opens the sign-up screen, and no n8n Form link remains
+[1A[2K[108/432] [chromium] › tests/e2e/05-domains.spec.ts:178:5 › a Creator can neither create a Profile with a Custom Domain nor set one on their own Profile
+[1A[2K[109/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:123:7 › rules and the proxy, over HTTP at the public origin › every reserved name is refused as a claim, each top-level route of 3 or more characters the app serves included
+[1A[2K[110/432] [chromium] › tests/e2e/06-editor-ui.spec.ts:139:5 › the landing page has one h1, one "Create your page" and one "Log in" link, the not-found note in the first screen, and no script
+[1A[2K[111/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /hannah › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[112/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /hannahmoon › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[113/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:142:7 › rules and the proxy, over HTTP at the public origin › the claim sets only Username, owner and default Mode, for the Creator alone, once
+[1A[2K[114/432] [chromium] › tests/e2e/05-domains.spec.ts:199:5 › the domains stay out of every public answer: the baseURL page and the records API without a token
+[1A[2K[115/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /hannahmoon › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[116/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /isaraee › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[117/432] [chromium] › tests/e2e/04-stats.spec.ts:390:5 › 5. Today, 7D and 30D read their own UTC days from the browser's clock, and a range with no rows says so
+[1A[2K[118/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /isaraee › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[119/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /ja123 › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[120/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /ja123 › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[121/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /jaka › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[122/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /jaka › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[123/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /jaka3 › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[124/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:200:7 › System Browser (desktop Chrome) › a Link with tracking on and no url reveals with the Tracking Code from the path
+[1A[2K[125/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:168:7 › rules and the proxy, over HTTP at the public origin › _superusers and /api/realtime answer 404 at the public origin, while the same Creator's calls through the proxy succeed
+[1A[2K[126/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /jaka3 › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[127/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /jaka5 › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[128/432] [chromium] › tests/e2e/05-domains.spec.ts:229:5 › the Profile page bootstrap carries the path's segments literally, `$` patterns included
+[1A[2K[129/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /jaka5 › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[130/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /jaka6q › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[131/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:211:7 › the verified-email gate › over HTTP an unverified Creator's token cannot update its Profile, add a Link or upload an avatar; the owner reads both back unchanged
+[1A[2K[132/432] [chromium] › tests/e2e/05-domains.spec.ts:263:5 › with Tracking Codes 111 and 222 on every host, the Adult Link's Age Gate sends Reveal to the page's own host, which answers 200 with a Destination ending in /c{code}
+[1A[2K[133/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /jaka6q › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[134/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /jaka7q › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[135/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /jaka7q › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[136/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /jakajaka › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[137/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:238:7 › Onboarding after verification › at 390×844 a verified Creator goes through Onboarding to a live Profile whose Links act like imported ones
+[1A[2K[138/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /jakajaka › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[139/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /jakajakajaka › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[140/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /jakajakajaka › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[141/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /juliafilippo › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[142/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /juliafilippo › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[143/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /juliafilippo_ › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[144/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:215:9 › System Browser (desktop Chrome) › a Profile default of direct shows no Escape Overlay
+[1A[2K[145/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:215:9 › System Browser (desktop Chrome) › a Profile default of escape_ig shows no Escape Overlay
+[1A[2K[146/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /juliafilippo_ › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[147/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /kihua › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[148/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:215:9 › System Browser (desktop Chrome) › a Profile default of deeplink shows no Escape Overlay
+[1A[2K[149/432] [chromium] › tests/e2e/04-stats.spec.ts:449:5 › 6. each load records its In-App Browser, and an Event holds nothing but its seven fields
+[1A[2K[150/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:222:7 › System Browser (desktop Chrome) › a Link with its mode removed follows a deeplink default and reveals
+[1A[2K[151/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /kihua › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[152/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /memory › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[153/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /memory › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[154/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /motherfucker › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[155/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /motherfucker › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[156/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /tanja › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[157/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /tanja › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[158/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:426:11 › v1 Snapshot › /timtom › the page shows the file's title, display name, bio, verified badge, avatar and cards
+[1A[2K[159/432] [chromium] › tests/e2e/04-stats.spec.ts:473:5 › the Stats Profile's and the Other Profile's JSON each carry profile.id, their record id, and no private key
+[1A[2K[160/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:456:11 › v1 Snapshot › /timtom › the Profile JSON carries fresh Link Ids, the url rule, Escape Mode, the default Tracking Codes and nothing private
+[1A[2K[161/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:514:11 › v1 Snapshot › Paths › /Jaka serves the same Profile JSON as /jaka
+[1A[2K[162/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:514:11 › v1 Snapshot › Paths › /JakaJaka serves the same Profile JSON as /jakajaka
+[1A[2K[163/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:514:11 › v1 Snapshot › Paths › /weiWEi serves the same Profile JSON as /weiwei
+[1A[2K[164/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:522:7 › v1 Snapshot › no Destination is in any Profile JSON, the twins' pages, /netlify/functions/secrets.json (404) or /secrets.json
+[1A[2K[165/432] [chromium] › tests/e2e/04-stats.spec.ts:495:5 › 7. only a Profile's signed-in owner reads its dailyStats rows, and nobody reads or writes an Event, through PocketBase itself
+[1A[2K[166/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:233:7 › System Browser (desktop Chrome) › a Link with an unrecognised mode follows a deeplink default and reveals
+[1A[2K[167/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for jaka5 card 1 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[168/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for jaka6q card 1 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[169/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for jaka6q card 2 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[170/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for jaka7q card 1 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[171/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for jaka7q card 2 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[172/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for juliafilippo card 2 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[173/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for juliafilippo_ card 2 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[174/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for juliafilippo_ card 3 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[175/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for juliafilippo_ card 4 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[176/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for motherfucker card 2 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[177/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:581:11 › v1 Snapshot › Clicks › /r for timtom card 2 (non-Adult) answers 302 to the card's v1 url
+[1A[2K[178/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for annavalentyna card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[179/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for bnjmklk card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[180/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for caseyrose card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[181/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for cgfakaweiwei card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[182/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for cleocash card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[183/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for f_wei13 card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[184/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for hannah card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[185/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for hannahmoon card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[186/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for isaraee card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[187/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for juliafilippo card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[188/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for juliafilippo_ card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[189/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for kihua card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[190/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for memory card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[191/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for memory card 2 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[192/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for motherfucker card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[193/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for tanja card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[194/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:591:11 › v1 Snapshot › Clicks › Reveal for timtom card 1 (Adult) with no code, digits, geo and junk answers what v1's handler answers
+[1A[2K[195/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:655:11 › v1 Snapshot › Clicks › Geo Rule: Reveal for juliafilippo card 1 with trackingId=geo answers what v1's handler answers for each location header pair
+[1A[2K[196/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:655:11 › v1 Snapshot › Clicks › Geo Rule: Reveal for juliafilippo_ card 1 with trackingId=geo answers what v1's handler answers for each location header pair
+[1A[2K[197/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:655:11 › v1 Snapshot › Clicks › Geo Rule: Reveal for timtom card 1 with trackingId=geo answers what v1's handler answers for each location header pair
+[1A[2K[198/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:666:9 › v1 Snapshot › Clicks › every derived location case changes v1's answer on some Link once its header is dropped or its precedence swapped
+[1A[2K[199/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:681:11 › v1 Snapshot › Clicks › asdf card 1, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does, and from /r
+[1A[2K[200/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:681:11 › v1 Snapshot › Clicks › asdfasdf card 1, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does, and from /r
+[1A[2K[201/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:681:11 › v1 Snapshot › Clicks › ja123 card 1, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does, and from /r
+[1A[2K[202/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:681:11 › v1 Snapshot › Clicks › jaka card 1, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does, and from /r
+[1A[2K[203/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:681:11 › v1 Snapshot › Clicks › jaka3 card 1, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does, and from /r
+[1A[2K[204/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:681:11 › v1 Snapshot › Clicks › jakajaka card 1, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does, and from /r
+[1A[2K[205/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:681:11 › v1 Snapshot › Clicks › jakajaka card 2, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does, and from /r
+[1A[2K[206/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:681:11 › v1 Snapshot › Clicks › jakajakajaka card 1, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does, and from /r
+[1A[2K[207/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:690:9 › v1 Snapshot › Clicks › every v1 Link Id and every secrets key answers 404 from Reveal and from /r
+[1A[2K[208/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › jaka5 card 1 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[209/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › jaka6q card 1 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[210/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:244:7 › System Browser (desktop Chrome) › with every mode stripped, the Deeplink Link falls back to Escape Mode and lands on its url with no Reveal
+[1A[2K[211/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › jaka6q card 2 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[212/432] [chromium] › tests/e2e/04-stats.spec.ts:581:5 › 8. a Tracking Code stays with the Profile it arrived on: never v1's global code, another Profile's, or a reused Username's
+[1A[2K[213/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › jaka7q card 1 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[214/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:383:7 › the Editor's Profile and default Mode › at 390×844 the Creator copies the Bio Link, edits display name and bio, replaces the avatar; Username read-only, no badge control
+[1A[2K[215/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › jaka7q card 2 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[216/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › juliafilippo card 2 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[217/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › juliafilippo_ card 2 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[218/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:261:9 › System Browser (desktop Chrome) › the Adult Link in direct Mode shows the Age Gate, then Continue (18+) reveals and lands on the answer
+[1A[2K[219/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:461:7 › the Editor's Profile and default Mode › the default Mode set in Quick Settings decides the Escape Overlay on open and moves only the Links left on "Profile default"
+[1A[2K[220/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › juliafilippo_ card 3 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[221/432] [chromium] › tests/e2e/04-stats.spec.ts:632:5 › 9. a deleted Link keeps its Clicks in the totals, under "Deleted link"
+[1A[2K[222/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:261:9 › System Browser (desktop Chrome) › the Adult Link in escape_ig Mode shows the Age Gate, then Continue (18+) reveals and lands on the answer
+[1A[2K[223/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:261:9 › System Browser (desktop Chrome) › the Adult Link in deeplink Mode shows the Age Gate, then Continue (18+) reveals and lands on the answer
+[1A[2K[224/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:281:7 › System Browser (desktop Chrome) › /{username}/{code} is cleaned to /{username}
+[1A[2K[225/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:286:7 › System Browser (desktop Chrome) › /{username}/{code}?link={Adult Link Id}, with tracking on, reveals with that id and the code, with no Age Gate, and lands on the answer
+[1A[2K[226/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:505:7 › the Editor's Profile and default Mode › "Pop out" in Quick Settings starts "On tap" and, set to "At open", pops an Instagram Visitor out on open
+[1A[2K[227/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › juliafilippo_ card 4 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[228/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:300:7 › System Browser (desktop Chrome) › /{username}/{code}?link={Escape Link Id} lands where a tap on that Link would: its url, with no Reveal
+[1A[2K[229/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:309:7 › System Browser (desktop Chrome) › /{username}?link={an id not on the Profile} loads the Profile, with no Reveal request and no navigation
+[1A[2K[230/432] [chromium] › tests/e2e/04-stats.spec.ts:664:5 › 10. a deleted Profile takes its Events with it, and its delete succeeds
+[1A[2K[231/432] [chromium] › tests/e2e/04-stats.spec.ts:675:5 › 11. while every Event write fails, /r still redirects and Reveal still answers, both to their Destinations
+[1A[2K[232/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:321:7 › System Browser (desktop Chrome) › the network fence answers every host other than localhost
+[1A[2K[233/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › motherfucker card 2 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[WebServer] app-1                              | Event write failed
+
+[1A[2K[WebServer] app-1                              | Event write failed
+
+[1A[2K[WebServer] app-1                              | Event write failed
+
+[1A[2K[WebServer] app-1                              | Event write failed
+
+[1A[2K[WebServer] app-1                              | Event write failed
+
+[1A[2K[WebServer] app-1                              | Event write failed
+
+[1A[2K[234/432] [chromium] › tests/e2e/04-stats.spec.ts:699:5 › 12. the Page View Ping meets its own limit per client and Username, apart from other Profiles' pings and from /r
+[1A[2K[235/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:545:7 › the Editor's Links › at 390×844 a title edit, a background replaced then removed, a Link added then moved up, and a confirmed delete each show on the next load
+[1A[2K[236/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:345:9 › In-App Browser (Instagram) › with every mode stripped, the Escape Overlay shows on open at /{username}/{code}, with no Close
+[1A[2K[237/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:345:9 › In-App Browser (FBAN) › with every mode stripped, the Escape Overlay shows on open at /{username}/{code}, with no Close
+[1A[2K[238/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:719:13 › v1 Snapshot › Clicks › Journeys › timtom card 2 (non-Adult) goes through /r/{Link Id} to its v1 url
+[1A[2K[239/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:345:9 › In-App Browser (TikTok) › with every mode stripped, the Escape Overlay shows on open at /{username}/{code}, with no Close
+[1A[2K[240/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:366:9 › System Browser (iOS Safari) › no Escape Overlay shows, and a tap on the Escape Link navigates plainly
+[1A[2K[241/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /annavalentyna/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[242/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:366:9 › System Browser (Android Chrome) › no Escape Overlay shows, and a tap on the Escape Link navigates plainly
+[1A[2K[243/432] [chromium] › tests/e2e/04-stats.spec.ts:713:5 › the Page View Ping: an unknown Username is 404 and records nothing, and a GET under /v/ reaches the Profile route
+[1A[2K[244/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:381:7 › In-App Browser (iOS Instagram) › Direct default: no Escape Overlay on open, the address keeps its code, and the Direct Link navigates plainly
+[1A[2K[245/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:394:7 › In-App Browser (iOS Instagram) › a tap on the Deeplink Link makes a Reveal request, then pops out to the answer through x-safari-, as v1 did
+[1A[2K[246/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:626:7 › the Editor's Links › a move whose second write fails shows the reason and reloads the list from PocketBase, matching the page's order
+[1A[2K[247/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:409:7 › In-App Browser (iOS Instagram) › the Adult Link set to Direct shows the Age Gate, then Continue (18+) reveals and navigates plainly
+[1A[2K[248/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:640:7 › the Editor's Links › reopening a Link shows its current Destination, and after the Creator changes it Reveal answers the new one
+[1A[2K[249/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:429:9 › In-App Browser (iOS Instagram) › a default of escape_ig with Pop out "At open", on a Profile that holds the Direct and Deeplink Links, pops out and shows the Escape Overlay on open, with Close
+[1A[2K[250/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:429:9 › In-App Browser (iOS Instagram) › a default of sideways with Pop out "At open", on a Profile that holds the Direct and Deeplink Links, pops out and shows the Escape Overlay on open, with Close
+[1A[2K[251/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:449:7 › In-App Browser (iOS Instagram) › every Link set to Escape Mode with an escape_ig default shows the Escape Overlay on open, with no Close
+[1A[2K[252/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:459:7 › In-App Browser (iOS Instagram) › a default of deeplink with Pop out "At open" pops out on open to the Profile, with no Escape Overlay
+[1A[2K[253/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:471:9 › In-App Browser (iOS Instagram) › Direct default: the Deeplink Link with an unrecognised mode navigates plainly to its url, with no Reveal and nothing x-safari- recorded
+[1A[2K[254/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:668:7 › the Editor's Links › every field of an opened Link changes: an icon from no stock file stays, then stock icons, Adult flag, Mode, tracking and default Tracking Code reach the page
+[1A[2K[255/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:471:9 › In-App Browser (iOS Instagram) › Direct default: the Deeplink Link with its mode removed navigates plainly to its url, with no Reveal and nothing x-safari- recorded
+[1A[2K[256/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:485:7 › In-App Browser (iOS Instagram) › Direct default: from /{username}/{code}, a tap on the Escape Link fires x-safari- to the escape target in the tap's own task
+[1A[2K[257/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:495:7 › In-App Browser (iOS Instagram) › after the Escape tap, the Escape Overlay shows every way out aimed at the escape target, and no Reveal is made
+[1A[2K[258/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:510:7 › In-App Browser (iOS Instagram) › tapping "Open in browser", then "Try another way", records each one's href as a navigation
+[1A[2K[259/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /annavalentyna?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[260/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:522:7 › In-App Browser (iOS Instagram) › "Close" hides the Escape Overlay and puts the address back to /{username}/{code}
+[1A[2K[261/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:715:7 › the Editor's Links › invalid Geo Rule JSON is refused and leaves the Link unchanged; a valid object saves and fills the textarea after a reload; emptying clears it
+[1A[2K[262/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:531:7 › In-App Browser (iOS Instagram) › /{username}/{code}?link={Escape Link Id} reveals, then bounces straight to the Destination through x-safari-, as v1's ?link= did, with the Escape Overlay aimed at that address, with Close
+[1A[2K[263/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:551:7 › In-App Browser (iOS Instagram) › after an earlier visit to /{username}/{code}, a tap on the Escape Link from /{username} carries the code in the target and the address
+[1A[2K[264/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:564:7 › In-App Browser (iOS Instagram) › after an earlier visit to /{username}/{code}, the overlay on open with an escape_ig default points the address and "Open in browser" at the code; Close puts /{username} back
+[1A[2K[265/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:581:9 › In-App Browser (iOS Instagram) › with clipboard permission on the localhost origin › "Copy link" puts the https escape target on the clipboard
+[1A[2K[266/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:591:7 › In-App Browser (iOS Instagram) › the Adult Link set to Escape Mode shows the Age Gate, then Continue (18+) fires x-safari- to the escape target in its own task, with no Reveal
+[1A[2K[267/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:762:7 › the Editor's Links › a Link saved with a javascript: Destination is refused by PocketBase; the Editor shows the reason and keeps every field as typed
+[1A[2K[268/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:606:7 › In-App Browser (iOS Instagram) › the Adult Link set to Escape Mode: closing the Age Gate instead records no navigation and makes no Reveal request
+[1A[2K[269/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:820:7 › owner rules, over HTTP at the public origin › another Creator cannot change, delete, add to or take from a Profile, nor replace its images; the owners read all back unchanged
+[1A[2K[270/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:836:7 › owner rules, over HTTP at the public origin › another Creator and an anonymous caller read nothing of the first Creator's, and nobody reads the ownerless Fixture
+[1A[2K[271/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /bnjmklk/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[272/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:635:7 › In-App Browser (iOS Instagram) › the hop: the target recorded from an Escape Link tap opens in a fresh desktop browser context and lands where a tap on that Link would
+[1A[2K[273/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:860:7 › owner rules, over HTTP at the public origin › the owner cannot change their Username, owner or badge, delete their Profile, add a second, choose a Link Id, upload a file directly or store a Destination outside https://, http:// and /
+[1A[2K[274/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:879:7 › owner rules, over HTTP at the public origin › the Operator edits a Creator's Profile, Link and account, then deletes the account and its Profile: the page lands on the landing page and log-in is refused
+[1A[2K[275/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:649:7 › In-App Browser (iOS Instagram) › the hop: for the Adult Link set to Escape Mode with tracking on, the fresh desktop browser context reveals with the code and lands on the answer
+[1A[2K[276/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:903:7 › the session and where log-in lands › reopening the Editor in the same context still shows it; Log out shows log-in, and logging in again lands in the Editor
+[1A[2K[277/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:924:7 › the session and where log-in lands › a Creator who logs in partway through Onboarding resumes at the claim step, the verify screen, the Profile step or the first-Link step
+[1A[2K[278/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:670:7 › In-App Browser (iOS Instagram) › Deeplink default: a Link with its mode removed makes a Reveal request, then pops out to the answer
+[1A[2K[279/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:687:7 › In-App Browser (Android Instagram) › from /{username}/{code}, a tap on the Escape Link fires v1's Chrome intent, in the tap's own task; "Open in browser" carries it; no "Try another way"
+[1A[2K[280/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:708:7 › In-App Browser (Android Instagram) › a tap on the Deeplink Link makes a Reveal request, then fires v1's Chrome intent for the answer
+[1A[2K[281/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:938:7 › the session and where log-in lands › with the stored token replaced by an invalid one, a save sends the Creator to log-in, and logging in returns them to the Editor
+[1A[2K[282/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:723:7 › In-App Browser (Android Instagram) › the Adult Link set to Deeplink shows the Age Gate, then Continue (18+) reveals and fires v1's Chrome intent for the answer
+[1A[2K[283/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:957:7 › the session and where log-in lands › hand-over: an ownerless Profile's Username is refused with the Cutover message; once the Operator sets its owner, the Creator's next log-in lands in the Editor on it
+[1A[2K[284/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:754:9 › Pop-out to Safari/Chrome (android Instagram) › Escape default, Pop out "At open": the page pops out on open to the Profile with its code, and shows the Escape Overlay
+[1A[2K[285/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:763:9 › Pop-out to Safari/Chrome (android Instagram) › Pop out "At open": a second load in the same tab does not pop out again
+[1A[2K[286/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /bnjmklk?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[287/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:980:7 › the session and where log-in lands › a bad verification link says invalid or expired and offers a resend; "Resend email" delivers a verification email, and once its link is followed Continue opens the Profile step
+[1A[2K[288/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:775:9 › Pop-out to Safari/Chrome (android Instagram) › ?link={Escape Link Id} reveals on open, then bounces straight to the Destination
+[1A[2K[289/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:785:9 › Pop-out to Safari/Chrome (android Instagram) › ?link={Escape Link Id} bounces again on a second load in the same tab, as v1's `?link=` did
+[1A[2K[290/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:799:9 › Pop-out to Safari/Chrome (android Instagram) › Deeplink default, Pop out "At open": the page pops out on open to the Profile, with no Escape Overlay
+[1A[2K[291/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:998:7 › the session and where log-in lands › "Forgot password" says the same for a known and an unknown address; a bad reset link offers a new one; the mailed one sets a password that lands in the Editor, the old one refused
+[1A[2K[292/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:754:9 › Pop-out to Safari/Chrome (ios TikTok) › Escape default, Pop out "At open": the page pops out on open to the Profile with its code, and shows the Escape Overlay
+[1A[2K[293/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:763:9 › Pop-out to Safari/Chrome (ios TikTok) › Pop out "At open": a second load in the same tab does not pop out again
+[1A[2K[294/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:775:9 › Pop-out to Safari/Chrome (ios TikTok) › ?link={Escape Link Id} reveals on open, then bounces straight to the Destination
+[1A[2K[295/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:785:9 › Pop-out to Safari/Chrome (ios TikTok) › ?link={Escape Link Id} bounces again on a second load in the same tab, as v1's `?link=` did
+[1A[2K[296/432] [chromium] › tests/e2e/03-auth-and-editor.spec.ts:1027:7 › the session and where log-in lands › after the run, the Fixture Profile still has no owner
+[1A[2K[297/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:799:9 › Pop-out to Safari/Chrome (ios TikTok) › Deeplink default, Pop out "At open": the page pops out on open to the Profile, with no Escape Overlay
+[1A[2K[298/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:809:11 › Pop-out to Safari/Chrome (ios TikTok) › Direct default: a tap on the Escape Link pops out to that Link from the tap itself, with no Reveal
+[1A[2K[299/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:817:11 › Pop-out to Safari/Chrome (ios TikTok) › Direct default: a tap on the Deeplink Link reveals, then pops out to the Destination
+[1A[2K[300/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:754:9 › Pop-out to Safari/Chrome (android TikTok) › Escape default, Pop out "At open": the page pops out on open to the Profile with its code, and shows the Escape Overlay
+[1A[2K[301/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:763:9 › Pop-out to Safari/Chrome (android TikTok) › Pop out "At open": a second load in the same tab does not pop out again
+[1A[2K[302/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:775:9 › Pop-out to Safari/Chrome (android TikTok) › ?link={Escape Link Id} reveals on open, then bounces straight to the Destination
+[1A[2K[303/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:785:9 › Pop-out to Safari/Chrome (android TikTok) › ?link={Escape Link Id} bounces again on a second load in the same tab, as v1's `?link=` did
+[1A[2K[304/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /caseyrose/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[305/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:799:9 › Pop-out to Safari/Chrome (android TikTok) › Deeplink default, Pop out "At open": the page pops out on open to the Profile, with no Escape Overlay
+[1A[2K[306/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:809:11 › Pop-out to Safari/Chrome (android TikTok) › Direct default: a tap on the Escape Link pops out to that Link from the tap itself, with no Reveal
+[1A[2K[307/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:817:11 › Pop-out to Safari/Chrome (android TikTok) › Direct default: a tap on the Deeplink Link reveals, then pops out to the Destination
+[1A[2K[308/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:838:9 › System Browser (iOS Safari), escape_ig default, Pop out open: nothing pops out on open
+[1A[2K[309/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:838:9 › System Browser (iOS Safari), escape_ig default, Pop out tap: nothing pops out on open
+[1A[2K[310/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:838:9 › System Browser (iOS Safari), deeplink default, Pop out open: nothing pops out on open
+[1A[2K[311/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:838:9 › System Browser (iOS Safari), deeplink default, Pop out tap: nothing pops out on open
+[1A[2K[312/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:838:9 › System Browser (Android Chrome), escape_ig default, Pop out open: nothing pops out on open
+[1A[2K[313/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /caseyrose?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[314/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:838:9 › System Browser (Android Chrome), escape_ig default, Pop out tap: nothing pops out on open
+[1A[2K[315/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:838:9 › System Browser (Android Chrome), deeplink default, Pop out open: nothing pops out on open
+[1A[2K[316/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:838:9 › System Browser (Android Chrome), deeplink default, Pop out tap: nothing pops out on open
+[1A[2K[317/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:852:7 › In-App Browser on neither iOS nor Android (desktop UA carrying "Instagram") › a tap on the Escape Link records no navigation and shows the Escape Overlay, whose "Open in browser" carries the plain https target; no "Try another way"
+[1A[2K[318/432] [chromium] › tests/e2e/05-domains.spec.ts:297:5 › on every host the Direct Mode Link and the Deeplink Mode Link each end at the same Destination, through `/r` and Reveal on the page's own host
+[1A[2K[319/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:876:11 › Pop out timing (ios Instagram) › Escape default, Pop out absent: the Escape Overlay shows on open with nothing popped out, and "Open in browser" pops out to the Profile from the tap
+[1A[2K[320/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:876:11 › Pop out timing (ios Instagram) › Escape default, Pop out tap: the Escape Overlay shows on open with nothing popped out, and "Open in browser" pops out to the Profile from the tap
+[1A[2K[321/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:876:11 › Pop out timing (ios Instagram) › Escape default, Pop out sideways: the Escape Overlay shows on open with nothing popped out, and "Open in browser" pops out to the Profile from the tap
+[1A[2K[322/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:895:9 › Pop out timing (ios Instagram) › Escape default, Pop out "On tap": a tap on the Escape Link, once the overlay is closed, pops out to that Link
+[1A[2K[323/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:907:9 › Pop out timing (ios Instagram) › Escape default, Pop out "At open": the page pops out on open to the Profile, and the Escape Overlay shows as the fallback
+[1A[2K[324/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /cgfakaweiwei/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[325/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:915:9 › Pop out timing (ios Instagram) › Deeplink default, Pop out "On tap": nothing pops out on open and no Escape Overlay shows
+[1A[2K[326/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:924:9 › Pop out timing (ios Instagram) › Deeplink default, Pop out "At open": the page pops out on open to the Profile, with no Escape Overlay
+[1A[2K[327/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:932:9 › Pop out timing (ios Instagram) › Direct default, Pop out "At open": nothing pops out on open
+[1A[2K[328/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:943:13 › Pop out timing (ios Instagram) › Pop out "tap": ?link={escape_ig Link Id} still reveals on load and bounces straight to the Destination
+[1A[2K[329/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:943:13 › Pop out timing (ios Instagram) › Pop out "tap": ?link={deeplink Link Id} still reveals on load and bounces straight to the Destination
+[1A[2K[330/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:943:13 › Pop out timing (ios Instagram) › Pop out "open": ?link={escape_ig Link Id} still reveals on load and bounces straight to the Destination
+[1A[2K[331/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:943:13 › Pop out timing (ios Instagram) › Pop out "open": ?link={deeplink Link Id} still reveals on load and bounces straight to the Destination
+[1A[2K[332/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:955:9 › Pop out timing (ios Instagram) › the Escape Overlay reads as v1's does in Instagram: the Instagram icon and "Instagram restricts some links"
+[1A[2K[333/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:876:11 › Pop out timing (android Instagram) › Escape default, Pop out absent: the Escape Overlay shows on open with nothing popped out, and "Open in browser" pops out to the Profile from the tap
+[1A[2K[334/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:876:11 › Pop out timing (android Instagram) › Escape default, Pop out tap: the Escape Overlay shows on open with nothing popped out, and "Open in browser" pops out to the Profile from the tap
+[1A[2K[335/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:876:11 › Pop out timing (android Instagram) › Escape default, Pop out sideways: the Escape Overlay shows on open with nothing popped out, and "Open in browser" pops out to the Profile from the tap
+[1A[2K[336/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:895:9 › Pop out timing (android Instagram) › Escape default, Pop out "On tap": a tap on the Escape Link, once the overlay is closed, pops out to that Link
+[1A[2K[337/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:907:9 › Pop out timing (android Instagram) › Escape default, Pop out "At open": the page pops out on open to the Profile, and the Escape Overlay shows as the fallback
+[1A[2K[338/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:915:9 › Pop out timing (android Instagram) › Deeplink default, Pop out "On tap": nothing pops out on open and no Escape Overlay shows
+[1A[2K[339/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /cgfakaweiwei?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[340/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:924:9 › Pop out timing (android Instagram) › Deeplink default, Pop out "At open": the page pops out on open to the Profile, with no Escape Overlay
+[1A[2K[341/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:932:9 › Pop out timing (android Instagram) › Direct default, Pop out "At open": nothing pops out on open
+[1A[2K[342/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:943:13 › Pop out timing (android Instagram) › Pop out "tap": ?link={escape_ig Link Id} still reveals on load and bounces straight to the Destination
+[1A[2K[343/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:943:13 › Pop out timing (android Instagram) › Pop out "tap": ?link={deeplink Link Id} still reveals on load and bounces straight to the Destination
+[1A[2K[344/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:943:13 › Pop out timing (android Instagram) › Pop out "open": ?link={escape_ig Link Id} still reveals on load and bounces straight to the Destination
+[1A[2K[345/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:943:13 › Pop out timing (android Instagram) › Pop out "open": ?link={deeplink Link Id} still reveals on load and bounces straight to the Destination
+[1A[2K[346/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:955:9 › Pop out timing (android Instagram) › the Escape Overlay reads as v1's does in Instagram: the Instagram icon and "Instagram restricts some links"
+[1A[2K[347/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:968:7 › the Escape Overlay outside Instagram (TikTok, v2's extension) › reads "This app restricts some links", with no Instagram icon
+[1A[2K[348/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1004:9 › Redirect paths (ios Instagram, then Safari) › (a) a Deeplink tap in the app reveals, then pops out to exactly the Destination, which the System Browser lands on
+[1A[2K[349/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1022:11 › Redirect paths (ios Instagram, then Safari) › (b) ?link={escape_ig Link Id} in the app reveals, then pops out to exactly the Destination, which the System Browser lands on
+[1A[2K[350/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1022:11 › Redirect paths (ios Instagram, then Safari) › (b) ?link={deeplink Link Id} in the app reveals, then pops out to exactly the Destination, which the System Browser lands on
+[1A[2K[351/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1039:9 › Redirect paths (ios Instagram, then Safari) › (c) Escape default, Pop out "At open": the app pops out to the Profile, where a tap on the Escape Link goes through /r to its Destination
+[1A[2K[352/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1060:9 › Redirect paths (ios Instagram, then Safari) › (d) a Direct Link navigates plainly in the app, through /r to its Destination, with nothing popped out
+[1A[2K[353/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1073:9 › Redirect paths (ios Instagram, then Safari) › (e) the Adult Link hits the Age Gate in the app, and again in the System Browser after the pop-out, where Continue (18+) reveals and lands
+[1A[2K[354/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1004:9 › Redirect paths (android Instagram, then Chrome) › (a) a Deeplink tap in the app reveals, then pops out to exactly the Destination, which the System Browser lands on
+[1A[2K[355/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /cleocash/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[356/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1022:11 › Redirect paths (android Instagram, then Chrome) › (b) ?link={escape_ig Link Id} in the app reveals, then pops out to exactly the Destination, which the System Browser lands on
+[1A[2K[357/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1022:11 › Redirect paths (android Instagram, then Chrome) › (b) ?link={deeplink Link Id} in the app reveals, then pops out to exactly the Destination, which the System Browser lands on
+[1A[2K[358/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1039:9 › Redirect paths (android Instagram, then Chrome) › (c) Escape default, Pop out "At open": the app pops out to the Profile, where a tap on the Escape Link goes through /r to its Destination
+[1A[2K[359/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1060:9 › Redirect paths (android Instagram, then Chrome) › (d) a Direct Link navigates plainly in the app, through /r to its Destination, with nothing popped out
+[1A[2K[360/432] [chromium] › tests/e2e/01-link-modes-and-escape.spec.ts:1073:9 › Redirect paths (android Instagram, then Chrome) › (e) the Adult Link hits the Age Gate in the app, and again in the System Browser after the pop-out, where Continue (18+) reveals and lands
+[1A[2K[361/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /cleocash?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[362/432] [chromium] › tests/e2e/05-domains.spec.ts:356:5 › with an iOS Instagram User-Agent, creator.test/ shows the Escape Overlay exactly when localhost/{username} does
+[1A[2K[363/432] [chromium] › tests/e2e/05-domains.spec.ts:385:5 › an Escape from creator.test/{code} targets creator.test and /{code}, with no Username segment, on iOS and as the Android intent
+[1A[2K[364/432] [chromium] › tests/e2e/05-domains.spec.ts:394:5 › an Escape from spare.test/{username}/{code} keeps /{username}/{code}
+[1A[2K[365/432] [chromium] › tests/e2e/05-domains.spec.ts:404:5 › loading creator.test/ adds one Page View Event, and the Adult Link's Reveal on creator.test/{code} one Click Event, both for the Fixture Profile
+[1A[2K[366/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /f_wei13/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[367/432] [chromium] › tests/e2e/05-domains.spec.ts:436:5 › on creator.test and spare.test the page requests nothing from another of ofl.ink's hosts, and no request URL names ofl.ink
+[1A[2K[368/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /f_wei13?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[369/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /hannah/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[370/432] [chromium] › tests/e2e/05-domains.spec.ts:482:5 › a fetch from a page on creator.test to Reveal on spare.test cannot be read by the page
+[1A[2K[371/432] [chromium] › tests/e2e/05-domains.spec.ts:516:5 › step 12's hand-over order: setting the owner while the Creator's bare Profile exists is refused; once it is deleted the owner is set, the next log-in lands in the Editor on the handed-over Profile with its Links, and the Creator owns exactly one Profile
+[1A[2K[372/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /hannah?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[373/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /hannahmoon/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[374/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /hannahmoon?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[375/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /isaraee/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[376/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /isaraee?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[377/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /juliafilippo/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[378/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /juliafilippo?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[379/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /juliafilippo_/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[380/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /juliafilippo_?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[381/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /kihua/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[382/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /kihua?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[383/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /memory/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[384/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /memory?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[385/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /memory/{digits}, then the Age Gate on card 2, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[386/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /memory?link={card 2's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[387/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /motherfucker/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[388/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /motherfucker?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[389/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /tanja/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[390/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /tanja?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[391/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:734:13 › v1 Snapshot › Clicks › Journeys › /timtom/{digits}, then the Age Gate on card 1, sends Reveal with those digits and lands where v1 sends that code
+[1A[2K[392/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:751:13 › v1 Snapshot › Clicks › Journeys › /timtom?link={card 1's Link Id} (Adult) reveals on load and lands where v1 sends it
+[1A[2K[393/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:771:5 › a phone-sized screenshot of a Profile page served by v2 is saved
+[1A[2K[394/432] [chromium] › tests/e2e/02-profile-parity.spec.ts:788:5 › nothing the test stack has printed holds a Test Secrets value or a v1 Destination
+[1A[2K[395/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:76:5 › the broken tree is refused with one line per bad file, before any write
+[1A[2K[396/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:88:5 › a bad Username and bad Destinations are refused, one line per problem
+[1A[2K[397/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:126:5 › a relative url the URL parser rejects is refused by its fixed reason and never printed
+[1A[2K[398/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:142:5 › a root-relative url whose backslash a browser reads as a second slash is refused and never printed
+[1A[2K[399/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:164:7 › a url beginning with two backslashes, which a browser sends off-site, is refused and never printed
+[1A[2K[400/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:164:7 › a url beginning with a backslash and a slash, which a browser sends off-site, is refused and never printed
+[1A[2K[401/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:164:7 › a url beginning with a tab and two backslashes, which a browser sends off-site, is refused and never printed
+[1A[2K[402/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:179:5 › a .json entry or an image path that is a directory is refused as unreadable, not a crash
+[1A[2K[403/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:197:5 › a Profile file holding JSON null gets its own refusal line next to another bad file
+[1A[2K[404/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:211:5 › one Username in two sites refuses the run
+[1A[2K[405/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:223:5 › the Fixture site alone plans three dropped entries and stops at its first write
+[1A[2K[406/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:238:5 › the v1 Snapshot then the Fixture site: every file repaired or kept, then the first write
+[1A[2K[407/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:315:9 › repairs, seen over HTTP on the seeded stack › /weiwei shows the repaired file's display name and cards
+[1A[2K[408/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:315:9 › repairs, seen over HTTP on the seeded stack › /weiWEi shows the repaired file's display name and cards
+[1A[2K[409/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:323:7 › repairs, seen over HTTP on the seeded stack › jaka7q's display name is jaka7q
+[1A[2K[410/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:331:9 › repairs, seen over HTTP on the seeded stack › juliafilippo_ shows every card, each with a distinct Link Id
+[1A[2K[411/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:331:9 › repairs, seen over HTTP on the seeded stack › jaka6q shows every card, each with a distinct Link Id
+[1A[2K[412/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:331:9 › repairs, seen over HTTP on the seeded stack › jaka7q shows every card, each with a distinct Link Id
+[1A[2K[413/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:342:7 › repairs, seen over HTTP on the seeded stack › the six Profiles whose avatar file is missing serve an empty avatar
+[1A[2K[414/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:356:7 › repairs, seen over HTTP on the seeded stack › the four non-Adult Links that had a secrets entry reach their file's url through /r
+[1A[2K[415/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:418:7 › on the test stack › caddy, app and pocketbase run, PocketBase is healthy, and the app answers through Caddy
+[1A[2K[416/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:434:7 › on the test stack › the schema: fields, patterns, relations, file fields, and every rule superuser-only but the ones Phase 3 opens
+[1A[2K[417/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:504:7 › on the test stack › the seed wrote the Fixture Profile: fields, Links in order, fresh Link Ids, Destinations and image bytes
+[1A[2K[418/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:552:7 › on the test stack › the import's printed lines: a write error exits 2, the next run completes it with three dropped lines, the stale Profiles named and the summary; no Destination printed
+[1A[2K[WebServer] oflinkv2-e2e-app-run-fab6d33045d1  | dropped: stackcheck card 2: secrets entry iF3AZ1X2Ba6LFAbG unused, a non-Adult Link keeps its own url
+[WebServer] oflinkv2-e2e-app-run-fab6d33045d1  | dropped: stackcheck card 3: secrets entry x1FC7NfyBolRNc5U unused, a non-Adult Link keeps its own url
+[WebServer] oflinkv2-e2e-app-run-fab6d33045d1  | dropped: stackcheck card 4: secrets entry z5oIyUj3xHaLAqeY unused, a non-Adult Link keeps its own url
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-fab6d33045d1  | write failed: stackcheck card 2 refused
+
+[1A[2K[WebServer] [Koflinkv2-e2e-app-run-fab6d33045d1 exited with code 2
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | dropped: stackcheck card 2: secrets entry iF3AZ1X2Ba6LFAbG unused, a non-Adult Link keeps its own url
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | dropped: stackcheck card 3: secrets entry x1FC7NfyBolRNc5U unused, a non-Adult Link keeps its own url
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | dropped: stackcheck card 4: secrets entry z5oIyUj3xHaLAqeY unused, a non-Adult Link keeps its own url
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: annavalentyna
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: asdf
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: asdfasdf
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: bnjmklk
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: caseyrose
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: cgfakaweiwei
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: cleocash
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: f_wei13
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: hannah
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: hannahmoon
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: isaraee
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: ja123
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: jaka
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: jaka3
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: jaka5
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: jaka6q
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: jaka7q
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: jakajaka
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: jakajakajaka
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: juliafilippo
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: juliafilippo_
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: kihua
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: memory
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: motherfucker
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: tanja
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: timtom
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: weiwei
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | stale in v2: fixture
+[WebServer] oflinkv2-e2e-app-run-54a0f8c6a11b  | imported: 1 Profiles, 4 Links, 6 images, 31 warnings
+
+[1A[2K[WebServer] [Koflinkv2-e2e-app-run-54a0f8c6a11b exited with code 0
+
+[1A[2K[419/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:608:7 › on the test stack › the app signs in again when PocketBase stops accepting its superuser token
+[1A[2K[420/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:632:7 › on the test stack › PocketBase refuses a Destination that is neither absolute http(s) nor root-relative
+[1A[2K[421/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:676:9 › on the test stack › re-runs › v1's git tree, archived and unpacked inside the container: three case twins skipped, counts and served Link Ids unchanged
+[1A[2K[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | skipped: /tmp/v1/api/profiles/Jaka.json: case twin of jaka.json
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | skipped: /tmp/v1/api/profiles/JakaJaka.json: case twin of jakajaka.json
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | skipped: /tmp/v1/api/profiles/weiWEi.json: case twin of weiwei.json
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | no destination: jaka card 1
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | missing image: /tmp/v1/api/profiles/jaka.json: avatarUrl
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | no destination: jakajaka card 1
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | no destination: jakajaka card 2
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | no destination: asdf card 1
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | no destination: asdfasdf card 1
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | missing image: /tmp/v1/api/profiles/bnjmklk.json: avatarUrl
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | no destination: ja123 card 1
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | missing image: /tmp/v1/api/profiles/ja123.json: avatarUrl
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | no destination: jaka3 card 1
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | missing image: /tmp/v1/api/profiles/jaka5.json: avatarUrl
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | missing image: /tmp/v1/api/profiles/jaka6q.json: avatarUrl
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | repaired: /tmp/v1/api/profiles/jaka7q.json: display name
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | missing image: /tmp/v1/api/profiles/jaka7q.json: avatarUrl
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | no destination: jakajakajaka card 1
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: juliafilippo card 2: secrets entry 2 unused, a non-Adult Link keeps its own url
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: juliafilippo_ card 3: secrets entry juliafilippo_juliafilippo_juliafilippo_1 unused, a non-Adult Link keeps its own url
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: juliafilippo_ card 4: secrets entry juliafilippo_juliafilippo_juliafilippo_1 unused, a non-Adult Link keeps its own url
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | repaired: /tmp/v1/api/profiles/weiwei.json: trailing comma
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: weiwei card 2: secrets entry 2 unused, a non-Adult Link keeps its own url
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: secrets entry juliafilippo_name1 has no Link
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: secrets entry juliafilippo_1 has no Link
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: secrets entry juliafilippo_2 has no Link
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: secrets entry juliafilippo_juliafilippo_name1 has no Link
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: secrets entry juliafilippo_juliafilippo_1 has no Link
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: secrets entry juliafilippo_juliafilippo_2 has no Link
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: secrets entry weiWEi1 has no Link
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: secrets entry weiwei1 has no Link
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: secrets entry weiweiweiwei1 has no Link
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: secrets entry cgfakaweiweicgfakaweiwei691 has no Link
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: fixture card 2: secrets entry iF3AZ1X2Ba6LFAbG unused, a non-Adult Link keeps its own url
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: fixture card 3: secrets entry x1FC7NfyBolRNc5U unused, a non-Adult Link keeps its own url
+[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | dropped: fixture card 4: secrets entry z5oIyUj3xHaLAqeY unused, a non-Adult Link keeps its own url
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-95401e98f47c  | imported: 28 Profiles, 42 Links, 62 images, 36 warnings
+
+[1A[2K[WebServer] [Koflinkv2-e2e-app-run-95401e98f47c exited with code 0
+
+[1A[2K[422/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:711:9 › on the test stack › re-runs › the broken tree plus a case twin with other bytes is refused, one line per bad file, and nothing is written
+[1A[2K[WebServer] oflinkv2-e2e-app-run-8abb17cc4121  | invalid v1 file: /tmp/broken/api/profiles/Importcheck_ok.json: case twin of importcheck_ok.json with different bytes
+[WebServer] oflinkv2-e2e-app-run-8abb17cc4121  | invalid v1 file: /tmp/broken/api/profiles/importcheck_badjson.json: not valid JSON, even after the trailing-comma repair
+[WebServer] oflinkv2-e2e-app-run-8abb17cc4121  | invalid v1 file: /tmp/broken/api/profiles/importcheck_nolinks.json: no links array
+
+[1A[2K[WebServer] [Koflinkv2-e2e-app-run-8abb17cc4121 exited with code 1
+
+[1A[2K[423/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:732:9 › on the test stack › re-runs › tree A, then Direct Mode set through the API, then tree B: Link Ids kept, a fresh one for the new Link, the dropped one named and served, Mode kept
+[1A[2K[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: annavalentyna
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: asdf
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: asdfasdf
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: bnjmklk
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: caseyrose
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: cgfakaweiwei
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: cleocash
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: f_wei13
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: hannah
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: hannahmoon
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: isaraee
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: ja123
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: jaka
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: jaka3
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: jaka5
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: jaka6q
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: jaka7q
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: jakajaka
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: jakajakajaka
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: juliafilippo
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: juliafilippo_
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: kihua
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: memory
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: motherfucker
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: tanja
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: timtom
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: weiwei
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | stale in v2: fixture
+[WebServer] oflinkv2-e2e-app-run-f66ed0fee1eb  | imported: 1 Profiles, 5 Links, 0 images, 28 warnings
+
+[1A[2K[WebServer] [Koflinkv2-e2e-app-run-f66ed0fee1eb exited with code 0
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: reruncheck card 3 (Link Id sr1ydaw8ddzp)
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: annavalentyna
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: asdf
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: asdfasdf
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: bnjmklk
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: caseyrose
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: cgfakaweiwei
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: cleocash
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: f_wei13
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: hannah
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: hannahmoon
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: isaraee
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: ja123
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: jaka
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: jaka3
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: jaka5
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: jaka6q
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: jaka7q
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: jakajaka
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: jakajakajaka
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: juliafilippo
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: juliafilippo_
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: kihua
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: memory
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: motherfucker
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: tanja
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: timtom
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: weiwei
+[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | stale in v2: fixture
+
+[1A[2K[WebServer] oflinkv2-e2e-app-run-d8671c432d62  | imported: 1 Profiles, 5 Links, 0 images, 29 warnings
+
+[1A[2K[WebServer] [Koflinkv2-e2e-app-run-d8671c432d62 exited with code 0
+
+[1A[2K[424/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:780:9 › on the test stack › re-runs › pocketbase and app recreated: the re-run Profile still serves in Direct Mode and the Fixture avatar with the same bytes
+[1A[2K[WebServer] [Kpocketbase-1 has been recreated
+
+[1A[2K[WebServer] [Kpocketbase-1 exited with code 0
+
+[1A[2K[WebServer] [Kapp-1 has been recreated
+
+[1A[2K[WebServer] [Kapp-1 exited with code 137
+
+[1A[2K[WebServer] pocketbase-1                       | Successfully saved superuser "e2e-superuser@example.com"!
+
+[1A[2K[WebServer] pocketbase-1                       | 2026/10/05 22:01:42 Server started at http://0.0.0.0:8090
+[WebServer] pocketbase-1                       | ├─ REST API:  http://0.0.0.0:8090/api/
+[WebServer] pocketbase-1                       | └─ Dashboard: http://0.0.0.0:8090/_/
+
+[1A[2K[425/432] [stack-import] › tests/e2e/02-v1-import.spec.ts:817:7 › on the test stack › after every spec: only a migration created the events collection
+[1A[2K[426/432] [reveal-guard] › tests/e2e/02-reveal-guard.spec.ts:68:7 › Reveal answers only its own origin › a foreign Origin gets 403 with no Destination
+[1A[2K[427/432] [reveal-guard] › tests/e2e/02-reveal-guard.spec.ts:78:9 › Reveal answers only its own origin › Sec-Fetch-Site: cross-site gets 403 with no Destination, even with the page's own Origin
+[1A[2K[428/432] [reveal-guard] › tests/e2e/02-reveal-guard.spec.ts:78:9 › Reveal answers only its own origin › Sec-Fetch-Site: same-site gets 403 with no Destination, even with the page's own Origin
+[1A[2K[429/432] [reveal-guard] › tests/e2e/02-reveal-guard.spec.ts:84:7 › Reveal answers only its own origin › the page's own Origin, Sec-Fetch-Site same-origin or none, and a request with neither header pass
+[1A[2K[430/432] [reveal-guard] › tests/e2e/02-reveal-guard.spec.ts:100:7 › Reveal answers only its own origin › a 404 Reveal carries no CORS header either
+[1A[2K[431/432] [reveal-guard] › tests/e2e/02-reveal-guard.spec.ts:108:7 › Reveal and /r share one limit per client › repeated Reveal and /r calls, half through each, reach 429 within 600 + 1, and no 429 holds a Destination
+[1A[2K[432/432] [reveal-guard] › tests/e2e/02-reveal-guard.spec.ts:120:7 › Reveal and /r share one limit per client › a client-set first X-Forwarded-For entry neither resets nor escapes the limit
+[1A[2K[WebServer] 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-mailpit-1 Stopping 
+[WebServer]  Container oflinkv2-e2e-caddy-1 Stopping 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-caddy-1 Stopped 
+[WebServer]  Container oflinkv2-e2e-caddy-1 Removing 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-caddy-1 Removed 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-app-1 Stopping 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-mailpit-1 Stopped 
+[WebServer]  Container oflinkv2-e2e-mailpit-1 Removing 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-mailpit-1 Removed 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-app-1 Stopped 
+[WebServer]  Container oflinkv2-e2e-app-1 Removing 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-app-1 Removed 
+[WebServer]  Container oflinkv2-e2e-pocketbase-1 Stopping 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Stopped 
+[WebServer]  Container oflinkv2-e2e-pocketbase-1 Removing 
+
+[1A[2K[WebServer]  Container oflinkv2-e2e-pocketbase-1 Removed 
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_caddy_data Removing 
+[WebServer]  Volume oflinkv2-e2e_pb_data Removing 
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_caddy_config Removing 
+
+[1A[2K[WebServer]  Network oflinkv2-e2e_default Removing 
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_caddy_data Removed 
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_pb_data Removed 
+
+[1A[2K[WebServer]  Volume oflinkv2-e2e_caddy_config Removed 
+
+[1A[2K[WebServer]  Network oflinkv2-e2e_default Removed 
+
+[1A[2K[WebServer] tests/stack.sh: line 14: 71882 Terminated: 15          compose logs -f --no-color
+
+[1A[2K  1 skipped
+  431 passed (3.7m)
+exit=0
