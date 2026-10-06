@@ -40,6 +40,7 @@ async function fenced(browser: Browser, origin: string, options: BrowserContextO
   return context;
 }
 
+
 async function fillLink(page: Page, link: (typeof LINKS)[number]) {
   await page.getByLabel('Title').fill(link.title);
   await page.getByLabel('Destination').fill(link.destination);
@@ -48,7 +49,7 @@ async function fillLink(page: Page, link: (typeof LINKS)[number]) {
 }
 
 // Settled for a shot: network idle, fonts loaded, every image on screen decoded; then the local origin rewritten (ruling 11).
-async function shoot(page: Page, origin: string, name: string) {
+async function settle(page: Page, origin: string) {
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => [...document.images]
@@ -62,8 +63,29 @@ async function shoot(page: Page, origin: string, name: string) {
     }
   }, { local, to: PUBLIC });
   expect(await page.evaluate(() => document.body.innerText), 'the local origin in the shot').not.toContain(local.host);
+}
+
+// A full-viewport shot.
+async function shoot(page: Page, origin: string, name: string) {
+  await settle(page, origin);
   const png = join(PNG_DIR, `${name}.png`);
   await page.screenshot({ path: png, animations: 'disabled' });
+  await toWebp(png, name);
+}
+
+// A cropped shot: `clip` is in CSS pixels, measured after settle() by the caller, so the overlay's dead black band is left out.
+async function shootClip(page: Page, origin: string, name: string, clip: (p: Page) => Promise<{ x: number; y: number; width: number; height: number }>) {
+  await settle(page, origin);
+  const png = join(PNG_DIR, `${name}.png`);
+  await page.screenshot({ path: png, animations: 'disabled', clip: await clip(page) });
+  await toWebp(png, name);
+}
+
+// A single element, cropped to its own box (the Editor's Quick Settings card).
+async function shootEl(page: Page, origin: string, name: string, selector: string) {
+  await settle(page, origin);
+  const png = join(PNG_DIR, `${name}.png`);
+  await page.locator(selector).screenshot({ path: png, animations: 'disabled' });
   await toWebp(png, name);
 }
 
@@ -133,6 +155,24 @@ test('the landing\'s four screenshots of a demo Creator', async ({ browser, base
   await shoot(profile, origin, 'profile-mobile');
   await visitorPhone.close();
 
+  // The Escape Overlay, the screen Escape Mode shows a Visitor inside the Instagram in-app browser: its UA (an `Instagram` token
+  // script.js matches) makes her Escape Mode Profile show the on-load screen. Its up-arrow (to the ··· menu) and Instagram mark
+  // are inline SVG in index.html, so they render under the strict fence with no webfont to wait on. The shot is cropped to the
+  // content (top of frame down to the "Copy link" button) so the overlay's top-aligned dead black band is left out. Her
+  // example.com Links keep any Destination out of the shot, and the escape target shown is her own Profile URL, rewritten to
+  // https://ofl.ink by settle().
+  const IG_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 300.0.0.0.0 (iPhone14,3; iOS 17_0; en_US; en-US; scale=3.00; 1170x2532; 000000000)';
+  const igPhone = await fenced(browser, origin, { ...PHONE, userAgent: IG_UA });
+  const ig = await igPhone.newPage();
+  await ig.goto(`/${MIA.username}`);
+  await expect(ig.locator('#igOverlay')).toBeVisible();
+  await expect(ig.locator('#igCopyBtn')).toBeVisible();
+  await shootClip(ig, origin, 'escape-overlay-mobile', async (p) => {
+    const bottom = await p.locator('#igCopyBtn').evaluate((node) => node.getBoundingClientRect().bottom);
+    return { x: 0, y: 0, width: 390, height: Math.ceil(bottom + 24) };
+  });
+  await igPhone.close();
+
   // Local Visitors: a Page View each, and a Click through /r for those that tap, its 302 fetched without following it.
   for (const [country, title] of VISITS) {
     const context = await fenced(browser, origin, { ...PHONE, extraHTTPHeaders: { 'CF-IPCountry': country } });
@@ -158,5 +198,44 @@ test('the landing\'s four screenshots of a demo Creator', async ({ browser, base
   await expect(heading(page, 'Stats')).toBeVisible();
   await expect(page.getByRole('button', { name: '7D', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await shoot(page, origin, 'editor-stats-mobile');
+
+  // Where Deeplink is set: the Editor's "Quick Settings" card (profile.js quickSettings), the Profile's one default Mode. With
+  // "Deeplink on tap" chosen its help text shows and the fixed note ("Every Link left on 'Profile default' follows this Mode.")
+  // proves it is set once for the whole Profile, not per Link. The choice is not saved, so her default stays Escape. The card is
+  // shot as a single element, so it is cropped to itself with no full-page band.
+  await page.goto('/edit/home');
+  await page.locator('#modes').scrollIntoViewIfNeeded();
+  await page.getByLabel('Default Mode').selectOption({ label: 'Deeplink on tap' });
+  await expect(page.locator('#default-mode-help')).toContainText('Deeplink on tap');
+  await shootEl(page, origin, 'deeplink-setting-mobile', '#modes');
+
+  // One adult Link, added now so profile-mobile (shot earlier) is unchanged, to trigger the 18+ Age Gate.
+  await page.goto('/edit/home');
+  await page.getByRole('button', { name: 'Add link' }).click();
+  await expect(heading(page, 'Add link')).toBeVisible();
+  await page.getByLabel('Title').fill('Backstage');
+  await page.getByLabel('Destination').fill('https://example.com/backstage');
+  await page.getByLabel('Icon').selectOption({ label: 'Link' });
+  await page.getByLabel('18+ Age Gate').check();
+  await page.getByRole('button', { name: 'Save link' }).click();
+  await expect(heading(page, 'Edit Profile')).toBeVisible();
   await phone.close();
+
+  // The 18+ Age Gate (#overlay, the Mature Content Disclaimer), as a Visitor sees it on tapping the adult Link. A plain phone
+  // (not an in-app browser) so the tap opens the overlay in place. Cropped to the card. (Its lock/close glyphs are FontAwesome,
+  // blocked by the fence, so they stay blank rather than render as tofu; the card still reads as the 18+ check.)
+  const agePhone = await fenced(browser, origin, PHONE);
+  const ageView = await agePhone.newPage();
+  await ageView.goto(`/${MIA.username}`);
+  await ageView.locator('.link-card', { hasText: 'Backstage' }).click();
+  await expect(ageView.locator('#overlay')).toBeVisible();
+  await expect(ageView.locator('#overlay .overlay-content')).toBeVisible();
+  await shootClip(ageView, origin, 'age-gate-mobile', async (p) => {
+    const box = await p.locator('#overlay .overlay-content').evaluate((node) => {
+      const r = node.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom };
+    });
+    return { x: 0, y: Math.max(0, Math.floor(box.top - 40)), width: 390, height: Math.ceil(box.bottom - box.top + 80) };
+  });
+  await agePhone.close();
 });

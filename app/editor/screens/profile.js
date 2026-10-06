@@ -104,7 +104,7 @@ export function drawProfileStep(profile) {
 // What each default Mode does, in one plain sentence, as app/public/script.js does it (the brief's ruling 13).
 const MODE_HELP = {
   direct: 'Direct opens the Destination straight away.',
-  escape_ig: 'Escape moves Visitors out of the Instagram or TikTok browser into Safari or Chrome. If the phone won\'t switch by itself, your page shows how.',
+  escape_ig: 'Escape shows Visitors in the Instagram or TikTok browser a screen that helps them into Safari or Chrome; a Visitor already in a real browser never sees it.',
   deeplink: 'Deeplink on tap sends the Visitor to Safari or Chrome the moment they tap the Link, from Instagram, TikTok and other apps\' in-app browsers on iPhone and Android, with no how-to screen. Safari or Chrome then opens the Destination.',
   deeplink_open: 'Deeplink at open sends the Visitor to Safari or Chrome as soon as your page opens in Instagram, TikTok and other apps\' in-app browsers on iPhone and Android, once per tab, with no how-to screen. Taps there behave like Deeplink on tap.',
 };
