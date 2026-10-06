@@ -100,9 +100,11 @@ test('a pending Custom Domain gets no certificate and shows no Profile; set live
 });
 
 // A Visitor on `origin`, in a fresh 390×844 context that reaches no other host, opens `path`. The caller closes the context.
-async function visit(browser: Browser, origin: string, path: string) {
+async function visit(browser: Browser, origin: string, path: string, profileJson?: object) {
   const context = await phoneContext(browser, { origin });
   const visitor = await context.newPage();
+  // A Profile JSON, when given, answers the page's own request for it (an in-flight variant, as Phase 1's serveVariant does)
+  if (profileJson) await visitor.route(`${origin}/api/profiles/fixture.json`, (route) => route.fulfill({ json: profileJson }));
   await visitor.goto(origin + path);
   return visitor;
 }
@@ -322,42 +324,41 @@ async function storedLink(linkId: string): Promise<{ id: string; mode: string }>
   return found.items[0];
 }
 
-// The Deeplink Link's Mode is set to Deeplink Mode as the Operator would in the admin UI, and restored in `finally`.
-// ASSUMPTION: the seed already stores the Deeplink Link in Deeplink Mode (01-link-modes-and-escape finds it served so), so the
-// set-up writes the value it holds and changes nothing other specs read while they run (rung 2: the ticket sets the Mode in the
-// REST set-up; rung 4: no shared Link changes Mode mid-run). Overturned if the seed stops storing it; the write then matters.
+// The Deeplink Link travels as Deeplink under a Deeplink default (the Deeplink Modes are Profile defaults only, ADR 0003,
+// amended 2026-10-06): each host's page gets its Profile JSON as the app serves it under one, in flight, as overlayShows does
+// below, so the stored default other specs read never changes.
 test('on every host the Direct Mode Link and the Deeplink Mode Link each end at the same Destination, through `/r` and Reveal on the page\'s own host', async ({ browser, request }) => {
   test.setTimeout(120_000); // six page loads
   const deeplink = await fixtureLinkId(request, 'Deeplink Link');
-  const stored = await storedLink(deeplink);
-  try {
-    expect(await operator('PATCH', `/api/collections/links/records/${stored.id}`, { mode: 'deeplink' }), `Link ${deeplink} set to Deeplink Mode`).toBe(200);
-    for (const title of ['Direct Link', 'Deeplink Link']) {
-      const linkId = await fixtureLinkId(request, title);
-      const ends: string[] = [];
-      for (const host of HOSTS) {
-        const origin = at(host);
-        const where = `Link ${linkId} on ${host}${codedPath(host, '111')}`;
-        const visitor = await visit(browser, origin, codedPath(host, '111'));
-        await showsFixture(visitor, where);
-        const reveals: URL[] = [];
-        visitor.on('request', (req) => { if (new URL(req.url()).pathname === REVEAL) reveals.push(new URL(req.url())); });
-        const left = await onward(visitor, origin, () => card(visitor, title).click());
-        // Direct Mode reaches its Destination through `/r` on the page's own host; Deeplink Mode through Reveal there.
-        if (title === 'Direct Link') {
-          expect(left.redirectedFrom()?.url(), `the Click route ${where} went through`).toBe(`${origin}/r/${linkId}`);
-          expect(reveals, `Reveal requests for ${where}`).toEqual([]);
-        } else {
-          expect(reveals.map((url) => `${url.origin} ${url.searchParams.get('id')}`), `the Reveal for ${where}`).toEqual([`${origin} ${linkId}`]);
-        }
-        ends.push(left.url());
-        await visitor.context().close();
+  const deeplinkDefault = async (host: string) => {
+    const served = await (await request.get('/api/profiles/fixture.json', { headers: { host: new URL(at(host)).host } })).json();
+    served.profile.mode = 'deeplink';
+    served.links.find((l: { id: string }) => l.id === deeplink).mode = 'deeplink';
+    return served;
+  };
+  for (const title of ['Direct Link', 'Deeplink Link']) {
+    const linkId = await fixtureLinkId(request, title);
+    const ends: string[] = [];
+    for (const host of HOSTS) {
+      const origin = at(host);
+      const where = `Link ${linkId} on ${host}${codedPath(host, '111')}`;
+      const visitor = await visit(browser, origin, codedPath(host, '111'), await deeplinkDefault(host));
+      await showsFixture(visitor, where);
+      const reveals: URL[] = [];
+      visitor.on('request', (req) => { if (new URL(req.url()).pathname === REVEAL) reveals.push(new URL(req.url())); });
+      const left = await onward(visitor, origin, () => card(visitor, title).click());
+      // Direct Mode reaches its Destination through `/r` on the page's own host; Deeplink Mode through Reveal there.
+      if (title === 'Direct Link') {
+        expect(left.redirectedFrom()?.url(), `the Click route ${where} went through`).toBe(`${origin}/r/${linkId}`);
+        expect(reveals, `Reveal requests for ${where}`).toEqual([]);
+      } else {
+        expect(reveals.map((url) => `${url.origin} ${url.searchParams.get('id')}`), `the Reveal for ${where}`).toEqual([`${origin} ${linkId}`]);
       }
-      expect(ends.every((end) => end === ends[0]), `Link ${linkId} ends at one Destination on ${HOSTS.join(', ')}`).toBe(true);
-      expect(HOSTS.some((host) => new URL(ends[0]).host === `${host}:${PORT}`), `Link ${linkId}'s Destination on one of ofl.ink's hosts`).toBe(false);
+      ends.push(left.url());
+      await visitor.context().close();
     }
-  } finally {
-    expect(await operator('PATCH', `/api/collections/links/records/${stored.id}`, { mode: stored.mode }), `Link ${deeplink}'s Mode restored`).toBe(200);
+    expect(ends.every((end) => end === ends[0]), `Link ${linkId} ends at one Destination on ${HOSTS.join(', ')}`).toBe(true);
+    expect(HOSTS.some((host) => new URL(ends[0]).host === `${host}:${PORT}`), `Link ${linkId}'s Destination on one of ofl.ink's hosts`).toBe(false);
   }
 });
 

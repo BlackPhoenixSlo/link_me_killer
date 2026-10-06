@@ -20,7 +20,7 @@ const REVEAL_PATH = '/.netlify/functions/reveal';
 
 const LIMIT = Number(ENV.REVEAL_LIMIT_PER_MINUTE);
 
-type FixtureLink = { id: string; title: string; url: string };
+type FixtureLink = { id: string; title: string; url: string; mode?: string };
 type ServedLink = { id: string; title: string; isAdult: boolean; mode: string };
 const fixtureLinks: FixtureLink[] = JSON.parse(readFileSync(join(FIXTURES, 'api', 'profiles', 'fixture.json'), 'utf8')).links;
 const TEST_SECRETS: Record<string, string> = JSON.parse(readFileSync(join(FIXTURES, 'netlify', 'functions', 'secrets.json'), 'utf8'));
@@ -32,7 +32,9 @@ const noCors = (res: APIResponse) => !Object.keys(res.headers()).some((h) => h.s
 
 let links: ServedLink[];
 let origin: string;
-const deeplink = () => links.find((l) => !l.isAdult && l.mode === 'deeplink')!;
+// The Fixture's Deeplink Link: the one with no Mode of its own, as the Deeplink Modes are Profile defaults only (ADR 0003,
+// amended 2026-10-06).
+const deeplink = () => links.find((l) => !l.isAdult && !fixtureLinks.find((f) => f.title === l.title)!.mode)!;
 const direct = () => links.find((l) => !l.isAdult && l.mode === 'direct')!;
 
 test.beforeAll(async ({ playwright }) => {

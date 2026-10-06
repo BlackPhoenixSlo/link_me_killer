@@ -18,7 +18,7 @@ const MUST_REVALIDATE = 'public, max-age=0, must-revalidate';
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 const MODES = ['direct', 'escape_ig', 'deeplink'];
 
-type FixtureLink = { id: string; title: string; url: string; isAdult: boolean; mode: string; icon?: string; backgroundImage?: string; default_tracknumber?: string };
+type FixtureLink = { id: string; title: string; url: string; isAdult: boolean; mode?: string; icon?: string; backgroundImage?: string; default_tracknumber?: string };
 type ServedLink = { id: string; title: string; url: string; isAdult: boolean; tracking: boolean; mode: string; icon: string; backgroundImage: string; default_tracknumber?: string };
 type Served = { profile: Record<string, unknown> & { username: string; mode: string; avatarUrl: string }; links: ServedLink[] };
 
@@ -82,7 +82,9 @@ let origin: string;
 const linkBy = (pick: (l: ServedLink) => boolean) => served!.links.find(pick)!;
 const onlyFixture = () => test.beforeEach(() => test.skip(!served, `${PROFILE_JSON} is not served here: a VPS run`));
 const direct = () => linkBy((l) => !l.isAdult && l.mode === 'direct');
-const deeplink = () => linkBy((l) => !l.isAdult && l.mode === 'deeplink');
+// The Fixture's Deeplink Link: the one with no Mode of its own, as the Deeplink Modes are Profile defaults only (ADR 0003,
+// amended 2026-10-06). It travels as Deeplink under a Deeplink default.
+const deeplink = () => linkBy((l) => !l.isAdult && !fileCard(l).mode);
 const adult = () => linkBy((l) => l.isAdult);
 
 test.beforeAll(async ({ playwright }) => {
@@ -143,6 +145,14 @@ test.describe('Fixture Profile journeys (desktop Chrome)', () => {
   test('the Deeplink Link\'s Click sends Reveal with its id, never requests /r, then requests its Test Secrets Destination', async ({ page }) => {
     const link = deeplink();
     const destination = destinationOf(link);
+    // The Profile JSON as the app serves it under a Deeplink default, in flight, so the stored default other specs read stays.
+    await page.route(`**${PROFILE_JSON}`, async (route) => {
+      const response = await route.fetch();
+      const json: Served = await response.json();
+      json.profile.mode = 'deeplink';
+      json.links.find((l) => l.id === link.id)!.mode = 'deeplink';
+      await route.fulfill({ response, json });
+    });
     await page.goto('/fixture');
     await expect(page.locator('.link-card .link-title')).toHaveCount(served!.links.length);
     const reveal = page.waitForRequest((req) => new URL(req.url()).pathname === REVEAL_PATH);
@@ -185,7 +195,7 @@ test.describe('Profile JSON', () => {
       expect(link.id === fileCard(link).id, card).toBe(false);
       const expectedUrl = !link.isAdult && link.mode !== 'deeplink' ? `${origin}/r/${link.id}` : '';
       expect(link.url === expectedUrl, `${card} url`).toBe(true);
-      expect(link.mode, card).toBe(fileCard(link).mode); // the Fixture's Links each carry their own Mode
+      expect(link.mode, card).toBe(fileCard(link).mode ?? fixture.profile.mode); // its own Mode, else the Profile default
       expect('default_tracknumber' in link, card).toBe(fileCard(link).default_tracknumber !== undefined);
     }
     expect(new Set(json.links.map((l) => l.id)).size).toBe(json.links.length);

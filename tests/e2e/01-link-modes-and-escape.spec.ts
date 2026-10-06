@@ -22,13 +22,18 @@ const FENCE_HEADER = 'x-network-fence';
 const TC = '4242'; // a numeric Tracking Code in the path
 // The iOS Instagram Escape Overlay, opened by an Escape Mode tap, left for the human on every run (plan section 7, step 2).
 const SCREENSHOT = join(__dirname, '..', '..', '.scratch', 'goal_ai', 'shots', '01-link-modes-and-escape.png');
-const FIXTURE_FILE: { links: { title: string; url: string }[] } = JSON.parse(
+const FIXTURE_FILE: { links: { title: string; url: string; mode?: string }[] } = JSON.parse(
   readFileSync(join(__dirname, '..', 'fixtures', 'api', 'profiles', 'fixture.json'), 'utf8'),
 );
 // Where `/r/{Link Id}` sends a non-Adult Link: its Destination, the Fixture file's v1 `url` for the card of the same title.
 const destinationOf = (link: Link) => FIXTURE_FILE.links.find((l) => l.title === link.title)!.url;
 
-// Fixture read: fails fast, naming what is missing, if no Link has one of the three Modes or no Link is Adult.
+// The Mode a Fixture Link carries of its own in the Fixture file, if any.
+const ownMode = (link: Link) => FIXTURE_FILE.links.find((l) => l.title === link.title)?.mode;
+
+// Fixture read: fails fast, naming what is missing, if no Link has one of the three Modes or no Link is Adult. The Deeplink
+// Modes are Profile defaults only (ADR 0003, amended 2026-10-06), so the "deeplink" Link is the one with no Mode of its own:
+// it inherits the Profile default, and travels as Deeplink under a Deeplink default (withDefault).
 let served: ProfileJson;
 let username: string;
 let byMode: Record<Mode, Link>;
@@ -46,7 +51,7 @@ test.beforeAll(async ({ playwright }) => {
   const missing: string[] = [];
   byMode = {} as Record<Mode, Link>;
   for (const mode of MODES) {
-    const link = served.links.find((l) => !l.isAdult && l.mode === mode);
+    const link = served.links.find((l) => !l.isAdult && (mode === 'deeplink' ? !ownMode(l) : ownMode(l) === mode && l.mode === mode));
     if (link) byMode[mode] = link;
     else missing.push(`a non-Adult Link with mode "${mode}"`);
   }
@@ -127,8 +132,16 @@ const popOuts = (navigations: Navigation[]) => [...xSafari(navigations), ...inte
 const poppedTo = (recorded: string) => (recorded.startsWith('x-safari-')
   ? recorded.slice('x-safari-'.length)
   : `https://${recorded.slice('intent://'.length, recorded.indexOf('#Intent;'))}`);
+// A Profile default as the app serves it: the Profile's mode, and the Link with no Mode of its own (byMode.deeplink), whose
+// served `mode` is the effective one, inheriting it.
+const withDefault = (mode: string) => (json: ProfileJson) => {
+  json.profile.mode = mode;
+  linkIn(json, byMode.deeplink.id).mode = mode;
+};
+// Deeplink on tap as the Profile's default Mode.
+const deeplinkDefault = withDefault('deeplink');
 // Deeplink at open as the Profile's default Mode: pops out on open, once per tab.
-const deeplinkAtOpen = (json: ProfileJson) => { json.profile.mode = 'deeplink_open'; };
+const deeplinkAtOpen = withDefault('deeplink_open');
 // This tab has popped out on open before: the page's once-per-tab guard for the Profile (app/public/script.js, popOutOnLoad)
 // is already set.
 const alreadyPoppedOut = (page: Page) => page.addInitScript((key) => sessionStorage.setItem(key, '1'), `popOut:/${username}`);
@@ -141,7 +154,9 @@ async function openProfile(page: Page, path = `/${username}`) {
 }
 const card = (page: Page, link: Link) => page.locator('.link-card', { hasText: link.title });
 
-const directDefault = (json: ProfileJson) => { json.profile.mode = 'direct'; };
+const directDefault = withDefault('direct');
+// The default under which byMode[mode] travels by `mode`: Deeplink for the Link that inherits it, Direct for the others.
+const defaultFor = (mode: Mode) => (mode === 'deeplink' ? deeplinkDefault : directDefault);
 
 // From /{username}/{code} with a Direct default, a tap on the Link (the Escape Link unless given); the escape target as the spec spells it.
 async function tapEscapeFromCode(page: Page, link: Link = byMode.escape_ig, edit: (json: ProfileJson) => void = directDefault) {
@@ -160,7 +175,7 @@ test.describe('System Browser (desktop Chrome)', () => {
   test('the Deeplink Link makes a Reveal request even though it carries a url, then lands on the answer', async ({ page }) => {
     const deeplink = byMode.deeplink;
     // The url is set apart from the Destination, so landing on Reveal's answer proves the url was not followed.
-    await serveVariant(page, (json) => { linkIn(json, deeplink.id).url = 'https://example.net/not-the-destination'; });
+    await serveVariant(page, (json) => { deeplinkDefault(json); linkIn(json, deeplink.id).url = 'https://example.net/not-the-destination'; });
     const reveals = watchReveals(page);
     await openProfile(page);
 
@@ -221,7 +236,7 @@ test.describe('System Browser (desktop Chrome)', () => {
 
   for (const mode of ALL_MODES) {
     test(`a Profile default of ${mode} shows no Escape Overlay`, async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = mode; });
+      await serveVariant(page, (json) => { withDefault(mode)(json); });
       await openProfile(page);
       await expect(page.locator('#igOverlay')).toBeHidden();
     });
@@ -229,7 +244,7 @@ test.describe('System Browser (desktop Chrome)', () => {
 
   test('a Link with its mode removed follows a deeplink default and reveals', async ({ page }) => {
     const link = byMode.direct;
-    await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; delete linkIn(json, link.id).mode; });
+    await serveVariant(page, (json) => { withDefault('deeplink')(json); delete linkIn(json, link.id).mode; });
     const reveals = watchReveals(page);
     await openProfile(page);
     const reveal = nextReveal(page);
@@ -240,7 +255,7 @@ test.describe('System Browser (desktop Chrome)', () => {
 
   test('a Link with an unrecognised mode follows a deeplink default and reveals', async ({ page }) => {
     const link = byMode.direct;
-    await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; linkIn(json, link.id).mode = 'sideways'; });
+    await serveVariant(page, (json) => { withDefault('deeplink')(json); linkIn(json, link.id).mode = 'sideways'; });
     const reveals = watchReveals(page);
     await openProfile(page);
     const reveal = nextReveal(page);
@@ -401,7 +416,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
   test('a tap on the Deeplink Link pops out through x-safari- to its Link Shortcut in the tap\'s own task, with no Reveal before it and no Escape Overlay', async ({ page }) => {
     const link = byMode.deeplink;
-    await serveVariant(page, directDefault);
+    await serveVariant(page, deeplinkDefault);
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
@@ -418,7 +433,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
   test('a Deeplink tap whose pop-out does not take (the page still showing after the wait) reveals and lands on the answer in the app', async ({ page }) => {
     const link = byMode.deeplink;
-    await serveVariant(page, directDefault);
+    await serveVariant(page, deeplinkDefault);
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
@@ -441,7 +456,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
   ] as const) {
     test(`a Deeplink tap whose page ${left} before the wait is up (Safari took over) makes no Reveal`, async ({ page }) => {
       const link = byMode.deeplink;
-      await serveVariant(page, directDefault);
+      await serveVariant(page, deeplinkDefault);
       const navigations = await recordNavigations(page);
       const reveals = watchReveals(page);
       await openProfile(page);
@@ -478,7 +493,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
   for (const profileMode of ['escape_ig', 'sideways']) {
     test(`a default of ${profileMode}, on a Profile that holds the Direct and Deeplink Links, shows the Escape Overlay on open, with Close, and pops nothing out`, async ({ page }) => {
       const link = byMode.direct;
-      await serveVariant(page, (json) => { json.profile.mode = profileMode; });
+      await serveVariant(page, (json) => { withDefault(profileMode)(json); });
       const navigations = await recordNavigations(page);
       await openProfile(page);
       await expect(escapeOverlay(page)).toBeVisible();
@@ -496,7 +511,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
   test('every Link set to Escape Mode with an escape_ig default shows the Escape Overlay on open, with no Close', async ({ page }) => {
     await serveVariant(page, (json) => {
-      json.profile.mode = 'escape_ig';
+      withDefault('escape_ig')(json);
       json.links.forEach((l) => { l.mode = 'escape_ig'; });
     });
     await openProfile(page);
@@ -610,7 +625,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
   });
 
   test('after an earlier visit to /{username}/{code}, the overlay on open with an escape_ig default points the address and "Open in browser" at the code; Close puts /{username} back', async ({ page }) => {
-    await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+    await serveVariant(page, (json) => { withDefault('escape_ig')(json); });
     await openProfile(page, `/${username}/${TC}`);
     await openProfile(page, `/${username}`);
     const host = new URL(page.url()).host;
@@ -717,7 +732,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
   test('Deeplink default: a Link with its mode removed pops out to its Link Shortcut from the tap, with no Reveal before it', async ({ page }) => {
     const link = byMode.escape_ig;
-    await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; delete linkIn(json, link.id).mode; });
+    await serveVariant(page, (json) => { withDefault('deeplink')(json); delete linkIn(json, link.id).mode; });
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
@@ -730,7 +745,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
   test('a tap on a deeplink_script Link pops out through x-safari- set from script in the tap\'s own task, from a card that is no anchor', async ({ page }) => {
     const link = byMode.deeplink;
-    await serveVariant(page, (json) => { directDefault(json); linkIn(json, link.id).mode = 'deeplink_script'; });
+    await serveVariant(page, withDefault('deeplink_script'));
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
@@ -771,7 +786,7 @@ test.describe('In-App Browser (Android Instagram)', () => {
 
   test('a tap on the Deeplink Link fires v1\'s Chrome intent for its Link Shortcut in the tap\'s own task, with no Reveal before it', async ({ page }) => {
     const link = byMode.deeplink;
-    await serveVariant(page, directDefault);
+    await serveVariant(page, deeplinkDefault);
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
@@ -785,7 +800,7 @@ test.describe('In-App Browser (Android Instagram)', () => {
   });
 
   for (const [variant, edit] of [
-    ['set to deeplink', (json: ProfileJson) => { directDefault(json); linkIn(json, adult.id).mode = 'deeplink'; }],
+    ['inheriting a deeplink default', (json: ProfileJson) => { deeplinkDefault(json); linkIn(json, adult.id).mode = 'deeplink'; }],
     ['on a deeplink_open default', (json: ProfileJson) => { deeplinkAtOpen(json); delete linkIn(json, adult.id).mode; }],
   ] as const) {
     test(`the Adult Link ${variant} shows the Age Gate, then Continue (18+) fires v1's Chrome intent for its Link Shortcut in its own task, with no Reveal before it`, async ({ page }) => {
@@ -810,7 +825,7 @@ test.describe('In-App Browser (Android Instagram)', () => {
 
   test('a tap on a deeplink_script Link fires v1\'s Chrome intent set from script in the tap\'s own task, from a card that is no anchor', async ({ page }) => {
     const link = byMode.deeplink;
-    await serveVariant(page, (json) => { directDefault(json); linkIn(json, link.id).mode = 'deeplink_script'; });
+    await serveVariant(page, withDefault('deeplink_script'));
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
@@ -838,7 +853,7 @@ for (const [app, platform, userAgent, withTaps] of [
     test.use({ userAgent });
 
     test('Escape default: the Escape Overlay shows on open, and nothing pops out', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+      await serveVariant(page, (json) => { withDefault('escape_ig')(json); });
       const navigations = await recordNavigations(page);
       await openProfile(page, `/${username}/${TC}`);
       await expect(escapeOverlay(page)).toBeVisible();
@@ -869,7 +884,7 @@ for (const [app, platform, userAgent, withTaps] of [
     for (const mode of ['escape_ig', 'deeplink'] as const) {
       test(`?link={${mode} Link Id} reveals on open, then bounces straight to the Destination, as v1's \`?link=\` did`, async ({ page }) => {
         const link = byMode[mode];
-        await serveVariant(page, directDefault);
+        await serveVariant(page, defaultFor(mode));
         const navigations = await recordNavigations(page);
         const reveal = nextReveal(page);
         await openProfile(page, `/${username}/${TC}?link=${link.id}`);
@@ -879,7 +894,7 @@ for (const [app, platform, userAgent, withTaps] of [
 
       test(`?link={${mode} Link Id} bounces again on a second load in the same tab, as v1's \`?link=\` did`, async ({ page }) => {
         const link = byMode[mode];
-        await serveVariant(page, directDefault);
+        await serveVariant(page, defaultFor(mode));
         const navigations = await recordNavigations(page);
         const first = nextReveal(page);
         await openProfile(page, `/${username}?link=${link.id}`);
@@ -901,8 +916,8 @@ for (const [app, platform, userAgent, withTaps] of [
         expect(reveals).toHaveLength(0);
       });
 
-      test('Direct default: a tap on the Deeplink Link pops out to that Link from the tap itself, with no Reveal before it', async ({ page }) => {
-        const { navigations, reveals, target } = await tapEscapeFromCode(page, byMode.deeplink);
+      test('Deeplink default: a tap on the Deeplink Link pops out to that Link from the tap itself, with no Reveal before it', async ({ page }) => {
+        const { navigations, reveals, target } = await tapEscapeFromCode(page, byMode.deeplink, deeplinkDefault);
         const href = popTo(platform, target);
         await expect.poll(() => popOuts(navigations)).toEqual([href]);
         expect(navigations).toContainEqual({ url: href, inTapTask: true });
@@ -923,7 +938,7 @@ for (const [name, platform, userAgent] of [
     const context = await browser.newContext({ userAgent, baseURL: test.info().project.use.baseURL });
     const page = await context.newPage();
     await fenceNetwork(page);
-    const { navigations, reveals, target } = await tapEscapeFromCode(page, byMode.deeplink);
+    const { navigations, reveals, target } = await tapEscapeFromCode(page, byMode.deeplink, deeplinkDefault);
     const href = popTo(platform, target);
     await expect.poll(() => popOuts(navigations)).toEqual([href]);
     expect(navigations).toContainEqual({ url: href, inTapTask: true });
@@ -943,7 +958,7 @@ for (const [name, userAgent] of [
     const context = await browser.newContext({ userAgent, baseURL: test.info().project.use.baseURL });
     const page = await context.newPage();
     await fenceNetwork(page);
-    await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+    await serveVariant(page, (json) => { withDefault('escape_ig')(json); });
     const navigations = await recordNavigations(page);
     await openProfile(page);
     await expect(escapeOverlay(page)).toBeHidden();
@@ -967,7 +982,7 @@ for (const [browser, userAgent] of [
 
     for (const profileMode of ['escape_ig', 'deeplink', 'deeplink_open']) {
       test(`${profileMode} default: nothing pops out on open and no Escape Overlay shows`, async ({ page }) => {
-        await serveVariant(page, (json) => { json.profile.mode = profileMode; });
+        await serveVariant(page, (json) => { withDefault(profileMode)(json); });
         const navigations = await recordNavigations(page);
         await openProfile(page, `/${username}/${TC}`);
         await page.waitForLoadState('networkidle');
@@ -1000,7 +1015,7 @@ for (const [browser, userAgent] of [
     });
 
     test('deeplink default: no card and no Age Gate Continue is an anchor to Safari or Chrome', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; delete linkIn(json, adult.id).mode; });
+      await serveVariant(page, (json) => { withDefault('deeplink')(json); delete linkIn(json, adult.id).mode; });
       await openProfile(page, `/${username}/${TC}`);
       await card(page, adult).click();
       await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
@@ -1009,6 +1024,7 @@ for (const [browser, userAgent] of [
     });
 
     test('?link={Deeplink Link Id} reveals on load, then lands on the answer, with no pop-out to Safari or Chrome', async ({ page }) => {
+      await serveVariant(page, deeplinkDefault);
       const navigations = await recordNavigations(page);
       const reveals = watchReveals(page);
       const reveal = nextReveal(page);
@@ -1046,7 +1062,7 @@ for (const [platform, userAgent] of [
     test.use({ userAgent });
 
     test('Escape default: the Escape Overlay shows on open with nothing popped out, and "Open in browser" pops out to the Profile from the tap', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+      await serveVariant(page, (json) => { withDefault('escape_ig')(json); });
       const navigations = await recordNavigations(page);
       await openProfile(page, `/${username}/${TC}`);
       await expect(escapeOverlay(page)).toBeVisible();
@@ -1061,7 +1077,7 @@ for (const [platform, userAgent] of [
 
     test('Escape default: a tap on the Escape Link, once the overlay is closed, pops out to that Link', async ({ page }) => {
       const link = byMode.escape_ig;
-      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+      await serveVariant(page, (json) => { withDefault('escape_ig')(json); });
       const navigations = await recordNavigations(page);
       await openProfile(page, `/${username}/${TC}`);
       await closeButton(page).click();
@@ -1072,7 +1088,7 @@ for (const [platform, userAgent] of [
     });
 
     test('Deeplink on tap default: nothing pops out on open and no Escape Overlay shows', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; });
+      await serveVariant(page, (json) => { withDefault('deeplink')(json); });
       const navigations = await recordNavigations(page);
       await openProfile(page);
       await page.waitForLoadState('networkidle');
@@ -1125,7 +1141,7 @@ for (const [platform, userAgent] of [
       for (const mode of ['escape_ig', 'deeplink'] as const) {
         test(`${profileMode} default: ?link={${mode} Link Id} still reveals on load and bounces straight to the Destination, with no pop-out to the Profile`, async ({ page }) => {
           const link = byMode[mode];
-          await serveVariant(page, (json) => { json.profile.mode = profileMode; });
+          await serveVariant(page, (json) => { withDefault(profileMode)(json); });
           const navigations = await recordNavigations(page);
           const reveal = nextReveal(page);
           await openProfile(page, `/${username}/${TC}?link=${link.id}`);
@@ -1136,7 +1152,7 @@ for (const [platform, userAgent] of [
     }
 
     test('the Escape Overlay reads as v1\'s does in Instagram: the Instagram icon and "Instagram restricts some links"', async ({ page }) => {
-      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+      await serveVariant(page, (json) => { withDefault('escape_ig')(json); });
       await openProfile(page);
       await expect(escapeOverlay(page)).toBeVisible();
       await expect(escapeOverlay(page).getByText('Instagram restricts some links.', { exact: false })).toBeVisible();
@@ -1149,7 +1165,7 @@ test.describe('the Escape Overlay outside Instagram (TikTok, v2\'s extension)', 
   test.use({ userAgent: UA.tiktok });
 
   test('reads "This app restricts some links", with no Instagram icon', async ({ page }) => {
-    await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+    await serveVariant(page, (json) => { withDefault('escape_ig')(json); });
     await openProfile(page);
     await expect(escapeOverlay(page).getByText('This app restricts some links.', { exact: false })).toBeVisible();
     expect(await page.locator('#igIcon').evaluate((el) => (el as HTMLElement).style.display)).toBe('none');
@@ -1186,13 +1202,13 @@ for (const [platform, inAppUA, systemUA] of [
 
     test('(a) a Deeplink tap in the app pops out to its Link Shortcut, where the System Browser reveals and lands on the Destination', async ({ page, browser }) => {
       const link = byMode.deeplink;
-      await serveVariant(page, directDefault);
+      await serveVariant(page, deeplinkDefault);
       const navigations = await recordNavigations(page);
       await openProfile(page);
       await card(page, link).click();
       await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, `https://${new URL(page.url()).host}/${username}?link=${link.id}`)]);
 
-      const system = await systemBrowser(browser, directDefault);
+      const system = await systemBrowser(browser, deeplinkDefault);
       const systemNavigations = await recordNavigations(system);
       const reveal = nextReveal(system);
       await system.goto(onStack(page, poppedTo(popOuts(navigations)[0])));
@@ -1211,7 +1227,7 @@ for (const [platform, inAppUA, systemUA] of [
     for (const mode of ['escape_ig', 'deeplink'] as const) {
       test(`(b) ?link={${mode} Link Id} in the app reveals, then pops out to exactly the Destination, which the System Browser lands on`, async ({ page, browser }) => {
         const link = byMode[mode];
-        await serveVariant(page, directDefault);
+        await serveVariant(page, defaultFor(mode));
         const navigations = await recordNavigations(page);
         const reveal = nextReveal(page);
         await openProfile(page, `/${username}/${TC}?link=${link.id}`);
@@ -1219,7 +1235,7 @@ for (const [platform, inAppUA, systemUA] of [
         expect(destination).toBe(destinationOf(link)); // a non-Adult Link's Destination, untouched by the Tracking Code
         await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
 
-        const system = await systemBrowser(browser, directDefault);
+        const system = await systemBrowser(browser, defaultFor(mode));
         await system.goto(poppedTo(popOuts(navigations)[0]));
         await expect(system).toHaveURL(destination);
         await system.context().close();
@@ -1248,7 +1264,7 @@ for (const [platform, inAppUA, systemUA] of [
 
     test('(d) a Direct Link navigates plainly in the app, through /r to its Destination, with nothing popped out', async ({ page }) => {
       const link = byMode.direct;
-      await serveVariant(page, (json) => { json.profile.mode = 'escape_ig'; });
+      await serveVariant(page, (json) => { withDefault('escape_ig')(json); });
       const navigations = await recordNavigations(page);
       await openProfile(page);
       await closeButton(page).click();

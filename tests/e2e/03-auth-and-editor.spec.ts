@@ -504,7 +504,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     expect(served.links.map((l) => [l.title, l.mode])).toEqual([['Default card', 'direct'], ['Escape card', 'escape_ig']]);
   });
 
-  test('the default Mode offers "Deeplink on tap" and "Deeplink at open", a Link\'s Mode only "Deeplink on tap"; saved, deeplink_open is served and pops an Instagram Visitor out on open', async ({ page, browser, request, baseURL }) => {
+  test('the default Mode offers "Deeplink on tap" and "Deeplink at open", a Link\'s Mode neither; saved, deeplink_open is served and pops an Instagram Visitor out on open', async ({ page, browser, request, baseURL }) => {
     test.setTimeout(120_000);
     const origin = new URL(baseURL!).origin;
     const { creator, token, linkIds } = await verifiedCreator(request, [['Default card', ''], ['Own card', 'direct']]);
@@ -546,14 +546,11 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     await expect(page.getByLabel('Default Mode')).toHaveValue('deeplink_open');
     await page.getByRole('button', { name: 'Add link' }).click();
     await expect(page.getByLabel('Mode').locator('option'))
-      .toHaveText(['Profile default (currently Deeplink at open)', 'Direct', 'Escape', 'Deeplink on tap', 'Deeplink on tap (x-safari script)']);
+      .toHaveText(['Profile default (currently Deeplink at open)', 'Direct', 'Escape']);
     expect(await popsOnOpen()).toEqual([`x-safari-https://${new URL(origin).host}/${creator.username}`]);
 
-    // Deeplink on tap (x-safari script), the test variant kept to compare the two pop-outs on a phone, is a Link Mode too:
-    // stored, served as it is, with no url.
-    expect((await as.patch(`links/records/${linkIds[1]}`, { mode: 'deeplink_script' })).ok()).toBe(true);
-    const scripted = await servedProfile(request, creator.username);
-    expect(scripted.links.map((l) => [l.mode, l.url])).toEqual([['deeplink_open', ''], ['deeplink_script', '']]);
+    // Every Deeplink Mode is a Profile default only (ADR 0003, amended 2026-10-06): a Link refuses each.
+    for (const linkMode of ['deeplink', 'deeplink_script']) refused(await as.patch(`links/records/${linkIds[1]}`, { mode: linkMode }));
   });
 });
 
@@ -790,7 +787,7 @@ test.describe('the Editor\'s Links', () => {
       await page.getByLabel('Destination').fill(typed.destination);
       await page.getByLabel('Icon').selectOption({ label: 'Twitch' });
       await page.getByLabel('18+ Age Gate').check();
-      await page.getByLabel('Mode').selectOption({ label: 'Deeplink on tap' });
+      await page.getByLabel('Mode').selectOption({ label: 'Escape' });
       await openTracking(page);
       await page.getByLabel('OnlyFans tracking').check();
       await page.getByLabel('Default Tracking Code').fill(typed.code);
@@ -804,7 +801,7 @@ test.describe('the Editor\'s Links', () => {
       await expect(page.getByLabel('Destination')).toHaveValue(typed.destination);
       await expect(page.getByLabel('Icon').locator('option:checked')).toHaveText('Twitch');
       await expect(page.getByLabel('18+ Age Gate')).toBeChecked();
-      await expect(page.getByLabel('Mode').locator('option:checked')).toHaveText('Deeplink on tap');
+      await expect(page.getByLabel('Mode').locator('option:checked')).toHaveText('Escape');
       await expect(page.getByLabel('OnlyFans tracking')).toBeChecked();
       await expect(page.getByLabel('Default Tracking Code')).toHaveValue(typed.code);
       await expect(page.getByLabel('Geo Rule')).toHaveValue(typed.geo);

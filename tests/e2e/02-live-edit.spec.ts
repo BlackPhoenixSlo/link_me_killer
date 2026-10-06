@@ -28,6 +28,8 @@ const ENV: Record<string, string> = Object.fromEntries(
 const PB = `http://127.0.0.1:${ENV.PB_PORT}`;
 const TEST_SECRETS: Record<string, string> = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'netlify', 'functions', 'secrets.json'), 'utf8'));
 const MODES = ['direct', 'escape_ig', 'deeplink'] as const;
+// A Link's own Modes: the Deeplink Modes are Profile defaults only (ADR 0003, amended 2026-10-06).
+const LINK_MODES = ['direct', 'escape_ig'] as const;
 
 const pb = (pathname: string, { token, ...init }: RequestInit & { token?: string } = {}) =>
   fetch(PB + pathname, { ...init, headers: { ...(init.headers as Record<string, string>), ...(token ? { Authorization: token } : {}) } });
@@ -130,7 +132,7 @@ test.describe('live edits through PocketBase\'s API', () => {
   test('the Profile\'s Mode and a Link\'s Mode show as the effective Mode; a Deeplink Link\'s url is empty', async ({ request, baseURL }) => {
     const origin = new URL(baseURL!).origin;
     for (const profileMode of ['', ...MODES]) {
-      for (const linkMode of ['', ...MODES]) {
+      for (const linkMode of ['', ...LINK_MODES]) {
         const at = `Profile Mode '${profileMode}', Link Mode '${linkMode}'`;
         await patch('profiles', profileId, { mode: profileMode });
         await patch('links', links.second.id, { mode: linkMode });

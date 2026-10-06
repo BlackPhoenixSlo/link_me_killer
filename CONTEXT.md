@@ -77,7 +77,7 @@ _Avoid_: IG overlay, Instagram overlay, menu instructions
 ASSUMPTION: coined name for v1's `igOverlay`; overturned by any name the Operator already uses for it.
 
 **Mode**:
-How a tap on a Link travels to its Destination: Direct Mode, Escape Mode or Deeplink on tap. Every Link has one; a Profile has a default Mode that its Links inherit, which may also be Deeplink at open.
+How a tap on a Link travels to its Destination: Direct Mode, Escape Mode or Deeplink on tap. Every Link has one: its own Direct or Escape Mode, or the default Mode of its Profile, which is the only place a Deeplink Mode is set (ADR 0003).
 _Avoid_: site option, link option, deeplink checkbox, escape checkbox
 ASSUMPTION: the Profile's default Mode also decides whether the Escape Overlay shows when the page opens, since that happens before any Link is tapped; overturned if the on-load overlay should instead follow whether any Link on the Profile is in Escape Mode.
 
@@ -191,5 +191,5 @@ Pointing ofl.ink's DNS from v1 to v2, done only once v2 shows every v1 Profile i
 _Avoid_: go-live, switchover, launch
 
 **Fixture Profile**:
-The seeded test Profile, Username `fixture`, shaped like `juliafilippo_` but holding none of its data: one Direct Mode Link, one Escape Mode Link, one Deeplink on tap Link and one Adult Link, so that every Mode and behaviour is testable.
+The seeded test Profile, Username `fixture`, shaped like `juliafilippo_` but holding none of its data: one Direct Mode Link, one Escape Mode Link, one Link on the Profile default (the "Deeplink Link", Deeplink on tap under a Deeplink default) and one Adult Link, so that every Mode and behaviour is testable.
 _Avoid_: seed profile, test profile, demo profile

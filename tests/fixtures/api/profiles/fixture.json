@@ -52,7 +52,6 @@
       "tracking": false,
       "title": "Deeplink Link",
       "isAdult": false,
-      "mode": "deeplink",
       "icon": "/images/twitchicon.webp",
       "geo": null
     }
