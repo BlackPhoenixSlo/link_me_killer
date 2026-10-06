@@ -1,0 +1,9 @@
+{
+  "profile": {
+    "username": "importcheck_nolinks",
+    "displayName": "No Links array",
+    "avatarUrl": "",
+    "verified": false,
+    "bio": "This file has a profile object but no links array"
+  }
+}

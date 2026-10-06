@@ -1,0 +1,36 @@
+# The local mail catcher (docs/spec/phase-03-auth-and-editor.md, Mail): Mailpit, in the test stack only. tests/e2e.env names
+# this file beside compose.yaml (COMPOSE_FILE), and its `mail` profile keeps it out of every resolution that does not ask for
+# it, so Phase 2's Compose contract checks still see caddy, app and pocketbase alone. tests/stack.sh starts it with
+# `--profile mail` and sets it as PocketBase's SMTP. The VPS's .env never names this file.
+# ASSUMPTION: a profile-gated service in an extra Compose file under tests/ rather than in compose.yaml (rung 2: the VPS compose
+# gains no mail catcher; rung 4: one file and one profile, both read by the test harness alone). The profile, not a second
+# Compose project, because a stopped profile's container is no orphan, so `docker compose run` in the 02 specs prints no orphan
+# warning (rung 1: observed on Compose 5.1.1). Overturned if the Operator wants Mailpit on the VPS too.
+services:
+  mailpit:
+    image: axllent/mailpit
+    pull_policy: never # the image is local (ticket 24); a run never pulls it
+    profiles: [mail]
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:?set MAILPIT_PORT (see tests/e2e.env)}:8025" # its HTTP API, read by the spec on loopback
+  # Phase 6's fake DNS (tests/fake-dns.mjs, ticket 5): the only DNS server the app's Custom Domain check asks in the test stack
+  # (DNS_SERVERS in tests/e2e.env). On the app's own base image, so nothing is pulled; its control API is on loopback for the
+  # specs. Same `mail` profile, so only tests/stack.sh's resolution sees it.
+  fakedns:
+    image: node:22-alpine
+    pull_policy: never # the app's base image (app/Dockerfile), already local
+    profiles: [mail]
+    command: ["node", "/fake-dns.mjs"]
+    volumes:
+      - ./tests/fake-dns.mjs:/fake-dns.mjs:ro # relative to compose.yaml, the first file in COMPOSE_FILE
+    ports:
+      - "127.0.0.1:${FAKE_DNS_PORT:?set FAKE_DNS_PORT (see tests/e2e.env)}:18053"
+  # tests/stack.sh names the services it starts; the app's dependency starts the fake DNS with them. Not required, so a
+  # resolution without the `mail` profile (the specs' own `docker compose run`) still runs the app without it.
+  # ASSUMPTION: a non-required dependency here rather than a new name on tests/stack.sh's `up` line (rung 4: one file, the
+  # one this ticket owns). Overturned if Compose starts the app without it; the `up` line then names fakedns.
+  app:
+    depends_on:
+      fakedns:
+        condition: service_started
+        required: false

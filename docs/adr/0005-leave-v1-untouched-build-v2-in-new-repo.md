@@ -1,0 +1,8 @@
+# v1 is left untouched; v2 is built only in this repo
+
+Run 1 planned to fix v1 first: close the secrets.json leak and add Mode to v1's own page. Section 8 of the plan ("we will make a totally new repo; all old stays as is") replaces that: the old GitHub repo, the Netlify site and the live n8n workflow are not touched by any Phase, everything new is built in this repo, and `linkme_clone3/` here is the v1 Snapshot, read but never edited. This knowingly leaves v1's Destinations exposed. Netlify keeps serving secrets.json and the public repo keeps it in its history indefinitely; v1 stays live on its netlify.app address (plan section 10). In exchange, a working system is never changed, and the fix moves to v2: it never publishes a Destination (ADR 0004) and it mints a fresh Link Id for every Link, so leaked v1 ids stop revealing on ofl.ink once it points at v2; they still reveal v1 Destinations through v1's own Reveal function on the netlify.app host.
+ASSUMPTION: the motive ("do not change a working system") is inferred; section 8 states the decision and accepts its consequence but gives no reason. Overturned if the plan author had another reason (the decision itself would still stand).
+
+## Considered Options
+
+- **Run 1's Phase 0 and Phase 1 on the old side.** Serve only `public/` so secrets.json is no longer reachable, make the repo private, purge secrets.json from its history, regenerate v1's Link Ids, and repair the broken Profiles and the n8n prefix bug in place. Then build Mode and the Escape fixes into v1's script.js, with a three-way Mode radio in the n8n Form. The plan put this fix at under a day, so the leak could have been closed almost at once; giving that up is the cost of this decision. Rejected by section 8 because it edits the live v1.

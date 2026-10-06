@@ -1,0 +1,253 @@
+/* The Stats page (/edit/stats), after docs/spec/editor-redesign.md 4.15 and ruling 8. Loaded after editor.css, which styles the
+   shared components this page also uses (e-card, e-field, e-select, e-empty, e-page__title, e-page__lead) and owns the vertical
+   spacing between the page's blocks (`.e-page > * + *`). Tokens only, from tokens.css. Phone first; then 768px (bigger cards
+   and bars) and 1024px (Links and Countries side by side). */
+
+/* ---- Range: the segmented Today / 7D / 30D group and the UTC date span ------------------------------------------------ */
+
+.e-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-space-2) var(--e-space-4);
+}
+
+.e-segmented {
+  display: flex;
+  flex: 1 1 100%;
+  gap: var(--e-space-1);
+  padding: var(--e-space-1);
+  border-radius: var(--e-radius-md);
+  background: var(--e-color-segmented-track);
+}
+
+.e-segmented__btn {
+  flex: 1 1 0;
+  min-width: var(--e-tap);
+  height: var(--e-tap);
+  margin: 0;
+  padding: 0 var(--e-space-2); /* the three share the row on a phone; 16px from 768px, where each is as wide as its name */
+  border: 0;
+  border-radius: var(--e-radius-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--e-color-text-muted);
+  font-family: var(--e-font-sans);
+  font-size: var(--e-text-sm);
+  line-height: var(--e-leading-sm);
+  font-weight: var(--e-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color var(--e-dur-fast) var(--e-ease), color var(--e-dur-fast) var(--e-ease);
+}
+
+.e-segmented__btn:hover { color: var(--e-color-text); }
+
+.e-segmented__btn[aria-pressed="true"] {
+  background: var(--e-color-segmented-pressed);
+  box-shadow: var(--e-shadow-sm);
+  color: var(--e-color-text);
+}
+
+.e-segmented__btn:focus-visible {
+  outline: var(--e-focus-width) solid var(--e-color-focus);
+  outline-offset: var(--e-focus-offset);
+}
+
+/* A tab whose rows are on their way: a small ring after its name. */
+.e-segmented__btn[aria-busy="true"]::after {
+  content: "";
+  display: inline-block;
+  width: var(--e-space-3);
+  height: var(--e-space-3);
+  margin-left: var(--e-space-2);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--e-radius-pill);
+  vertical-align: -1px;
+  animation: e-segmented-spin 800ms linear infinite;
+}
+
+@keyframes e-segmented-spin { to { transform: rotate(1turn); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .e-segmented__btn[aria-busy="true"]::after { animation: none; }
+}
+
+.e-range__span {
+  color: var(--e-color-text-muted);
+  font-size: var(--e-text-sm);
+  line-height: var(--e-leading-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Filters: Link and Country, side by side down to 320px, stacked below (a 200% zoom on a phone) -------------------- */
+
+.e-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  gap: var(--e-space-3);
+}
+
+.e-filters .e-field { min-width: 0; }
+.e-filters .e-select { width: 100%; min-width: 0; }
+
+/* ---- Cards: Page Views, Clicks, CTR, three across (1 + 2 below 360px) -------------------------------------------------- */
+
+.e-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--e-space-2);
+}
+
+.e-stat {
+  min-width: 0;
+  margin: 0;
+  padding: var(--e-space-3);
+  border: 1px solid var(--e-color-border);
+  border-radius: var(--e-radius-md);
+  background: var(--e-color-surface);
+  box-shadow: var(--e-shadow-sm);
+}
+
+.e-stat__label {
+  margin: 0 0 var(--e-space-1);
+  color: var(--e-color-text-muted);
+  font-size: var(--e-text-xs);
+  line-height: var(--e-leading-xs);
+  font-weight: var(--e-weight-medium);
+}
+
+.e-stat__value {
+  margin: 0;
+  color: var(--e-color-text);
+  font-size: var(--e-text-xl);
+  line-height: var(--e-leading-xl);
+  font-weight: var(--e-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 359px) {
+  .e-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .e-stat:first-child { grid-column: 1 / -1; }
+}
+
+/* ---- Tables: each in a card, its wrapper scrolling sideways so the page never does ------------------------------------- */
+
+.e-table-card { padding: 0; }
+
+.e-table-card__title {
+  margin: 0;
+  padding: var(--e-space-4) var(--e-space-4) var(--e-space-2);
+  color: var(--e-color-text);
+  font-size: var(--e-text-lg);
+  line-height: var(--e-leading-lg);
+  font-weight: var(--e-weight-semibold);
+}
+
+.e-table-card > .e-table-wrap { margin-top: 0; } /* editor.css spaces a card's children; here the title's padding does */
+
+.e-table-wrap {
+  overflow-x: auto;
+  border-radius: 0 0 var(--e-radius-lg) var(--e-radius-lg);
+}
+
+.e-table-wrap:focus-visible {
+  outline: var(--e-focus-width) solid var(--e-color-focus);
+  outline-offset: calc(-1 * var(--e-focus-width));
+}
+
+.e-tables {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--e-space-4);
+}
+
+.e-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--e-color-text);
+  font-size: var(--e-text-sm);
+  line-height: var(--e-leading-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.e-table th,
+.e-table td {
+  padding: var(--e-space-2);
+  text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.e-table th:first-child { padding-left: var(--e-space-4); text-align: left; }
+.e-table th:last-child,
+.e-table td:last-child { padding-right: var(--e-space-4); }
+
+.e-table thead th {
+  border-bottom: 1px solid var(--e-color-border);
+  color: var(--e-color-text-muted);
+  font-size: var(--e-text-xs);
+  line-height: var(--e-leading-xs);
+  font-weight: var(--e-weight-medium);
+  white-space: normal;
+  vertical-align: bottom;
+}
+
+/* Row names: a day, a country or "Deleted link" on one line; a Link title wraps rather than widen the table. */
+.e-table tbody th { font-weight: var(--e-weight-regular); }
+.e-table--wrap tbody th { white-space: normal; overflow-wrap: anywhere; }
+
+.e-table tbody tr:nth-child(even) { background: var(--e-color-surface-muted); }
+
+/* A Daily bar: decoration only (aria-hidden), its length the share --w (0–1, set by stats.js) of --e-bar-max, which is shorter
+   on phones so the Daily table fits a 320px screen. */
+@media (max-width: 767px) {
+  .e-table { --e-bar-max: 40px; }
+}
+
+.e-bar {
+  display: inline-block;
+  width: calc(var(--e-bar-max) * var(--w, 0));
+  height: var(--e-space-2);
+  margin-right: var(--e-space-2);
+  border-radius: var(--e-radius-pill);
+  vertical-align: middle;
+}
+
+.e-bar--views { background: var(--e-color-views); }
+.e-bar--clicks { background: var(--e-color-clicks); }
+
+/* ---- From 768px: the range on one line, bigger cards ------------------------------------------------------------------ */
+
+@media (min-width: 768px) {
+  .e-segmented { flex: 0 0 auto; }
+  .e-segmented__btn { flex: 0 0 auto; padding-inline: var(--e-space-4); }
+
+  .e-filters { gap: var(--e-space-4); }
+
+  .e-stats { gap: var(--e-space-4); }
+  .e-stat { padding: var(--e-space-4) var(--e-space-5); }
+  .e-stat__label { font-size: var(--e-text-sm); line-height: var(--e-leading-sm); }
+  .e-stat__value { font-size: var(--e-text-3xl); line-height: var(--e-leading-3xl); font-weight: var(--e-weight-bold); }
+
+  .e-table-card__title { padding: var(--e-space-5) var(--e-space-6) var(--e-space-3); }
+  .e-table th,
+  .e-table td { padding-inline: var(--e-space-3); }
+  .e-table th:first-child { padding-left: var(--e-space-6); }
+  .e-table th:last-child,
+  .e-table td:last-child { padding-right: var(--e-space-6); }
+}
+
+/* ---- From 1024px: Links and Countries side by side, with the phone's tighter cells so four columns fit half the column - */
+
+@media (min-width: 1024px) {
+  .e-tables { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .e-tables .e-table-card__title { padding-inline: var(--e-space-4); }
+  .e-tables .e-table th,
+  .e-tables .e-table td { padding-inline: var(--e-space-2); }
+  .e-tables .e-table th:first-child { padding-left: var(--e-space-4); }
+  .e-tables .e-table th:last-child,
+  .e-tables .e-table td:last-child { padding-right: var(--e-space-4); }
+}

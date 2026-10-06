@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!-- The browser's bar matches the top bar: --e-color-topbar in /edit/tokens.css (a meta tag cannot read a custom property). -->
+    <meta name="theme-color" content="#ffffff">
+    <title>ofl.ink Editor</title>
+    <link rel="stylesheet" href="/edit/tokens.css">
+    <link rel="stylesheet" href="/edit/editor.css">
+    <link rel="stylesheet" href="/edit/stats.css">
+</head>
+
+<body class="e-body">
+    <header class="e-topbar">
+        <span class="e-topbar__brand">ofl.ink</span>
+        <div id="title"></div>
+    </header>
+    <main class="e-main" id="screen" aria-busy="true">
+        <section class="e-page">
+            <p class="e-visually-hidden">Loading…</p>
+            <div class="e-skeleton" aria-hidden="true">
+                <div class="e-skeleton__line"></div>
+                <div class="e-skeleton__line"></div>
+                <div class="e-skeleton__row"></div>
+                <div class="e-skeleton__row"></div>
+                <div class="e-skeleton__row"></div>
+            </div>
+        </section>
+    </main>
+    <script type="module" src="/edit/app.js"></script>
+</body>
+
+</html>

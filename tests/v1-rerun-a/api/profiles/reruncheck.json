@@ -1,0 +1,56 @@
+{
+  "profile": {
+    "username": "reruncheck",
+    "displayName": "Rerun Check A",
+    "avatarUrl": "",
+    "verified": false,
+    "bio": "Tree A of the import's re-run check"
+  },
+  "links": [
+    {
+      "url": "",
+      "id": "reruncheck_1",
+      "tracking": false,
+      "title": "Adult Link",
+      "isAdult": true,
+      "icon": null,
+      "geo": null
+    },
+    {
+      "url": "https://example.com/rerun-retitled",
+      "id": "reruncheck_2",
+      "tracking": false,
+      "title": "Old Title",
+      "isAdult": false,
+      "icon": null,
+      "geo": null
+    },
+    {
+      "url": "https://example.com/rerun-dropped",
+      "id": "reruncheck_3",
+      "tracking": false,
+      "title": "Dropped Link",
+      "isAdult": false,
+      "icon": null,
+      "geo": null
+    },
+    {
+      "url": "https://example.com/rerun-twin",
+      "id": "reruncheck_5",
+      "tracking": false,
+      "title": "Twin Link",
+      "isAdult": false,
+      "icon": null,
+      "geo": null
+    },
+    {
+      "url": "https://example.com/rerun-twin",
+      "id": "reruncheck_5",
+      "tracking": false,
+      "title": "Twin Link",
+      "isAdult": false,
+      "icon": null,
+      "geo": null
+    }
+  ]
+}

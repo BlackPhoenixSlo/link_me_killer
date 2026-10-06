@@ -1,0 +1,48 @@
+# VPS only (ticket 23). Traefik (n8n-traefik-1, v3.6, Docker provider only, exposedbydefault=false, network n8n_default
+# 172.18.0.0/16) holds ports 80 and 443 and fronts Caddy: a TCP router HostSNI(`*`) with TLS passthrough and the PROXY
+# protocol header to Caddy's container port 443. Specific HTTPS routers (n8n's Host rule) win over the HostSNI(`*`)
+# catch-all, so n8n is untouched. Port 80 needs no router: Traefik's web entrypoint already redirects every host to HTTPS.
+# Selected on the VPS by COMPOSE_FILE=compose.yaml:compose.vps.yaml in .env; tests never load it (no n8n_default there).
+# Observed 2026-10-05 on the VPS: no Traefik file provider exists, so the routers live here as labels, and Caddy joins
+# n8n_default so Traefik can dial it; PROXY_PROTOCOL_FROM=172.18.0.0/16 is then Traefik's own address range.
+# Certificates: observed 2026-10-05 that Traefik's own `tlschallenge` resolver answers every acme-tls/1 handshake itself
+# ("unrecognized name"), so TLS-ALPN-01 can never reach Caddy, and that its port-80 redirect sends HTTP-01 to HTTPS, where
+# Caddy has no certificate yet. So the ACME path on port 80 gets its own HTTP router to Caddy's port 80 at priority 2000.
+# Traefik v3 generates its redirect router at MaxInt64-1 and caps user routers 1000 below it (observed in its API), so
+# the Operator lowers the generated router with the static flag
+# --entrypoints.web.http.redirections.entryPoint.priority=1000 on n8n-traefik-1 (above n8n's own router at 34, so
+# nothing else changes; RUN.md Cutover Records, step 1). Until then every certificate request fails.
+# ASSUMPTION: Caddy's :80 listener accepts Traefik's plain connection without a PROXY header (rung 1 locally: the wrapper's
+# `allow` uses a header when present and tolerates its absence; tests/proxy-protocol.sh). Overturned if Caddy's log shows
+# the challenge request refused; the HTTP service then needs the header, which Traefik sends for TCP services only.
+# On n8n_default another project's container already answers to the name `app` (observed: fastt-app, alias app), so Caddy
+# reaches our app under the alias oflink-app on the stack's own network, through the Caddyfile's APP_UPSTREAM (default app:3000).
+services:
+  app:
+    networks:
+      default:
+        aliases: [oflink-app]
+  caddy:
+    environment:
+      APP_UPSTREAM: oflink-app:3000
+    networks:
+      default: {}
+      traefik: {}
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: n8n_default
+      traefik.tcp.routers.oflink.entrypoints: websecure
+      traefik.tcp.routers.oflink.rule: HostSNI(`*`)
+      traefik.tcp.routers.oflink.tls.passthrough: "true"
+      traefik.tcp.routers.oflink.service: oflink
+      traefik.tcp.services.oflink.loadbalancer.server.port: "443"
+      traefik.tcp.services.oflink.loadbalancer.proxyprotocol.version: "2"
+      traefik.http.routers.oflink-acme.entrypoints: web
+      traefik.http.routers.oflink-acme.rule: PathPrefix(`/.well-known/acme-challenge/`)
+      traefik.http.routers.oflink-acme.priority: "2000"
+      traefik.http.routers.oflink-acme.service: oflink-acme
+      traefik.http.services.oflink-acme.loadbalancer.server.port: "80"
+networks:
+  traefik:
+    external: true
+    name: n8n_default

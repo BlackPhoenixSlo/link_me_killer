@@ -1,0 +1,20 @@
+{
+  "profile": {
+    "username": "pngavatarcheck",
+    "displayName": "PNG Avatar Check",
+    "avatarUrl": "/images/avatar.png",
+    "verified": false,
+    "bio": "A v1-shaped tree whose avatar is a PNG"
+  },
+  "links": [
+    {
+      "url": "https://example.com/png-avatar-check",
+      "id": "pngavatarcheck_1",
+      "tracking": false,
+      "title": "Plain Link",
+      "isAdult": false,
+      "icon": null,
+      "geo": null
+    }
+  ]
+}

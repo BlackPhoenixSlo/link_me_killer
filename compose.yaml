@@ -1,0 +1,79 @@
+# v2 stack: Caddy, the app and PocketBase (docs/spec/phase-02-vps-foundation.md). n8n is not part of it.
+# Environment contract: .env.example (on the VPS: an untracked .env; in tests: tests/e2e.env).
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS (see .env.example)}
+      # The addresses Caddy accepts a PROXY protocol header from (see .env.example), handed to the Caddyfile as `off` when
+      # empty or `on <CIDRs>`, which selects its snippet: Caddy has no conditional of its own.
+      # ASSUMPTION: the one variable keeps the Operator's name and carries the selector word in the container (rung 2: the
+      # ticket asks for one variable in this service; rung 3: every variable here passes under its own name). Overturned if a
+      # second, derived variable reads better; it would be the selector alone.
+      PROXY_PROTOCOL_FROM: ${PROXY_PROTOCOL_FROM:+on }${PROXY_PROTOCOL_FROM:-off}
+      # Cloudflare's published ranges (see .env.example), shaped the same way: `off` when empty (tests), else `on <CIDRs>`,
+      # which selects the Caddyfile's Cloudflare lines.
+      # ASSUMPTION: shaped as PROXY_PROTOCOL_FROM above, under the spec's name (rung 3: ticket 45's pattern). Overturned with it.
+      CLOUDFLARE_RANGES: ${CLOUDFLARE_RANGES:+on }${CLOUDFLARE_RANGES:-off}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  app:
+    # Build context is app/ alone, so the v1 Snapshot can never be baked in. No ports: only Caddy reaches it.
+    # The v1 Import runs in this image as a one-off container, with its site mounted read-only for that run only:
+    #   VPS:  docker compose run --rm -v "$PWD/linkme_clone3:/v1:ro" app import-v1 --site /v1
+    #   Fixture site (test stack; tests/fixtures/ with the Page Copy's stock icons as its images/, mounted as three
+    #   read-only pieces so that no mountpoint is ever created inside tests/fixtures/):
+    #     docker compose --env-file tests/e2e.env run --rm \
+    #       -v "$PWD/tests/fixtures/api:/site/api:ro" -v "$PWD/tests/fixtures/netlify:/site/netlify:ro" \
+    #       -v "$PWD/app/public/images:/site/images:ro" app import-v1 --site /site
+    build:
+      context: ./app
+    restart: unless-stopped
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    environment:
+      PB_SUPERUSER_EMAIL: ${PB_SUPERUSER_EMAIL:?set PB_SUPERUSER_EMAIL (see .env.example)}
+      PB_SUPERUSER_PASSWORD: ${PB_SUPERUSER_PASSWORD:?set PB_SUPERUSER_PASSWORD (see .env.example)}
+      PB_URL: http://pocketbase:8090
+      REVEAL_LIMIT_PER_MINUTE: ${REVEAL_LIMIT_PER_MINUTE:-60}
+      # ofl.ink's own hosts for Host Resolution (Phase 5 spec, PRIMARY_HOSTS); no default, as the app refuses to start without one.
+      PRIMARY_HOSTS: ${PRIMARY_HOSTS:?set PRIMARY_HOSTS (see .env.example)}
+      # Self-service Custom Domains (Phase 6 spec, § 3): the VPS's addresses a Creator's A and AAAA records must name, and the
+      # DNS servers the check asks (the test stack's fake DNS only). Empty by default, so a VPS .env without them still starts;
+      # with no ORIGIN_IPV4 no Custom Domain can go live.
+      ORIGIN_IPV4: ${ORIGIN_IPV4:-}
+      ORIGIN_IPV6: ${ORIGIN_IPV6:-}
+      DNS_SERVERS: ${DNS_SERVERS:-}
+
+  pocketbase:
+    # Context is pocketbase/. The pinned PocketBase release is downloaded by its Dockerfile at build time.
+    build:
+      context: ./pocketbase
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PB_PORT:-8090}:8090"   # loopback only; admin UI through an SSH tunnel
+    environment:
+      PB_SUPERUSER_EMAIL: ${PB_SUPERUSER_EMAIL:?set PB_SUPERUSER_EMAIL (see .env.example)}
+      PB_SUPERUSER_PASSWORD: ${PB_SUPERUSER_PASSWORD:?set PB_SUPERUSER_PASSWORD (see .env.example)}
+    volumes:
+      - pb_data:/pb/pb_data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/api/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pb_data:
