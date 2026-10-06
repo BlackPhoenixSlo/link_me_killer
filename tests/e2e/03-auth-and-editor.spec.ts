@@ -479,7 +479,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     await expect(page.getByRole('heading', { name: 'Quick Settings' })).toBeVisible();
     const mode = page.getByLabel('Default Mode');
     await expect(mode).toHaveValue('escape_ig');
-    await expect(mode.locator('option')).toHaveText(['Direct', 'Escape', 'Deeplink on tap', 'Deeplink at open']);
+    await expect(mode.locator('option')).toHaveText(['Direct', 'Escape', 'Deeplink on tap', 'Deeplink on tap (x-safari script)', 'Deeplink at open']);
     await mode.selectOption({ label: 'Direct' });
     await page.getByRole('button', { name: 'Save default Mode' }).click();
     await expect(page.getByText('Default Mode saved.', { exact: true })).toBeVisible();
@@ -546,8 +546,14 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     await expect(page.getByLabel('Default Mode')).toHaveValue('deeplink_open');
     await page.getByRole('button', { name: 'Add link' }).click();
     await expect(page.getByLabel('Mode').locator('option'))
-      .toHaveText(['Profile default (currently Deeplink at open)', 'Direct', 'Escape', 'Deeplink on tap']);
+      .toHaveText(['Profile default (currently Deeplink at open)', 'Direct', 'Escape', 'Deeplink on tap', 'Deeplink on tap (x-safari script)']);
     expect(await popsOnOpen()).toEqual([`x-safari-https://${new URL(origin).host}/${creator.username}`]);
+
+    // Deeplink on tap (x-safari script), the test variant kept to compare the two pop-outs on a phone, is a Link Mode too:
+    // stored, served as it is, with no url.
+    expect((await as.patch(`links/records/${linkIds[1]}`, { mode: 'deeplink_script' })).ok()).toBe(true);
+    const scripted = await servedProfile(request, creator.username);
+    expect(scripted.links.map((l) => [l.mode, l.url])).toEqual([['deeplink_open', ''], ['deeplink_script', '']]);
   });
 });
 

@@ -488,9 +488,10 @@ test.describe('on the test stack', () => {
     expect(field(events, 'kind').maxSelect).toBe(1);
     expect(field(events, 'created').onCreate === true && field(events, 'created').onUpdate === false).toBe(true);
     for (const c of [profiles, links]) expect(field(c, 'mode').required).toBe(false);
-    // Deeplink at open (`deeplink_open`) is a Profile default only (1791140010_deeplink_open.js).
-    expect(field(profiles, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink', 'deeplink_open']);
-    expect(field(links, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink']);
+    // Deeplink at open (`deeplink_open`) is a Profile default only (1791140010_deeplink_open.js); the scripted Deeplink on tap
+    // test variant (`deeplink_script`) is both (1791140013_deeplink_script.js).
+    expect(field(profiles, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink', 'deeplink_open', 'deeplink_script']);
+    expect(field(links, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink', 'deeplink_script']);
     // Pop out timing is gone (1791140010_deeplink_open.js), its create rule clause with it.
     expect(profiles.createRule.includes('popOutTiming'), 'no Pop out timing clause in the claim rule').toBe(false);
     const files = [users, profiles, links].flatMap((c) => c.fields.filter((f: Field) => f.type === 'file'));

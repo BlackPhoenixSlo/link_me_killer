@@ -14,8 +14,9 @@ type ProfileJson = { profile: { username: string; displayName: string; mode?: st
 
 const PROFILE_JSON = '/api/profiles/fixture.json'; // where the stand-in serves the Fixture Profile
 const MODES: Mode[] = ['direct', 'escape_ig', 'deeplink'];
-// Every Mode a Profile or Link may hold: the Fixture's three, and Deeplink at open, which no Fixture Link holds.
-const ALL_MODES = [...MODES, 'deeplink_open'];
+// Every Mode a Profile or Link may hold: the Fixture's three, Deeplink at open, and the scripted Deeplink on tap test variant,
+// which no Fixture Link holds.
+const ALL_MODES = [...MODES, 'deeplink_open', 'deeplink_script'];
 const REVEAL_PATH = '/.netlify/functions/reveal';
 const FENCE_HEADER = 'x-network-fence';
 const TC = '4242'; // a numeric Tracking Code in the path
@@ -726,6 +727,22 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     expect(navigations).toContainEqual({ url: href, inTapTask: true });
     expect(reveals).toHaveLength(0);
   });
+
+  test('a tap on a deeplink_script Link pops out through x-safari- set from script in the tap\'s own task, from a card that is no anchor', async ({ page }) => {
+    const link = byMode.deeplink;
+    await serveVariant(page, (json) => { directDefault(json); linkIn(json, link.id).mode = 'deeplink_script'; });
+    const navigations = await recordNavigations(page);
+    const reveals = watchReveals(page);
+    await openProfile(page);
+    const href = `x-safari-https://${new URL(page.url()).host}/${username}?link=${link.id}`;
+
+    await expect(card(page, link)).not.toHaveAttribute('href');
+    await card(page, link).click();
+    await expect.poll(() => xSafari(navigations)).toEqual([href]);
+    expect(navigations).toContainEqual({ url: href, inTapTask: true });
+    expect(reveals).toHaveLength(0);
+    await expect(escapeOverlay(page)).toBeHidden();
+  });
 });
 
 test.describe('In-App Browser (Android Instagram)', () => {
@@ -790,6 +807,21 @@ test.describe('In-App Browser (Android Instagram)', () => {
       expect(reveals).toHaveLength(0);
     });
   }
+
+  test('a tap on a deeplink_script Link fires v1\'s Chrome intent set from script in the tap\'s own task, from a card that is no anchor', async ({ page }) => {
+    const link = byMode.deeplink;
+    await serveVariant(page, (json) => { directDefault(json); linkIn(json, link.id).mode = 'deeplink_script'; });
+    const navigations = await recordNavigations(page);
+    const reveals = watchReveals(page);
+    await openProfile(page);
+
+    const intent = deeplinkIntent(page, link);
+    await expect(card(page, link)).not.toHaveAttribute('href');
+    await card(page, link).click();
+    await expect.poll(() => intents(navigations)).toEqual([intent]);
+    expect(navigations).toContainEqual({ url: intent, inTapTask: true });
+    expect(reveals).toHaveLength(0);
+  });
 });
 
 // Pop-out to Safari/Chrome (real-device report, 2026-10-06): an In-App Browser drops a pop-out that follows a request, so

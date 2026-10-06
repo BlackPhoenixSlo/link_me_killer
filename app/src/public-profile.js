@@ -2,7 +2,9 @@
 // Public Profile: records to the Profile JSON (docs/spec/phase-02-vps-foundation.md, Contracts).
 // Never sent: destination, geo, owner, v1Key.
 // `deeplink_open` (Deeplink at open) is a Profile default only; on a Link it is normalised like an unknown Mode.
-const LINK_MODES = new Set(['direct', 'escape_ig', 'deeplink']);
+// `deeplink_script` is Deeplink on tap by a scripted pop-out, a test variant kept so a phone can compare the two.
+const LINK_MODES = new Set(['direct', 'escape_ig', 'deeplink', 'deeplink_script']);
+const DEEPLINK_MODES = new Set(['deeplink', 'deeplink_script', 'deeplink_open']);
 const PROFILE_MODES = new Set([...LINK_MODES, 'deeplink_open']);
 
 const fileUrl = (collection, record, field) => (record[field] ? `/api/files/${collection}/${record.id}/${record[field]}` : '');
@@ -31,7 +33,7 @@ function toPublicProfile(profile, links, origin) {
         mode,
         icon: fileUrl('links', link, 'icon'),
         backgroundImage: fileUrl('links', link, 'backgroundImage'),
-        url: !link.isAdult && mode !== 'deeplink' && mode !== 'deeplink_open' ? `${origin}/r/${link.linkId}` : '',
+        url: !link.isAdult && !DEEPLINK_MODES.has(mode) ? `${origin}/r/${link.linkId}` : '',
       };
     }),
   };

@@ -106,6 +106,7 @@ const MODE_HELP = {
   direct: 'Direct opens the Destination straight away.',
   escape_ig: 'Escape moves Visitors out of the Instagram or TikTok browser into Safari or Chrome. If the phone won\'t switch by itself, your page shows how.',
   deeplink: 'Deeplink on tap sends the Visitor to Safari or Chrome the moment they tap the Link, from Instagram, TikTok and other apps\' in-app browsers on iPhone and Android, with no how-to screen. Safari or Chrome then opens the Destination.',
+  deeplink_script: 'Deeplink on tap (x-safari script) is Deeplink on tap with the pop-out started from script instead of the tapped link itself, kept to compare the two on a phone.',
   deeplink_open: 'Deeplink at open sends the Visitor to Safari or Chrome as soon as your page opens in Instagram, TikTok and other apps\' in-app browsers on iPhone and Android, once per tab, with no how-to screen. Taps there behave like Deeplink on tap.',
 };
 
