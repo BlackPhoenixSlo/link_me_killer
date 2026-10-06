@@ -222,9 +222,16 @@ h1 {
     opacity: 0.9;
 }
 
-.continue-btn:disabled {
+.continue-btn[aria-disabled="true"] {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* The Age Gate's Continue is an anchor, so a Deeplink pop-out from it is a real anchor tap; it keeps the button's look */
+#overlay .continue-btn {
+    display: block;
+    box-sizing: border-box;
+    text-decoration: none;
 }
 
 /* Escape Overlay: its ways out stack as full-width buttons */

@@ -160,8 +160,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderLinks(links) {
         linksContainer.innerHTML = '';
         links.forEach(link => {
-            const card = document.createElement('div');
+            // A Deeplink card in an In-App Browser is an anchor to that Link's escape link, so the tap itself pops out, as the
+            // Escape Overlay's "Open in browser" does: a real phone (2026-10-06) dropped the same link set from script. The
+            // stored Tracking Code is already in place here (it is stored before the Links render)
+            const popOutHref = !link.isAdult && popsOutAsDeeplink(link) ? escapeLink(escapeTarget(link.id).url) : null;
+            const card = document.createElement(popOutHref ? 'a' : 'div');
             card.className = 'link-card';
+            if (popOutHref) card.href = popOutHref;
 
 
 
@@ -216,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     openOverlay(link.id);
                 } else if (isInAppBrowser && effectiveMode(link) === 'escape_ig') {
                     escapeOnTap(link);
-                } else if (isAnyInAppBrowser && canPopOut && isDeeplink(effectiveMode(link))) {
+                } else if (popOutHref) {
                     deeplinkOnTap(link);
                 } else {
                     goToDestination(link);
@@ -242,6 +247,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Deeplink on tap and Deeplink at open: a tap travels the same way under either
     function isDeeplink(mode) {
         return mode === 'deeplink' || mode === 'deeplink_open';
+    }
+
+    // A tap on this Link pops out as Deeplink on tap: a Deeplink Mode Link in any app's In-App Browser, on a platform with an
+    // escape link
+    function popsOutAsDeeplink(link) {
+        return isAnyInAppBrowser && canPopOut && isDeeplink(effectiveMode(link));
     }
 
     // Tracking Code key (Phase 4): one per Profile, by the record id the Profile JSON carries, so a code that arrived on one
@@ -354,16 +365,16 @@ document.addEventListener('DOMContentLoaded', () => {
         openEscapeOverlay(target, true);
     }
 
-    // A Deeplink tap in an In-App Browser: pops out to that Link's escape target from the tap itself, with no request before it
-    // (an In-App Browser drops a pop-out that waits on one) and no Escape Overlay; Safari or Chrome loads the Link Shortcut and
-    // Reveals there. A dead tap falls back to a Reveal and plain navigation in the app: the page neither blurred, hid nor
+    // A Deeplink tap in an In-App Browser: the tap is on an anchor whose href is that Link's escape link, so the anchor itself
+    // pops out to the escape target, with no request before it (an In-App Browser drops a pop-out that waits on one, and one
+    // set from script) and no Escape Overlay; Safari or Chrome loads the Link Shortcut and Reveals there. This only arms the
+    // fallback: a dead tap falls back to a Reveal and plain navigation in the app when the page neither blurred, hid nor
     // went away during the wait, and the wait was not stretched by the page being suspended
     const POP_OUT_WAIT_MS = 2500;
     let popOutFallback = null;
     let leftPage = false;
     function deeplinkOnTap(link) {
         leftPage = false;
-        popOut(escapeTarget(link.id).url);
         clearTimeout(popOutFallback);
         const start = Date.now();
         popOutFallback = setTimeout(() => {
@@ -436,6 +447,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Overlay Logic
     function openOverlay(linkId) {
         currentLinkId = linkId;
+        // An Adult Deeplink Link in an In-App Browser: Continue is an anchor to its escape link, so that tap pops out as a card's
+        // does. Otherwise Continue has no href and Reveals
+        const link = linksData.find(l => l.id === linkId);
+        if (link && popsOutAsDeeplink(link)) continueBtn.href = escapeLink(escapeTarget(link.id).url);
+        else continueBtn.removeAttribute('href');
         overlay.classList.remove('hidden');
         // Add active class for transition
         setTimeout(() => overlay.classList.add('active'), 10);
@@ -451,24 +467,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Deep Linking / Bounce Logic
     continueBtn.addEventListener('click', () => {
-        if (!currentLinkId) return;
+        if (!currentLinkId || continueBtn.getAttribute('aria-disabled') === 'true') return;
         // Found at click time, as v1 did: closing the Age Gate mid-Reveal still travels
         const link = linksData.find(l => l.id === currentLinkId);
 
         // An Adult Escape or Deeplink Mode Link in an In-App Browser: this tap is the pop-out, with no Reveal in the app first
+        // (for Deeplink, the anchor's own href, set by openOverlay)
         if (isInAppBrowser && effectiveMode(link) === 'escape_ig') {
             escapeOnTap(link);
             closeOverlay();
             return;
         }
-        if (isAnyInAppBrowser && canPopOut && isDeeplink(effectiveMode(link))) {
+        if (popsOutAsDeeplink(link)) {
             deeplinkOnTap(link);
             closeOverlay();
             return;
         }
 
         continueBtn.textContent = 'loading...';
-        continueBtn.disabled = true;
+        continueBtn.setAttribute('aria-disabled', 'true');
 
         fetch(revealUrl(currentLinkId))
             .then(res => {
@@ -481,13 +498,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 // Reset UI
                 continueBtn.textContent = 'Continue (18+)';
-                continueBtn.disabled = false;
+                continueBtn.removeAttribute('aria-disabled');
                 closeOverlay();
             })
             .catch(err => {
                 console.error('Error revealing link:', err);
                 continueBtn.textContent = 'Continue (18+)';
-                continueBtn.disabled = false;
+                continueBtn.removeAttribute('aria-disabled');
             });
     });
 

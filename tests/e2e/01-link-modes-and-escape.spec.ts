@@ -406,6 +406,8 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await openProfile(page);
     const href = `x-safari-https://${new URL(page.url()).host}/${username}?link=${link.id}`;
 
+    // The card is a real anchor to the escape link, as "Open in browser" is: the pop-out is the anchor tap itself
+    await expect(card(page, link)).toHaveAttribute('href', href);
     await card(page, link).click();
     await expect.poll(() => xSafari(navigations)).toEqual([href]);
     expect(reveals).toHaveLength(0); // before the fallback's wait is up
@@ -461,6 +463,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await card(page, adult).click();
     await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
     expect(reveals).toHaveLength(0);
+    await expect(page.locator('#continueBtn')).not.toHaveAttribute('href'); // no anchor tap: Continue Reveals
 
     const reveal = nextReveal(page);
     await page.getByRole('button', { name: 'Continue (18+)' }).click();
@@ -756,8 +759,9 @@ test.describe('In-App Browser (Android Instagram)', () => {
     const reveals = watchReveals(page);
     await openProfile(page);
 
-    await card(page, link).click();
     const intent = deeplinkIntent(page, link);
+    await expect(card(page, link)).toHaveAttribute('href', intent); // a real anchor tap, as "Open in browser" is
+    await card(page, link).click();
     await expect.poll(() => intents(navigations)).toEqual([intent]);
     expect(navigations).toContainEqual({ url: intent, inTapTask: true });
     expect(reveals).toHaveLength(0);
@@ -778,8 +782,9 @@ test.describe('In-App Browser (Android Instagram)', () => {
       await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
       expect(reveals).toHaveLength(0);
 
-      await page.getByRole('button', { name: 'Continue (18+)' }).click();
       const intent = deeplinkIntent(page, adult);
+      await expect(page.locator('#continueBtn')).toHaveAttribute('href', intent); // a real anchor tap, as "Open in browser" is
+      await page.getByRole('button', { name: 'Continue (18+)' }).click();
       await expect.poll(() => intents(navigations)).toEqual([intent]);
       expect(navigations).toContainEqual({ url: intent, inTapTask: true });
       expect(reveals).toHaveLength(0);
@@ -960,6 +965,15 @@ for (const [browser, userAgent] of [
       const reveal = nextReveal(page);
       await card(page, byMode.deeplink).click();
       await landsOn(page, navigations, await realUrlOf(await reveal));
+    });
+
+    test('deeplink default: no card and no Age Gate Continue is an anchor to Safari or Chrome', async ({ page }) => {
+      await serveVariant(page, (json) => { json.profile.mode = 'deeplink'; delete linkIn(json, adult.id).mode; });
+      await openProfile(page, `/${username}/${TC}`);
+      await card(page, adult).click();
+      await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
+      await expect(page.locator('#continueBtn')).not.toHaveAttribute('href');
+      await expect(page.locator('a[href^="x-safari-"], a[href^="intent:"]')).toHaveCount(0);
     });
 
     test('?link={Deeplink Link Id} reveals on load, then lands on the answer, with no pop-out to Safari or Chrome', async ({ page }) => {
