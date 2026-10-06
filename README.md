@@ -41,6 +41,27 @@ settings, is documented inline in [`.env.example`](.env.example).
 The PocketBase admin UI is published on `127.0.0.1:8090` only; reach it through an SSH tunnel
 in production.
 
+## Deploy on a VPS (Hostinger, one line)
+
+From a fresh VPS terminal (Hostinger Ubuntu/Debian, as root):
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/BlackPhoenixSlo/link_me_killer/main/deploy.sh)
+```
+
+That installs Docker if needed, clones this repo to `/opt/link_me_killer`, asks for your domain
+and a PocketBase admin login (generating a password if you leave it blank), and starts the stack.
+Re-run the same line any time to update to the latest commit and restart.
+
+To skip the prompts, pass the values as environment variables:
+
+```bash
+DOMAIN=links.example.com PB_SUPERUSER_EMAIL=you@example.com \
+  bash <(curl -fsSL https://raw.githubusercontent.com/BlackPhoenixSlo/link_me_killer/main/deploy.sh)
+```
+
+Point the domain's DNS `A` record at the VPS's public IP so Caddy can issue HTTPS.
+
 ## Production
 
 [`RUN.md`](RUN.md) is the full operator runbook: the real-device escape test matrix, the
