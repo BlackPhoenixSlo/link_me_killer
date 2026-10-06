@@ -488,9 +488,9 @@ test.describe('on the test stack', () => {
     expect(field(events, 'kind').maxSelect).toBe(1);
     expect(field(events, 'created').onCreate === true && field(events, 'created').onUpdate === false).toBe(true);
     for (const c of [profiles, links]) expect(field(c, 'mode').required).toBe(false);
-    // The Deeplink Modes are Profile defaults only (1791140010_deeplink_open.js, 1791140013_deeplink_script.js,
-    // 1791140014_link_modes_direct_escape.js).
-    expect(field(profiles, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink', 'deeplink_open', 'deeplink_script']);
+    // The Deeplink Modes are Profile defaults only (1791140010_deeplink_open.js, 1791140014_link_modes_direct_escape.js);
+    // the scripted test variant is gone (1791140015_drop_deeplink_script.js).
+    expect(field(profiles, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink', 'deeplink_open']);
     expect(field(links, 'mode').values).toEqual(['direct', 'escape_ig']);
     // Pop out timing is gone (1791140010_deeplink_open.js), its create rule clause with it.
     expect(profiles.createRule.includes('popOutTiming'), 'no Pop out timing clause in the claim rule').toBe(false);

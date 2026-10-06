@@ -479,7 +479,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     await expect(page.getByRole('heading', { name: 'Quick Settings' })).toBeVisible();
     const mode = page.getByLabel('Default Mode');
     await expect(mode).toHaveValue('escape_ig');
-    await expect(mode.locator('option')).toHaveText(['Direct', 'Escape', 'Deeplink on tap', 'Deeplink on tap (x-safari script)', 'Deeplink at open']);
+    await expect(mode.locator('option')).toHaveText(['Direct', 'Escape', 'Deeplink on tap', 'Deeplink at open']);
     await mode.selectOption({ label: 'Direct' });
     await page.getByRole('button', { name: 'Save default Mode' }).click();
     await expect(page.getByText('Default Mode saved.', { exact: true })).toBeVisible();
@@ -549,8 +549,8 @@ test.describe('the Editor\'s Profile and default Mode', () => {
       .toHaveText(['Profile default (currently Deeplink at open)', 'Direct', 'Escape']);
     expect(await popsOnOpen()).toEqual([igExt(`https://${new URL(origin).host}/${creator.username}`)]);
 
-    // Every Deeplink Mode is a Profile default only (ADR 0003, amended 2026-10-06): a Link refuses each.
-    for (const linkMode of ['deeplink', 'deeplink_script']) refused(await as.patch(`links/records/${linkIds[1]}`, { mode: linkMode }));
+    // Deeplink on tap is a Profile default only too (ADR 0003, amended 2026-10-06): a Link refuses it.
+    refused(await as.patch(`links/records/${linkIds[1]}`, { mode: 'deeplink' }));
   });
 });
 

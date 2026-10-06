@@ -90,19 +90,15 @@ Attempts an Escape on tap, with the Escape Overlay as the fallback. As a Profile
 _Avoid_: escape_ig (outside stored data), IG mode, bounce mode
 
 **Deeplink Mode**:
-Deeplink on tap or Deeplink at open: both pop the Visitor out of the In-App Browser into the System Browser with no Escape Overlay. A tap pops out from the tap itself, as a real anchor tap to the escape link, never after a Reveal, since In-App Browsers drop a pop-out that waits on one or is set from script. Outside an In-App Browser the Destination is revealed and opened, on Android by handing its https link to the app that owns it.
+Deeplink on tap or Deeplink at open: both pop the Visitor out of the In-App Browser into the System Browser with no Escape Overlay. A tap pops out from the tap itself, as a real anchor tap to the escape link, never after a Reveal (Instagram dropped an `x-safari-https://` pop-out that waited on one or was set from script). Outside an In-App Browser the Destination is revealed and opened, on Android by handing its https link to the app that owns it.
 _Avoid_: app-link mode, deep link (for anything else)
 
 **Deeplink on tap**:
 The Deeplink Mode `deeplink`: a tap on the Link in an In-App Browser pops out at once to that Link's Link Shortcut, which the System Browser then reveals; if the page is still showing a moment later, the tap reveals and goes to the Destination in the app instead.
 _Avoid_: deeplink (alone, once the two are told apart), bounce
 
-**Deeplink on tap (x-safari script)**:
-The Deeplink Mode `deeplink_script`, a test variant of Deeplink on tap kept so a phone can compare the two: the same, but the pop-out is set from script in the tap's click handler rather than being the tap on an anchor.
-_Avoid_: script mode
-
 **Deeplink at open**:
-The Deeplink Mode `deeplink_open`, a Profile's default only, never a Link's own (ADR 0003): the page pops out to itself as soon as its Profile has loaded in an In-App Browser, once per tab, best-effort (a real phone dropped it); taps there behave as Deeplink on tap.
+The Deeplink Mode `deeplink_open`, a Profile's default only, never a Link's own (ADR 0003): the page pops out to itself as soon as its Profile has loaded in an In-App Browser, once per tab (phone-verified on iPhone Instagram, 2026-10-06); taps there behave as Deeplink on tap.
 _Avoid_: Pop Out Timing, at start, auto-bounce
 
 ## Attribution and Stats

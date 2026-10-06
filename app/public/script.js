@@ -161,9 +161,9 @@ document.addEventListener('DOMContentLoaded', () => {
         linksContainer.innerHTML = '';
         links.forEach(link => {
             // A Deeplink card in an In-App Browser is an anchor to that Link's escape link, so the tap itself pops out, as the
-            // Escape Overlay's "Open in browser" does: a real phone (2026-10-06) dropped the same link set from script. The
+            // Escape Overlay's "Open in browser" does: a real phone (2026-10-06) dropped x-safari-https:// set from script. The
             // stored Tracking Code is already in place here (it is stored before the Links render)
-            const popOutHref = !link.isAdult && popsOutByAnchor(link) ? escapeLink(escapeTarget(link.id).url) : null;
+            const popOutHref = !link.isAdult && popsOutAsDeeplink(link) ? escapeLink(escapeTarget(link.id).url) : null;
             const card = document.createElement(popOutHref ? 'a' : 'div');
             card.className = 'link-card';
             if (popOutHref) card.href = popOutHref;
@@ -233,9 +233,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Mode: the Link's own if recognised, else the Profile's default if recognised, else Escape Mode. `deeplink_open` is a
-    // Profile default only; a Link inheriting it travels as Deeplink on tap. `deeplink_script` is Deeplink on tap by a scripted
-    // pop-out instead of an anchor tap, a test variant kept so a phone can compare the two
-    const MODES = ['direct', 'escape_ig', 'deeplink', 'deeplink_script', 'deeplink_open'];
+    // Profile default only; a Link inheriting it travels as Deeplink on tap
+    const MODES = ['direct', 'escape_ig', 'deeplink', 'deeplink_open'];
     function defaultMode() {
         if (currentProfile && MODES.includes(currentProfile.mode)) return currentProfile.mode;
         return 'escape_ig';
@@ -245,20 +244,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return MODES.includes(link.mode) ? link.mode : defaultMode();
     }
 
-    // Deeplink on tap (either variant) and Deeplink at open: a tap travels the same way under any
+    // Deeplink on tap and Deeplink at open: a tap travels the same way under either
     function isDeeplink(mode) {
-        return mode === 'deeplink' || mode === 'deeplink_script' || mode === 'deeplink_open';
+        return mode === 'deeplink' || mode === 'deeplink_open';
     }
 
     // A tap on this Link pops out as Deeplink on tap: a Deeplink Mode Link in any app's In-App Browser, on a platform with an
     // escape link
     function popsOutAsDeeplink(link) {
         return isAnyInAppBrowser && canPopOut && isDeeplink(effectiveMode(link));
-    }
-
-    // ...as a real anchor tap: every such Link but a `deeplink_script` one, which pops out from script
-    function popsOutByAnchor(link) {
-        return popsOutAsDeeplink(link) && effectiveMode(link) !== 'deeplink_script';
     }
 
     // Tracking Code key (Phase 4): one per Profile, by the record id the Profile JSON carries, so a code that arrived on one
@@ -375,16 +369,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // A Deeplink tap in an In-App Browser: the tap is on an anchor whose href is that Link's escape link, so the anchor itself
-    // pops out to the escape target, with no request before it (an In-App Browser drops a pop-out that waits on one, and one
-    // set from script) and no Escape Overlay; Safari or Chrome loads the Link Shortcut and Reveals there. A `deeplink_script`
-    // tap instead sets that escape link from script here. Then the fallback is armed: a dead tap falls back to a Reveal and plain navigation in the app when the page neither blurred, hid nor
+    // pops out to the escape target, with no request before it (Instagram dropped an x-safari- pop-out that waited on one,
+    // or was set from script) and no Escape Overlay; Safari or Chrome loads the Link Shortcut and Reveals there. This only arms the
+    // fallback: a dead tap falls back to a Reveal and plain navigation in the app when the page neither blurred, hid nor
     // went away during the wait, and the wait was not stretched by the page being suspended
     const POP_OUT_WAIT_MS = 2500;
     let popOutFallback = null;
     let leftPage = false;
     function deeplinkOnTap(link) {
         leftPage = false;
-        if (effectiveMode(link) === 'deeplink_script') popOut(escapeTarget(link.id).url);
         clearTimeout(popOutFallback);
         const start = Date.now();
         popOutFallback = setTimeout(() => {
@@ -461,7 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // An Adult Deeplink Link in an In-App Browser: Continue is an anchor to its escape link, so that tap pops out as a card's
         // does. Otherwise Continue has no href and Reveals
         const link = linksData.find(l => l.id === linkId);
-        if (link && popsOutByAnchor(link)) continueBtn.href = escapeLink(escapeTarget(link.id).url);
+        if (link && popsOutAsDeeplink(link)) continueBtn.href = escapeLink(escapeTarget(link.id).url);
         else continueBtn.removeAttribute('href');
         overlay.classList.remove('hidden');
         // Add active class for transition
@@ -483,7 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const link = linksData.find(l => l.id === currentLinkId);
 
         // An Adult Escape or Deeplink Mode Link in an In-App Browser: this tap is the pop-out, with no Reveal in the app first
-        // (for Deeplink, the anchor's own href, set by openOverlay; for `deeplink_script`, set from script by deeplinkOnTap)
+        // (for Deeplink, the anchor's own href, set by openOverlay)
         if (isInAppBrowser && effectiveMode(link) === 'escape_ig') {
             escapeOnTap(link);
             closeOverlay();

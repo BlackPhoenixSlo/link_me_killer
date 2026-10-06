@@ -3,9 +3,8 @@
 // Never sent: destination, geo, owner, v1Key.
 // The Deeplink Modes are Profile defaults only (ADR 0003, amended 2026-10-06): a Link's own Mode is honoured only if Direct
 // or Escape, and anything else on a Link (a Deeplink Mode included) is normalised like an unknown Mode, to the Profile default.
-// `deeplink_script` is Deeplink on tap by a scripted pop-out, a test variant kept so a phone can compare the two.
 const LINK_MODES = new Set(['direct', 'escape_ig']);
-const DEEPLINK_MODES = new Set(['deeplink', 'deeplink_script', 'deeplink_open']);
+const DEEPLINK_MODES = new Set(['deeplink', 'deeplink_open']);
 const PROFILE_MODES = new Set([...LINK_MODES, ...DEEPLINK_MODES]);
 
 const fileUrl = (collection, record, field) => (record[field] ? `/api/files/${collection}/${record.id}/${record[field]}` : '');
