@@ -22,8 +22,7 @@ Each Link has one Mode, and each Profile has a default Mode that its Links inher
 
 - **Direct Mode.** A tap goes to the Destination wherever the Visitor is, with no Escape and no overlay.
 - **Escape Mode.** Inside any In-App Browser the plan names, the tap itself fires an Escape. The Escape opens this same Profile in the System Browser, carrying the Tracking Code and a Link Shortcut, and the System Browser finishes the Click. The Escape Overlay then shows as the fallback, with these ways out:
-  - "Open in browser"
-  - on iOS Instagram, "Try another way" through Instagram's own open-in-browser link
+  - "Open in browser" (on iOS Instagram, Instagram's own open-in-browser link)
   - the app-menu instruction
   - the address itself, with "Copy link"
 
@@ -50,7 +49,7 @@ The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose d
 14. As a Visitor in any browser, I want a tap on a Direct Mode Link to open its Destination right where I am, so that Links which need no Escape just work.
 15. As a Visitor in an In-App Browser, I want a tap on an Escape Mode Link to fire the Escape from the tap itself, with no request before it, so that the app still treats the Escape as my own action.
 16. As a Visitor on iOS, I want that Escape to open this Profile in Safari through the `x-safari-https://` link v1 already uses, so that the method that works today keeps working (amended 2026-10-06: in Instagram, through `instagram://extbrowser/`, which a real iPhone showed works where `x-safari-` is dropped).
-17. As a Visitor in Instagram on iOS, I want a second "Try another way" link that uses `x-safari-https://` (`instagram://extbrowser/` before 2026-10-06) and fires from my tap, so that I have another route when the first one is blocked.
+17. (Removed 2026-10-06: "Try another way" is gone; on iOS Instagram "Open in browser" itself uses `instagram://extbrowser/`, and no `x-safari-` link is offered there.)
 18. As a Visitor on Android, I want the Escape to open this Profile in Chrome through v1's own intent string, so that the method that works today keeps working. (A phone without Chrome gets no automatic Escape; the Escape Overlay's menu instruction and "Copy link" are its way out.)
 19. As a Visitor whose Escape did not happen, I want the Escape Overlay to offer the app-menu instruction, an "Open in browser" link, the address and a "Copy link" button, so that I can always get out by hand.
 20. As a Visitor who opened the Escape Overlay by tapping a Link, I want to close it, so that I can still reach the Profile's other Links.
@@ -101,7 +100,6 @@ The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose d
   - **Escape Overlay controls.** All are reachable by role and name:
     - heading "Open in System Browser". The heading and the overlay's element id are kept, so the smoke spec's Instagram check still finds them.
     - link "Open in browser", whose `href` is the platform's escape link
-    - link "Try another way", on iOS Instagram only
     - the https escape target, shown as text
     - button "Copy link"
     - button "Close", on every Escape Overlay except the one shown on open on a Profile whose Links all escape
@@ -144,14 +142,11 @@ The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose d
     | Platform | Escape link |
     |---|---|
     | iOS Instagram (amended 2026-10-06) | `instagram://extbrowser/?url=` + encoded escape target |
-    | iOS Instagram, second option ("Try another way") | `x-safari-` + escape target |
-    | iOS, any other app | `x-safari-` + escape target |
+    | iOS, any other app (TikTok, Snapchat, a bare WKWebView) | `x-safari-` + escape target, the only one known there; unverified on a phone since 2026-10-06 |
     | Android | `intent://{host}/{path}[?query]#Intent;scheme=https;package=com.android.chrome;end`, v1's performBounce string exactly, on a tap and at load alike, for Escape and Deeplink Mode alike, with no `S.browser_fallback_url` |
     | anything else | none; "Open in browser" carries the escape target itself |
 
-    On 2026-10-06 a real iPhone showed Instagram drops `x-safari-https://` while `instagram://extbrowser/` goes through, so iOS Instagram's escape link (every Escape, Deeplink pop-out, "Open in browser" and `?link=` bounce) is extbrowser, and `x-safari-` is its "Try another way".
-
-    ASSUMPTION: "Try another way" is offered only in Instagram's In-App Browser on iOS, because an `instagram://` link would push Facebook, Threads or TikTok Visitors into the Instagram app (rung 5). Overturned if the real-device matrix shows it escaping correctly from the other apps.
+    On 2026-10-06 a real iPhone showed Instagram drops `x-safari-https://` while `instagram://extbrowser/` goes through, so iOS Instagram's escape link (every Escape, Deeplink pop-out, "Open in browser" and `?link=` bounce) is extbrowser, with no `x-safari-` link offered there ("Try another way" is removed). `instagram://` stays out of other apps, where it would push Visitors into the Instagram app.
 
     ASSUMPTION: in an In-App Browser on a platform that is neither iOS nor Android, an Escape Mode tap fires no link. It only shows the overlay, whose "Open in browser" is the plain escape target, since no escape link is known there (rung 5). Overturned if such a platform shows up in real traffic and needs its own link.
   - **Deeplink link** (amended 2026-10-06). In an In-App Browser on iOS or Android, a Deeplink tap, or "Continue (18+)" on an Adult Deeplink Link, fires the escape link above for that Link's escape target (`?link={Link Id}`) as a real anchor tap with the escape link as href, as the Escape Overlay's "Open in browser" is, with no Reveal before it: the card renders as an `<a>` with that href, and the Age Gate's Continue is an `<a>` that gets it when the Age Gate opens for such a Link (and no href otherwise). The click only arms the fallback. A 2.5 s timer then falls back to Reveal and a plain navigation in place, unless `blur`, `pagehide` or `visibilitychange` to hidden fired meanwhile, or the timer ran more than 0.5 s late (a suspended page).
@@ -232,15 +227,15 @@ Behaviours covered. `{p}` is the Fixture Profile's Username, and `TC` is a numer
   - `/{p}/TC?link={Adult Link Id}`, with tracking on, calls Reveal with that id and `TC` as the Tracking Code, then navigates to the answer.
   - `/{p}/TC?link={Escape Mode Link Id}` lands where a tap on that Link would.
   - `/{p}?link={an id not on the Profile}` loads the Profile, with no Reveal request and no navigation.
-- **iOS Instagram UA.** The Profile default is Direct (variant) unless a case says otherwise. (Amended 2026-10-06: under this UA each `x-safari-https://{t}` below is recorded as `instagram://extbrowser/?url=` + encoded `https://{t}`, and "Try another way" carries `x-safari-https://{t}`.)
+- **iOS Instagram UA.** The Profile default is Direct (variant) unless a case says otherwise. (Amended 2026-10-06: under this UA each `x-safari-https://{t}` below is recorded as `instagram://extbrowser/?url=` + encoded `https://{t}`, and the overlay has no "Try another way" and no `x-safari-` link.)
   - There is no overlay on open, and `/{p}/TC` keeps that address until a Link is tapped.
   - The Direct Link navigates plainly, and nothing `x-safari-` is recorded.
   - From `/{p}/TC`, a tap on the Escape Mode Link:
     - records `x-safari-https://{host}/{p}/TC?link={id}` in the tap's own task, and the address becomes `/{p}/TC?link={id}`
-    - shows the overlay with "Open in browser" carrying that `href`, "Try another way" carrying `instagram://extbrowser/?url=` plus the encoded target, and the target as text
+    - shows the overlay with "Open in browser" carrying that `href` and the target as text
     - makes no Reveal request
     - "Copy link" puts `https://{host}/{p}/TC?link={id}` on the clipboard.
-    - tapping "Open in browser", then "Try another way", records each one's `href` as a navigation.
+    - tapping "Open in browser" records its `href` as a navigation.
     - "Close" hides the overlay and puts the address back to `/{p}/TC`.
   - After an earlier visit to `/{p}/TC` in the same browser context, a tap on the Escape Mode Link from `/{p}` carries `TC` in both the recorded target and the address bar.
   - The hop itself: the recorded target with `x-safari-` stripped, opened in a fresh browser context with a desktop UA (fresh storage, as in a System Browser), lands where a tap on that Link would. For the Adult Link set to Escape Mode with tracking on, that Reveal carries `TC`.
@@ -291,7 +286,7 @@ test -s .scratch/goal_ai/shots/01-link-modes-and-escape.png
 # manual (Phase 1 is not Done until this passes, goal_ai.txt:133): run the real-device matrix on that Profile: an iPhone and an Android phone x the Instagram, Facebook, Threads and TikTok In-App Browsers, plus Safari (iOS) and Chrome (Android), for each Mode. Record one RUN.md row per cell: device, OS version, app version, pass/fail.
 #   - On open: the Escape Overlay shows, with "Close", in every In-App Browser, and never in Safari or Chrome.
 #   - Direct: the Link opens in place.
-#   - Escape: the Visitor lands in the System Browser on /{username}/{code}?link={Link Id}, the Link opens there by itself, and the Adult Link's final address ends in /c{code}. Where the automatic Escape is blocked, each of "Open in browser", "Try another way" (iOS Instagram), the app-menu instruction and "Copy link" still gets out.
+#   - Escape: the Visitor lands in the System Browser on /{username}/{code}?link={Link Id}, the Link opens there by itself, and the Adult Link's final address ends in /c{code}. Where the automatic Escape is blocked, each of "Open in browser", the app-menu instruction and "Copy link" still gets out.
 #   - Escape, on an Android phone with Chrome disabled: no automatic Escape (v1's intent has no fallback); the Escape Overlay's menu instruction and "Copy link" still get out.
 #   - Deeplink, once with the Destination's app installed and once without: the app opens, or the web page does.
 ./check.sh
@@ -331,7 +326,7 @@ test -s .scratch/goal_ai/shots/01-link-modes-and-escape.png
 - **v1 parity of the Instagram path (the Operator, 2026-10: "exactly like linkme_clone3").** Matching v1 (`linkme_clone3/index.html`, `script.js`): the Escape Overlay on open in Instagram (with an Escape default, which every imported Profile has), its icon and copy word for word, no pop-out on open unless a Profile chooses Deeplink at open, `?link=` revealing and bouncing on every load, and the escape strings `x-safari-https://…` and `intent://…#Intent;scheme=https;package=com.android.chrome;end` exactly. (Amended 2026-10-06: in iOS Instagram the escape string is `instagram://extbrowser/?url=…` instead, as a real iPhone showed `x-safari-` dropped there; Escape link, per platform.) Kept on purpose:
   - Mode-dependence (ADR 0003): the overlay on open needs an Escape default, Direct Links never escape, and a Direct Link Shortcut navigates plainly.
   - The overlay shows once the Profile JSON has answered, not at DOMContentLoaded as v1's head script shows it, because it depends on the default Mode.
-  - The overlay's extra ways out ("Open in browser", "Try another way" on iOS Instagram, the address, "Copy link", "Close" where a Link does not escape), placed below v1's copy. v1's overlay has only the menu instruction; "Open in browser" is the tap that pops out.
+  - The overlay's extra ways out ("Open in browser", the address, "Copy link", "Close" where a Link does not escape), placed below v1's copy. v1's overlay has only the menu instruction; "Open in browser" is the tap that pops out.
   - Facebook, Threads and TikTok In-App Browsers are detected and escape too (plan section 4's pattern), and Deeplink Mode counts any app's (Contracts, In-App Browser detection); v1 bounced only Instagram. The overlay reads "This app" there.
   - An Escape Mode tap in an In-App Browser pops out to this Profile with a Link Shortcut and makes no Reveal in the app (story 24); v1 revealed in the app on "Continue (18+)" and bounced to the Destination.
   - Deeplink at open is v2's own Mode, guarded once per tab; v1 never popped out on open except through `?link=`.

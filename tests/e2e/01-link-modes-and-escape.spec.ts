@@ -565,8 +565,9 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     const { reveals, target } = await tapEscapeFromCode(page);
     await expect(escapeOverlay(page)).toBeVisible();
     await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', igExt(target));
-    // "Try another way" is the x-safari- link (2026-10-06: Instagram drops it, but it stays a way to try)
-    await expect(escapeOverlay(page).getByRole('link', { name: 'Try another way' })).toHaveAttribute('href', `x-safari-${target}`);
+    // No "Try another way", and no x-safari- link anywhere: Instagram drops it (a real iPhone, 2026-10-06)
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Try another way' })).toHaveCount(0);
+    await expect(page.locator('a[href^="x-safari-"]')).toHaveCount(0);
     await expect(escapeOverlay(page).getByText(target, { exact: true })).toBeVisible();
     await expect(escapeOverlay(page).getByRole('button', { name: 'Copy link' })).toBeVisible();
     await expect(escapeOverlay(page).getByText('Open in External Browser')).toBeVisible(); // the app-menu instruction
@@ -575,16 +576,13 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await page.screenshot({ path: SCREENSHOT, animations: 'disabled' });
   });
 
-  test('tapping "Open in browser", then "Try another way", records each one\'s href as a navigation', async ({ page }) => {
+  test('tapping "Open in browser" records its href as a navigation', async ({ page }) => {
     const { navigations, target } = await tapEscapeFromCode(page);
     const openInBrowser = igExt(target);
-    const tryAnotherWay = `x-safari-${target}`;
     await expect.poll(() => popOuts(navigations)).toEqual([openInBrowser]); // the tap's own Escape
 
     await escapeOverlay(page).getByRole('link', { name: 'Open in browser' }).click();
     await expect.poll(() => popOuts(navigations)).toEqual([openInBrowser, openInBrowser]);
-    await escapeOverlay(page).getByRole('link', { name: 'Try another way' }).click();
-    await expect.poll(() => navigations.at(-1)?.url).toBe(tryAnotherWay);
   });
 
   test('"Close" hides the Escape Overlay and puts the address back to /{username}/{code}', async ({ page }) => {

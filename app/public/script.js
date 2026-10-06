@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const igOverlay = document.getElementById('igOverlay');
     const igCloseBtn = document.getElementById('igCloseBtn');
     const igOpenBtn = document.getElementById('igOpenBtn');
-    const igAltBtn = document.getElementById('igAltBtn');
     const igTarget = document.getElementById('igTarget');
     const igCopyBtn = document.getElementById('igCopyBtn');
     const igIcon = document.getElementById('igIcon');
@@ -424,9 +423,6 @@ document.addEventListener('DOMContentLoaded', () => {
         igIcon.style.display = isInstagram ? '' : 'none';
         igAppName.textContent = isInstagram ? 'Instagram' : 'This app';
         igOpenBtn.href = escapeLink(target.url) || target.url;
-        // On iOS Instagram, "Try another way" is the x-safari- link "Open in browser" was before 2026-10-06
-        igAltBtn.hidden = !isIOSInstagram;
-        if (isIOSInstagram) igAltBtn.href = 'x-safari-' + asHttps(target.url);
         igTarget.textContent = target.url;
         igCloseBtn.hidden = !closeable;
         igOverlay.classList.remove('hidden');

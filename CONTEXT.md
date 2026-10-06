@@ -68,7 +68,7 @@ The phone's own browser (Safari on iOS, Chrome on Android), outside any In-App B
 _Avoid_: external browser, default browser, real browser
 
 **Escape**:
-An attempt to move a Visitor from an In-App Browser into the System Browser. In iOS Instagram it goes through `instagram://extbrowser/` (a real iPhone, 2026-10-06, showed Instagram drops `x-safari-https://`, now the alternative); elsewhere on iOS through `x-safari-https://`, on Android through the Chrome intent.
+An attempt to move a Visitor from an In-App Browser into the System Browser. In iOS Instagram it goes through `instagram://extbrowser/` (a real iPhone, 2026-10-06, showed Instagram drops `x-safari-https://`); elsewhere on iOS through `x-safari-https://`, on Android through the Chrome intent.
 _Avoid_: bounce, breakout, "move out of IG"
 
 **Escape Overlay**:
