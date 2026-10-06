@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Browser, type Page, type Req
 import { join } from 'node:path';
 import {
   account, asSuperuser, createOwnerlessProfile, EDITOR, escapeOverlay, eventCount, featured, fresh, handOver, heading, intents, logIn, only,
-  onLocalStack, operator, ownerOf, phoneContext, proxy, recordIds, recordNavigations, superuserToken, UA, verifiedCreator, xSafari,
+  onLocalStack, operator, ownerOf, phoneContext, proxy, recordIds, recordNavigations, superuserToken, UA, verifiedCreator, extBrowser, igExt,
 } from './helpers';
 
 // Phase 5 (docs/spec/phase-05-cutover-and-domains.md, Testing Decisions): one seam, this spec against the local stack at the
@@ -398,14 +398,15 @@ test('with an iOS Instagram User-Agent, creator.test/ shows the Escape Overlay e
   expect(shown, 'the Escape Overlay with the stored default, then with Direct Mode').toEqual([true, false]);
 });
 
-// The Escapes fired at `origin` + `path` with `userAgent`, each an `x-safari-` or `intent://` URL as Phase 1 captures it. The
+// The Escapes fired at `origin` + `path` with `userAgent`, each an `instagram://extbrowser/` (iOS Instagram, 2026-10-06) or
+// `intent://` URL as Phase 1 captures it. The
 // Fixture's Escape Mode default pops nothing out on open; after closing the Escape Overlay it shows, a tap on the Escape Link
 // fires the one Escape.
 async function escapesFired(browser: Browser, origin: string, path: string, userAgent: string) {
   const context = await phoneContext(browser, { origin, userAgent });
   const visitor = await context.newPage();
   const navigations = await recordNavigations(visitor);
-  const fired = () => [...xSafari(navigations), ...intents(navigations)];
+  const fired = () => [...extBrowser(navigations), ...intents(navigations)];
   await visitor.goto(origin + path);
   await showsFixture(visitor, `${origin}${path}`);
   await escapeOverlay(visitor).getByRole('button', { name: 'Close' }).click();
@@ -419,7 +420,7 @@ test('an Escape from creator.test/{code} targets creator.test and /{code}, with 
   const linkId = await fixtureLinkId(request, 'Escape Link');
   const target = `https://${CUSTOM}:${PORT}/111?link=${linkId}`; // the escape target, spelled out as the Phase 1 spec spells it
   expect(await escapesFired(browser, at(CUSTOM), '/111', UA.iosInstagram), `the iOS Escape for Link ${linkId} on ${CUSTOM}/111`)
-    .toEqual([`x-safari-${target}`]);
+    .toEqual([igExt(target)]);
   expect(await escapesFired(browser, at(CUSTOM), '/111', UA.androidInstagram), `the Android Escape for Link ${linkId} on ${CUSTOM}/111`)
     .toEqual([`intent://${CUSTOM}:${PORT}/111?link=${linkId}#Intent;scheme=https;package=com.android.chrome;end`]);
 });
@@ -427,7 +428,7 @@ test('an Escape from creator.test/{code} targets creator.test and /{code}, with 
 test('an Escape from spare.test/{username}/{code} keeps /{username}/{code}', async ({ browser, request }) => {
   const linkId = await fixtureLinkId(request, 'Escape Link');
   expect(await escapesFired(browser, at(SPARE), '/fixture/222', UA.iosInstagram), `the iOS Escape for Link ${linkId} on ${SPARE}/fixture/222`)
-    .toEqual([`x-safari-https://${SPARE}:${PORT}/fixture/222?link=${linkId}`]);
+    .toEqual([igExt(`https://${SPARE}:${PORT}/fixture/222?link=${linkId}`)]);
 });
 
 // Events this spec's Visitors make carry their own country, which no other spec sends, so other workers' Fixture traffic is left

@@ -49,8 +49,8 @@ The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose d
 13. As an Operator, I want the overlay shown on open to stay uncloseable on a Profile whose Links all escape, so that such a Profile, every untouched v1 Profile included, keeps v1's overlay.
 14. As a Visitor in any browser, I want a tap on a Direct Mode Link to open its Destination right where I am, so that Links which need no Escape just work.
 15. As a Visitor in an In-App Browser, I want a tap on an Escape Mode Link to fire the Escape from the tap itself, with no request before it, so that the app still treats the Escape as my own action.
-16. As a Visitor on iOS, I want that Escape to open this Profile in Safari through the `x-safari-https://` link v1 already uses, so that the method that works today keeps working.
-17. As a Visitor in Instagram on iOS, I want a second "Try another way" link that uses `instagram://extbrowser/` and fires from my tap, so that I have another route when the first one is blocked.
+16. As a Visitor on iOS, I want that Escape to open this Profile in Safari through the `x-safari-https://` link v1 already uses, so that the method that works today keeps working (amended 2026-10-06: in Instagram, through `instagram://extbrowser/`, which a real iPhone showed works where `x-safari-` is dropped).
+17. As a Visitor in Instagram on iOS, I want a second "Try another way" link that uses `x-safari-https://` (`instagram://extbrowser/` before 2026-10-06) and fires from my tap, so that I have another route when the first one is blocked.
 18. As a Visitor on Android, I want the Escape to open this Profile in Chrome through v1's own intent string, so that the method that works today keeps working. (A phone without Chrome gets no automatic Escape; the Escape Overlay's menu instruction and "Copy link" are its way out.)
 19. As a Visitor whose Escape did not happen, I want the Escape Overlay to offer the app-menu instruction, an "Open in browser" link, the address and a "Copy link" button, so that I can always get out by hand.
 20. As a Visitor who opened the Escape Overlay by tapping a Link, I want to close it, so that I can still reach the Profile's other Links.
@@ -143,10 +143,13 @@ The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose d
 
     | Platform | Escape link |
     |---|---|
-    | iOS | `x-safari-` + escape target |
-    | iOS Instagram, second option ("Try another way") | `instagram://extbrowser/?url=` + encoded escape target |
+    | iOS Instagram (amended 2026-10-06) | `instagram://extbrowser/?url=` + encoded escape target |
+    | iOS Instagram, second option ("Try another way") | `x-safari-` + escape target |
+    | iOS, any other app | `x-safari-` + escape target |
     | Android | `intent://{host}/{path}[?query]#Intent;scheme=https;package=com.android.chrome;end`, v1's performBounce string exactly, on a tap and at load alike, for Escape and Deeplink Mode alike, with no `S.browser_fallback_url` |
     | anything else | none; "Open in browser" carries the escape target itself |
+
+    On 2026-10-06 a real iPhone showed Instagram drops `x-safari-https://` while `instagram://extbrowser/` goes through, so iOS Instagram's escape link (every Escape, Deeplink pop-out, "Open in browser" and `?link=` bounce) is extbrowser, and `x-safari-` is its "Try another way".
 
     ASSUMPTION: "Try another way" is offered only in Instagram's In-App Browser on iOS, because an `instagram://` link would push Facebook, Threads or TikTok Visitors into the Instagram app (rung 5). Overturned if the real-device matrix shows it escaping correctly from the other apps.
 
@@ -229,7 +232,7 @@ Behaviours covered. `{p}` is the Fixture Profile's Username, and `TC` is a numer
   - `/{p}/TC?link={Adult Link Id}`, with tracking on, calls Reveal with that id and `TC` as the Tracking Code, then navigates to the answer.
   - `/{p}/TC?link={Escape Mode Link Id}` lands where a tap on that Link would.
   - `/{p}?link={an id not on the Profile}` loads the Profile, with no Reveal request and no navigation.
-- **iOS Instagram UA.** The Profile default is Direct (variant) unless a case says otherwise.
+- **iOS Instagram UA.** The Profile default is Direct (variant) unless a case says otherwise. (Amended 2026-10-06: under this UA each `x-safari-https://{t}` below is recorded as `instagram://extbrowser/?url=` + encoded `https://{t}`, and "Try another way" carries `x-safari-https://{t}`.)
   - There is no overlay on open, and `/{p}/TC` keeps that address until a Link is tapped.
   - The Direct Link navigates plainly, and nothing `x-safari-` is recorded.
   - From `/{p}/TC`, a tap on the Escape Mode Link:
@@ -325,7 +328,7 @@ test -s .scratch/goal_ai/shots/01-link-modes-and-escape.png
 
 ## Further Notes
 
-- **v1 parity of the Instagram path (the Operator, 2026-10: "exactly like linkme_clone3").** Matching v1 (`linkme_clone3/index.html`, `script.js`): the Escape Overlay on open in Instagram (with an Escape default, which every imported Profile has), its icon and copy word for word, no pop-out on open unless a Profile chooses Deeplink at open, `?link=` revealing and bouncing on every load, and the escape strings `x-safari-https://…` and `intent://…#Intent;scheme=https;package=com.android.chrome;end` exactly. Kept on purpose:
+- **v1 parity of the Instagram path (the Operator, 2026-10: "exactly like linkme_clone3").** Matching v1 (`linkme_clone3/index.html`, `script.js`): the Escape Overlay on open in Instagram (with an Escape default, which every imported Profile has), its icon and copy word for word, no pop-out on open unless a Profile chooses Deeplink at open, `?link=` revealing and bouncing on every load, and the escape strings `x-safari-https://…` and `intent://…#Intent;scheme=https;package=com.android.chrome;end` exactly. (Amended 2026-10-06: in iOS Instagram the escape string is `instagram://extbrowser/?url=…` instead, as a real iPhone showed `x-safari-` dropped there; Escape link, per platform.) Kept on purpose:
   - Mode-dependence (ADR 0003): the overlay on open needs an Escape default, Direct Links never escape, and a Direct Link Shortcut navigates plainly.
   - The overlay shows once the Profile JSON has answered, not at DOMContentLoaded as v1's head script shows it, because it depends on the default Mode.
   - The overlay's extra ways out ("Open in browser", "Try another way" on iOS Instagram, the address, "Copy link", "Close" where a Link does not escape), placed below v1's copy. v1's overlay has only the menu instruction; "Open in browser" is the tap that pops out.

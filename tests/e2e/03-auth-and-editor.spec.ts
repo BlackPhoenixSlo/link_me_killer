@@ -8,7 +8,7 @@ import {
   account, CLAIM, createOwnerlessProfile, EDITOR, expectServedWebp, expectVerifyScreen, featured, forgotPassword, fresh, furnishedCreator,
   handOver, heading, holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN, logIn, logInToHandedOver, mailedLink, mailedLinks, markVerified,
   onLocalStack, openProfile, openTracking, operator, ownerOf, passAgeGate, PHONE, phoneContext, pngFile, probe, proxy, reach, readBack,
-  recordIds, refused, recordNavigations, servedProfile, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees, xSafari,
+  recordIds, refused, recordNavigations, servedProfile, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees, extBrowser, igExt,
 } from './helpers';
 
 // Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL.
@@ -516,7 +516,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
       await visitor.goto(`/${creator.username}`);
       await expect(visitor.locator('.link-card .link-title')).toHaveText(['Default card', 'Own card']);
       await visitor.waitForLoadState('networkidle');
-      const popped = xSafari(navigations);
+      const popped = extBrowser(navigations); // iOS Instagram's escape link (2026-10-06)
       await context.close();
       return popped;
     };
@@ -547,7 +547,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     await page.getByRole('button', { name: 'Add link' }).click();
     await expect(page.getByLabel('Mode').locator('option'))
       .toHaveText(['Profile default (currently Deeplink at open)', 'Direct', 'Escape']);
-    expect(await popsOnOpen()).toEqual([`x-safari-https://${new URL(origin).host}/${creator.username}`]);
+    expect(await popsOnOpen()).toEqual([igExt(`https://${new URL(origin).host}/${creator.username}`)]);
 
     // Every Deeplink Mode is a Profile default only (ADR 0003, amended 2026-10-06): a Link refuses each.
     for (const linkMode of ['deeplink', 'deeplink_script']) refused(await as.patch(`links/records/${linkIds[1]}`, { mode: linkMode }));

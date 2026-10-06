@@ -14,3 +14,5 @@ Deeplink splits in two: `deeplink` (Deeplink on tap), a Mode for Links and Profi
 ## Amended 2026-10-06 (the Operator's decision)
 
 The Deeplink Modes (`deeplink`, `deeplink_script`, `deeplink_open`) are Profile defaults only, "once for the whole page, two places is messy": a Link chooses Direct, Escape or the Profile default. `links.mode` holds only `direct` and `escape_ig` (`1791140014_link_modes_direct_escape.js` moves Links that held a Deeplink Mode to the default), and the server serves any other Link Mode as the Profile default.
+
+Escape link, 2026-10-06: a real iPhone showed Instagram drops `x-safari-https://` while `instagram://extbrowser/?url=` goes through, so in iOS Instagram every pop-out, whatever the Mode, uses extbrowser, and `x-safari-` is the "Try another way" alternative (spec phase-01, Escape link, per platform).

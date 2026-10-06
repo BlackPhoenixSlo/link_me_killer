@@ -1,7 +1,7 @@
 import { test, expect, devices, type Browser, type Page, type Response } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { escapeOverlay, intents, recordNavigations, UA, xSafari, type Navigation } from './helpers';
+import { escapeOverlay, extBrowser, IG_EXT_BROWSER, igExt, intents, recordNavigations, UA, xSafari, type Navigation } from './helpers';
 
 // Phase 1: every Link travels by its own Mode (docs/spec/phase-01-link-modes-and-escape.md, Testing Decisions).
 // Link Ids, Modes and the Username come from the Fixture Profile the stand-in serves, never from a literal.
@@ -120,18 +120,23 @@ async function realUrlOf(reveal: Response): Promise<string> {
 
 const closeButton = (page: Page) => escapeOverlay(page).getByRole('button', { name: 'Close' });
 
-// Pop-outs, per platform, exactly v1's performBounce strings (linkme_clone3/script.js), with the address forced to https as
-// it forced it: x-safari-https:// on iOS, the Chrome intent with no fallback on Android, on open and on a tap alike.
-type Platform = 'ios' | 'android';
+// Pop-outs, per platform and app, with the address forced to https as v1 forced it, on open and on a tap alike: in iOS
+// Instagram, Instagram's own open-in-browser link (a real iPhone, 2026-10-06, showed Instagram drops x-safari-); elsewhere
+// v1's performBounce strings (linkme_clone3/script.js), x-safari-https:// on iOS and the Chrome intent with no fallback on
+// Android.
 const strip = (url: string) => url.replace(/^https?:\/\//, '');
-const popTo = (platform: Platform, url: string) => (platform === 'ios'
-  ? `x-safari-https://${strip(url)}`
-  : `intent://${strip(url)}#Intent;scheme=https;package=com.android.chrome;end`);
-const popOuts = (navigations: Navigation[]) => [...xSafari(navigations), ...intents(navigations)];
+const popTo = (userAgent: string, url: string) => {
+  if (/Android/.test(userAgent)) return `intent://${strip(url)}#Intent;scheme=https;package=com.android.chrome;end`;
+  if (/Instagram/.test(userAgent)) return igExt(`https://${strip(url)}`);
+  return `x-safari-https://${strip(url)}`;
+};
+const popOuts = (navigations: Navigation[]) => [...xSafari(navigations), ...extBrowser(navigations), ...intents(navigations)];
 // The https address a recorded pop-out hands Safari or Chrome.
-const poppedTo = (recorded: string) => (recorded.startsWith('x-safari-')
-  ? recorded.slice('x-safari-'.length)
-  : `https://${recorded.slice('intent://'.length, recorded.indexOf('#Intent;'))}`);
+const poppedTo = (recorded: string) => {
+  if (recorded.startsWith('x-safari-')) return recorded.slice('x-safari-'.length);
+  if (recorded.startsWith(IG_EXT_BROWSER)) return decodeURIComponent(recorded.slice(IG_EXT_BROWSER.length));
+  return `https://${recorded.slice('intent://'.length, recorded.indexOf('#Intent;'))}`;
+};
 // A Profile default as the app serves it: the Profile's mode, and the Link with no Mode of its own (byMode.deeplink), whose
 // served `mode` is the effective one, inheriting it.
 const withDefault = (mode: string) => (json: ProfileJson) => {
@@ -411,21 +416,22 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
     await card(page, link).click();
     await expect.poll(() => navigations.at(-1)?.url).toBe(link.url);
-    expect(xSafari(navigations)).toEqual([]);
+    expect(popOuts(navigations)).toEqual([]);
   });
 
-  test('a tap on the Deeplink Link pops out through x-safari- to its Link Shortcut in the tap\'s own task, with no Reveal before it and no Escape Overlay', async ({ page }) => {
+  test('a tap on the Deeplink Link pops out through instagram://extbrowser/ to its Link Shortcut in the tap\'s own task, with no Reveal before it and no Escape Overlay', async ({ page }) => {
     const link = byMode.deeplink;
     await serveVariant(page, deeplinkDefault);
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
-    const href = `x-safari-https://${new URL(page.url()).host}/${username}?link=${link.id}`;
+    const href = igExt(`https://${new URL(page.url()).host}/${username}?link=${link.id}`);
+    expect(new URL(poppedTo(href)).searchParams.get('link')).toBe(link.id); // ?link= survives the encoding
 
     // The card is a real anchor to the escape link, as "Open in browser" is: the pop-out is the anchor tap itself
     await expect(card(page, link)).toHaveAttribute('href', href);
     await card(page, link).click();
-    await expect.poll(() => xSafari(navigations)).toEqual([href]);
+    await expect.poll(() => popOuts(navigations)).toEqual([href]);
     expect(reveals).toHaveLength(0); // before the fallback's wait is up
     expect(navigations).toContainEqual({ url: href, inTapTask: true });
     await expect(escapeOverlay(page)).toBeHidden();
@@ -440,11 +446,11 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
     const reveal = nextReveal(page);
     await card(page, link).click();
-    await expect.poll(() => xSafari(navigations)).toHaveLength(1);
+    await expect.poll(() => popOuts(navigations)).toHaveLength(1);
     const destination = await realUrlOf(await reveal);
     await expect(page).toHaveURL(destination);
     expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
-    expect(xSafari(navigations)).toHaveLength(1); // the fallback navigates plainly, with no second pop-out
+    expect(popOuts(navigations)).toHaveLength(1); // the fallback navigates plainly, with no second pop-out
   });
 
   for (const [left, leave] of [
@@ -462,7 +468,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
       await openProfile(page);
 
       await card(page, link).click();
-      await expect.poll(() => xSafari(navigations)).toHaveLength(1);
+      await expect.poll(() => popOuts(navigations)).toHaveLength(1);
       await page.evaluate(leave);
       await page.waitForTimeout(FALLBACK_WAIT_MS + 1000);
       expect(reveals).toHaveLength(0);
@@ -487,7 +493,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await expect(page).toHaveURL(destination);
     expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([adult.id]);
     expect(navigations.at(-1)?.url).toBe(destination);
-    expect(xSafari(navigations)).toEqual([]);
+    expect(popOuts(navigations)).toEqual([]);
   });
 
   for (const profileMode of ['escape_ig', 'sideways']) {
@@ -505,7 +511,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
       await card(page, link).click();
       await expect.poll(() => navigations.at(-1)?.url).toBe(link.url);
-      expect(xSafari(navigations)).toEqual([]);
+      expect(popOuts(navigations)).toEqual([]);
     });
   }
 
@@ -523,7 +529,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await serveVariant(page, deeplinkAtOpen);
     const navigations = await recordNavigations(page);
     await openProfile(page);
-    await expect.poll(() => xSafari(navigations)).toEqual([`x-safari-https://${new URL(page.url()).host}/${username}`]);
+    await expect.poll(() => popOuts(navigations)).toEqual([igExt(`https://${new URL(page.url()).host}/${username}`)]);
     await expect(escapeOverlay(page)).toBeHidden();
   });
 
@@ -531,7 +537,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     ['an unrecognised mode', (l: Link) => { l.mode = 'sideways'; }],
     ['its mode removed', (l: Link) => { delete l.mode; }],
   ] as const) {
-    test(`Direct default: the Deeplink Link with ${variant} navigates plainly to its url, with no Reveal and nothing x-safari- recorded`, async ({ page }) => {
+    test(`Direct default: the Deeplink Link with ${variant} navigates plainly to its url, with no Reveal and nothing popped out`, async ({ page }) => {
       const link = byMode.deeplink;
       const url = rUrlOf(link); // the url v2 serves for a Link without a Deeplink mode (ticket 16, second ASSUMPTION)
       await serveVariant(page, (json) => { directDefault(json); edit(linkIn(json, link.id)); linkIn(json, link.id).url = url; });
@@ -541,16 +547,16 @@ test.describe('In-App Browser (iOS Instagram)', () => {
       await card(page, link).click();
       await expect.poll(() => navigations.at(-1)?.url).toBe(url);
       expect(reveals).toHaveLength(0);
-      expect(xSafari(navigations)).toEqual([]);
+      expect(popOuts(navigations)).toEqual([]);
     });
   }
 
-  test('Direct default: from /{username}/{code}, a tap on the Escape Link fires x-safari- to the escape target in the tap\'s own task', async ({ page }) => {
+  test('Direct default: from /{username}/{code}, a tap on the Escape Link fires instagram://extbrowser/ to the escape target in the tap\'s own task', async ({ page }) => {
     const link = byMode.escape_ig;
     const { navigations, target } = await tapEscapeFromCode(page);
-    const escapeLink = `x-safari-${target}`;
+    const escapeLink = igExt(target);
 
-    await expect.poll(() => xSafari(navigations)).toEqual([escapeLink]);
+    await expect.poll(() => popOuts(navigations)).toEqual([escapeLink]);
     expect(navigations).toContainEqual({ url: escapeLink, inTapTask: true });
     await expect(page).toHaveURL(`/${username}/${TC}?link=${link.id}`);
   });
@@ -559,9 +565,9 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const { reveals, target } = await tapEscapeFromCode(page);
     await expect(escapeOverlay(page)).toBeVisible();
-    await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', `x-safari-${target}`);
-    await expect(escapeOverlay(page).getByRole('link', { name: 'Try another way' }))
-      .toHaveAttribute('href', `instagram://extbrowser/?url=${encodeURIComponent(target)}`);
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', igExt(target));
+    // "Try another way" is the x-safari- link (2026-10-06: Instagram drops it, but it stays a way to try)
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Try another way' })).toHaveAttribute('href', `x-safari-${target}`);
     await expect(escapeOverlay(page).getByText(target, { exact: true })).toBeVisible();
     await expect(escapeOverlay(page).getByRole('button', { name: 'Copy link' })).toBeVisible();
     await expect(escapeOverlay(page).getByText('Open in External Browser')).toBeVisible(); // the app-menu instruction
@@ -572,12 +578,12 @@ test.describe('In-App Browser (iOS Instagram)', () => {
 
   test('tapping "Open in browser", then "Try another way", records each one\'s href as a navigation', async ({ page }) => {
     const { navigations, target } = await tapEscapeFromCode(page);
-    const openInBrowser = `x-safari-${target}`;
-    const tryAnotherWay = `instagram://extbrowser/?url=${encodeURIComponent(target)}`;
-    await expect.poll(() => xSafari(navigations)).toEqual([openInBrowser]); // the tap's own Escape
+    const openInBrowser = igExt(target);
+    const tryAnotherWay = `x-safari-${target}`;
+    await expect.poll(() => popOuts(navigations)).toEqual([openInBrowser]); // the tap's own Escape
 
     await escapeOverlay(page).getByRole('link', { name: 'Open in browser' }).click();
-    await expect.poll(() => xSafari(navigations)).toEqual([openInBrowser, openInBrowser]);
+    await expect.poll(() => popOuts(navigations)).toEqual([openInBrowser, openInBrowser]);
     await escapeOverlay(page).getByRole('link', { name: 'Try another way' }).click();
     await expect.poll(() => navigations.at(-1)?.url).toBe(tryAnotherWay);
   });
@@ -591,7 +597,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await expect(page).toHaveURL(`/${username}/${TC}`);
   });
 
-  test('/{username}/{code}?link={Escape Link Id} reveals, then bounces straight to the Destination through x-safari-, as v1\'s ?link= did, with the Escape Overlay aimed at that address, with Close', async ({ page }) => {
+  test('/{username}/{code}?link={Escape Link Id} reveals, then bounces straight to the Destination through instagram://extbrowser/, as v1\'s ?link= did, with the Escape Overlay aimed at that address, with Close', async ({ page }) => {
     const link = byMode.escape_ig;
     await serveVariant(page, directDefault);
     const navigations = await recordNavigations(page);
@@ -603,11 +609,11 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     const destination = await realUrlOf(await reveal);
 
     await expect(escapeOverlay(page)).toBeVisible();
-    await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', `x-safari-${target}`);
+    await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', igExt(target));
     await expect(escapeOverlay(page).getByText(target, { exact: true })).toBeVisible();
     await expect(closeButton(page)).toBeVisible();
     await expect(page).toHaveURL(address);
-    await expect.poll(() => xSafari(navigations)).toEqual([`x-safari-https://${strip(destination)}`]);
+    await expect.poll(() => popOuts(navigations)).toEqual([igExt(`https://${strip(destination)}`)]);
     expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
   });
 
@@ -620,7 +626,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     const host = new URL(page.url()).host;
 
     await card(page, link).click();
-    await expect.poll(() => xSafari(navigations)).toEqual([`x-safari-https://${host}/${username}/${TC}?link=${link.id}`]);
+    await expect.poll(() => popOuts(navigations)).toEqual([igExt(`https://${host}/${username}/${TC}?link=${link.id}`)]);
     await expect(page).toHaveURL(`/${username}/${TC}?link=${link.id}`);
   });
 
@@ -633,7 +639,7 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await expect(escapeOverlay(page)).toBeVisible();
     await expect(page).toHaveURL(`/${username}/${TC}`);
     await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' }))
-      .toHaveAttribute('href', `x-safari-https://${host}/${username}/${TC}`);
+      .toHaveAttribute('href', igExt(`https://${host}/${username}/${TC}`));
     await closeButton(page).click();
     await expect(page).toHaveURL(`/${username}`);
   });
@@ -651,14 +657,14 @@ test.describe('In-App Browser (iOS Instagram)', () => {
   const adultEscape = (json: ProfileJson) => { directDefault(json); linkIn(json, adult.id).mode = 'escape_ig'; };
   const ageGate = (page: Page) => page.getByRole('heading', { name: 'Mature Content Disclaimer' });
 
-  test('the Adult Link set to Escape Mode shows the Age Gate, then Continue (18+) fires x-safari- to the escape target in its own task, with no Reveal', async ({ page }) => {
+  test('the Adult Link set to Escape Mode shows the Age Gate, then Continue (18+) fires instagram://extbrowser/ to the escape target in its own task, with no Reveal', async ({ page }) => {
     const { navigations, reveals, target } = await tapEscapeFromCode(page, adult, adultEscape);
     await expect(ageGate(page)).toBeVisible();
-    const escapeLink = `x-safari-${target}`;
-    expect(xSafari(navigations)).toEqual([]);
+    const escapeLink = igExt(target);
+    expect(popOuts(navigations)).toEqual([]);
 
     await page.getByRole('button', { name: 'Continue (18+)' }).click();
-    await expect.poll(() => xSafari(navigations)).toEqual([escapeLink]);
+    await expect.poll(() => popOuts(navigations)).toEqual([escapeLink]);
     expect(navigations).toContainEqual({ url: escapeLink, inTapTask: true });
     await expect(escapeOverlay(page)).toBeVisible();
     await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', escapeLink);
@@ -679,13 +685,13 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     await expect(page).toHaveURL(`/${username}/${TC}`);
   });
 
-  // The hop: the recorded target, x-safari- stripped, opened in a fresh browser context with a desktop User-Agent
+  // The hop: the recorded target, decoded from Instagram's extbrowser link, opened in a fresh browser context with a desktop User-Agent
   // (fresh storage, as in a System Browser). The stand-in is plain http, so the target's https path and query are
   // opened on the stand-in, once the target is checked to be https on the host that served the page.
   // The fresh context serves the same Profile edit as the In-App page, so both browsers see one Profile.
   async function hop(browser: Browser, inApp: Page, recorded: string, edit: (json: ProfileJson) => void) {
-    expect(recorded.startsWith('x-safari-')).toBe(true);
-    const target = new URL(recorded.slice('x-safari-'.length));
+    expect(recorded.startsWith(IG_EXT_BROWSER)).toBe(true);
+    const target = new URL(poppedTo(recorded));
     expect(target.protocol).toBe('https:');
     expect(target.host).toBe(new URL(inApp.url()).host);
     const context = await browser.newContext({ userAgent: devices['Desktop Chrome'].userAgent, baseURL: test.info().project.use.baseURL });
@@ -698,9 +704,9 @@ test.describe('In-App Browser (iOS Instagram)', () => {
   test('the hop: the target recorded from an Escape Link tap opens in a fresh desktop browser context and lands where a tap on that Link would', async ({ page, browser }) => {
     const link = byMode.escape_ig;
     const { navigations } = await tapEscapeFromCode(page, link, directDefault);
-    await expect.poll(() => xSafari(navigations)).toHaveLength(1);
+    await expect.poll(() => popOuts(navigations)).toHaveLength(1);
 
-    const fresh = await hop(browser, page, xSafari(navigations)[0], directDefault);
+    const fresh = await hop(browser, page, popOuts(navigations)[0], directDefault);
     const landed = await recordNavigations(fresh.page);
     const reveals = watchReveals(fresh.page);
     await fresh.page.goto(fresh.path);
@@ -716,9 +722,9 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     };
     const { navigations } = await tapEscapeFromCode(page, adult, edit);
     await page.getByRole('button', { name: 'Continue (18+)' }).click();
-    await expect.poll(() => xSafari(navigations)).toHaveLength(1);
+    await expect.poll(() => popOuts(navigations)).toHaveLength(1);
 
-    const fresh = await hop(browser, page, xSafari(navigations)[0], edit);
+    const fresh = await hop(browser, page, popOuts(navigations)[0], edit);
     const reveals = watchReveals(fresh.page);
     const reveal = nextReveal(fresh.page);
     await fresh.page.goto(fresh.path);
@@ -736,24 +742,24 @@ test.describe('In-App Browser (iOS Instagram)', () => {
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
-    const href = `x-safari-https://${new URL(page.url()).host}/${username}?link=${link.id}`;
+    const href = igExt(`https://${new URL(page.url()).host}/${username}?link=${link.id}`);
     await card(page, link).click();
-    await expect.poll(() => xSafari(navigations)).toEqual([href]);
+    await expect.poll(() => popOuts(navigations)).toEqual([href]);
     expect(navigations).toContainEqual({ url: href, inTapTask: true });
     expect(reveals).toHaveLength(0);
   });
 
-  test('a tap on a deeplink_script Link pops out through x-safari- set from script in the tap\'s own task, from a card that is no anchor', async ({ page }) => {
+  test('a tap on a deeplink_script Link pops out through the escape link set from script in the tap\'s own task, from a card that is no anchor', async ({ page }) => {
     const link = byMode.deeplink;
     await serveVariant(page, withDefault('deeplink_script'));
     const navigations = await recordNavigations(page);
     const reveals = watchReveals(page);
     await openProfile(page);
-    const href = `x-safari-https://${new URL(page.url()).host}/${username}?link=${link.id}`;
+    const href = igExt(`https://${new URL(page.url()).host}/${username}?link=${link.id}`);
 
     await expect(card(page, link)).not.toHaveAttribute('href');
     await card(page, link).click();
-    await expect.poll(() => xSafari(navigations)).toEqual([href]);
+    await expect.poll(() => popOuts(navigations)).toEqual([href]);
     expect(navigations).toContainEqual({ url: href, inTapTask: true });
     expect(reveals).toHaveLength(0);
     await expect(escapeOverlay(page)).toBeHidden();
@@ -782,7 +788,7 @@ test.describe('In-App Browser (Android Instagram)', () => {
   });
 
   // The Chrome intent for a Link's Link Shortcut on the page's host: v1's performBounce intent.
-  const deeplinkIntent = (page: Page, link: Link) => popTo('android', `https://${new URL(page.url()).host}/${username}?link=${link.id}`);
+  const deeplinkIntent = (page: Page, link: Link) => popTo(UA.androidInstagram, `https://${new URL(page.url()).host}/${username}?link=${link.id}`);
 
   test('a tap on the Deeplink Link fires v1\'s Chrome intent for its Link Shortcut in the tap\'s own task, with no Reveal before it', async ({ page }) => {
     const link = byMode.deeplink;
@@ -866,7 +872,7 @@ for (const [app, platform, userAgent, withTaps] of [
       const navigations = await recordNavigations(page);
       await openProfile(page, `/${username}/${TC}`);
       const host = new URL(page.url()).host;
-      await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, `https://${host}/${username}/${TC}`)]);
+      await expect.poll(() => popOuts(navigations)).toEqual([popTo(userAgent, `https://${host}/${username}/${TC}`)]);
       await expect(escapeOverlay(page)).toBeHidden();
     });
 
@@ -889,7 +895,7 @@ for (const [app, platform, userAgent, withTaps] of [
         const reveal = nextReveal(page);
         await openProfile(page, `/${username}/${TC}?link=${link.id}`);
         const destination = await realUrlOf(await reveal);
-        await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
+        await expect.poll(() => popOuts(navigations)).toEqual([popTo(userAgent, destination)]);
       });
 
       test(`?link={${mode} Link Id} bounces again on a second load in the same tab, as v1's \`?link=\` did`, async ({ page }) => {
@@ -899,18 +905,18 @@ for (const [app, platform, userAgent, withTaps] of [
         const first = nextReveal(page);
         await openProfile(page, `/${username}?link=${link.id}`);
         const destination = await realUrlOf(await first);
-        await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
+        await expect.poll(() => popOuts(navigations)).toEqual([popTo(userAgent, destination)]);
         const second = nextReveal(page);
         await page.reload();
         await realUrlOf(await second);
-        await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination), popTo(platform, destination)]);
+        await expect.poll(() => popOuts(navigations)).toEqual([popTo(userAgent, destination), popTo(userAgent, destination)]);
       });
     }
 
     if (withTaps) {
       test('Direct default: a tap on the Escape Link pops out to that Link from the tap itself, with no Reveal', async ({ page }) => {
         const { navigations, reveals, target } = await tapEscapeFromCode(page);
-        const href = popTo(platform, target);
+        const href = popTo(userAgent, target);
         await expect.poll(() => popOuts(navigations)).toEqual([href]);
         expect(navigations).toContainEqual({ url: href, inTapTask: true });
         expect(reveals).toHaveLength(0);
@@ -918,7 +924,7 @@ for (const [app, platform, userAgent, withTaps] of [
 
       test('Deeplink default: a tap on the Deeplink Link pops out to that Link from the tap itself, with no Reveal before it', async ({ page }) => {
         const { navigations, reveals, target } = await tapEscapeFromCode(page, byMode.deeplink, deeplinkDefault);
-        const href = popTo(platform, target);
+        const href = popTo(userAgent, target);
         await expect.poll(() => popOuts(navigations)).toEqual([href]);
         expect(navigations).toContainEqual({ url: href, inTapTask: true });
         expect(reveals).toHaveLength(0);
@@ -939,7 +945,7 @@ for (const [name, platform, userAgent] of [
     const page = await context.newPage();
     await fenceNetwork(page);
     const { navigations, reveals, target } = await tapEscapeFromCode(page, byMode.deeplink, deeplinkDefault);
-    const href = popTo(platform, target);
+    const href = popTo(userAgent, target);
     await expect.poll(() => popOuts(navigations)).toEqual([href]);
     expect(navigations).toContainEqual({ url: href, inTapTask: true });
     expect(reveals).toHaveLength(0);
@@ -1020,7 +1026,7 @@ for (const [browser, userAgent] of [
       await card(page, adult).click();
       await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
       await expect(page.locator('#continueBtn')).not.toHaveAttribute('href');
-      await expect(page.locator('a[href^="x-safari-"], a[href^="intent:"]')).toHaveCount(0);
+      await expect(page.locator('a[href^="x-safari-"], a[href^="instagram:"], a[href^="intent:"]')).toHaveCount(0);
     });
 
     test('?link={Deeplink Link Id} reveals on load, then lands on the answer, with no pop-out to Safari or Chrome', async ({ page }) => {
@@ -1069,7 +1075,7 @@ for (const [platform, userAgent] of [
       await page.waitForLoadState('networkidle');
       expect(popOuts(navigations)).toEqual([]);
 
-      const href = popTo(platform, `https://${new URL(page.url()).host}/${username}/${TC}`);
+      const href = popTo(userAgent, `https://${new URL(page.url()).host}/${username}/${TC}`);
       await escapeOverlay(page).getByRole('link', { name: 'Open in browser' }).click();
       await expect.poll(() => popOuts(navigations)).toEqual([href]);
       expect(navigations).toContainEqual({ url: href, inTapTask: true });
@@ -1082,7 +1088,7 @@ for (const [platform, userAgent] of [
       await openProfile(page, `/${username}/${TC}`);
       await closeButton(page).click();
       await card(page, link).click();
-      const href = popTo(platform, `https://${new URL(page.url()).host}/${username}/${TC}?link=${link.id}`);
+      const href = popTo(userAgent, `https://${new URL(page.url()).host}/${username}/${TC}?link=${link.id}`);
       await expect.poll(() => popOuts(navigations)).toEqual([href]);
       expect(navigations).toContainEqual({ url: href, inTapTask: true });
     });
@@ -1100,7 +1106,7 @@ for (const [platform, userAgent] of [
       await serveVariant(page, deeplinkAtOpen);
       const navigations = await recordNavigations(page);
       await openProfile(page);
-      await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, `https://${new URL(page.url()).host}/${username}`)]);
+      await expect.poll(() => popOuts(navigations)).toEqual([popTo(userAgent, `https://${new URL(page.url()).host}/${username}`)]);
       await expect(escapeOverlay(page)).toBeHidden();
     });
 
@@ -1122,7 +1128,7 @@ for (const [platform, userAgent] of [
       await page.waitForLoadState('networkidle');
       expect(popOuts(navigations)).toEqual([]);
       await card(page, link).click();
-      const href = popTo(platform, `https://${new URL(page.url()).host}/${username}?link=${link.id}`);
+      const href = popTo(userAgent, `https://${new URL(page.url()).host}/${username}?link=${link.id}`);
       await expect.poll(() => popOuts(navigations)).toEqual([href]);
       expect(navigations).toContainEqual({ url: href, inTapTask: true });
       expect(reveals).toHaveLength(0);
@@ -1146,7 +1152,7 @@ for (const [platform, userAgent] of [
           const reveal = nextReveal(page);
           await openProfile(page, `/${username}/${TC}?link=${link.id}`);
           const destination = await realUrlOf(await reveal);
-          await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
+          await expect.poll(() => popOuts(navigations)).toEqual([popTo(userAgent, destination)]);
         });
       }
     }
@@ -1206,7 +1212,7 @@ for (const [platform, inAppUA, systemUA] of [
       const navigations = await recordNavigations(page);
       await openProfile(page);
       await card(page, link).click();
-      await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, `https://${new URL(page.url()).host}/${username}?link=${link.id}`)]);
+      await expect.poll(() => popOuts(navigations)).toEqual([popTo(inAppUA, `https://${new URL(page.url()).host}/${username}?link=${link.id}`)]);
 
       const system = await systemBrowser(browser, deeplinkDefault);
       const systemNavigations = await recordNavigations(system);
@@ -1233,7 +1239,7 @@ for (const [platform, inAppUA, systemUA] of [
         await openProfile(page, `/${username}/${TC}?link=${link.id}`);
         const destination = await realUrlOf(await reveal);
         expect(destination).toBe(destinationOf(link)); // a non-Adult Link's Destination, untouched by the Tracking Code
-        await expect.poll(() => popOuts(navigations)).toEqual([popTo(platform, destination)]);
+        await expect.poll(() => popOuts(navigations)).toEqual([popTo(inAppUA, destination)]);
 
         const system = await systemBrowser(browser, defaultFor(mode));
         await system.goto(poppedTo(popOuts(navigations)[0]));

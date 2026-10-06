@@ -528,6 +528,10 @@ export async function recordNavigations(page: Page) {
 }
 export const xSafari = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('x-safari-'));
 export const intents = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('intent:'));
+// iOS Instagram's escape link (a real iPhone, 2026-10-06: Instagram drops x-safari-, follows its own open-in-browser link).
+export const IG_EXT_BROWSER = 'instagram://extbrowser/?url=';
+export const igExt = (target: string) => IG_EXT_BROWSER + encodeURIComponent(target);
+export const extBrowser = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith(IG_EXT_BROWSER));
 
 // The Escape Overlay.
 export const escapeOverlay = (page: Page) => page.locator('#igOverlay');

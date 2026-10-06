@@ -334,11 +334,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function httpsIntent(url, extra) {
         return 'intent://' + asHttps(url).slice('https://'.length) + '#Intent;scheme=https;' + extra + 'end';
     }
+    const instagramExtBrowser = url => 'instagram://extbrowser/?url=' + encodeURIComponent(asHttps(url));
     const fallbackTo = url => 'S.browser_fallback_url=' + encodeURIComponent(asHttps(url)) + ';';
 
-    // Escape link, per platform, exactly v1's performBounce strings (linkme_clone3/script.js): x-safari-https:// on iOS and the
-    // Chrome intent with no fallback on Android; anything else has none
+    // Escape link, per platform: in iOS Instagram, Instagram's own open-in-browser link, since a real iPhone (2026-10-06) showed
+    // Instagram drops x-safari-https:// while instagram://extbrowser/ goes through; elsewhere v1's performBounce strings
+    // (linkme_clone3/script.js), x-safari-https:// on iOS and the Chrome intent with no fallback on Android; anything else has none
     function escapeLink(url) {
+        if (isIOSInstagram) return instagramExtBrowser(url);
         if (isIOS) return 'x-safari-' + asHttps(url);
         if (isAndroid) return httpsIntent(url, 'package=com.android.chrome;');
         return null;
@@ -428,8 +431,9 @@ document.addEventListener('DOMContentLoaded', () => {
         igIcon.style.display = isInstagram ? '' : 'none';
         igAppName.textContent = isInstagram ? 'Instagram' : 'This app';
         igOpenBtn.href = escapeLink(target.url) || target.url;
+        // On iOS Instagram, "Try another way" is the x-safari- link "Open in browser" was before 2026-10-06
         igAltBtn.hidden = !isIOSInstagram;
-        if (isIOSInstagram) igAltBtn.href = 'instagram://extbrowser/?url=' + encodeURIComponent(target.url);
+        if (isIOSInstagram) igAltBtn.href = 'x-safari-' + asHttps(target.url);
         igTarget.textContent = target.url;
         igCloseBtn.hidden = !closeable;
         igOverlay.classList.remove('hidden');
