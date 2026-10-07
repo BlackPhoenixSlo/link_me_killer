@@ -329,11 +329,17 @@ export async function onboard() {
 // slot. The Editor and Stats work on the current one: the id kept on this device under CURRENT, else the lowest slot.
 // ASSUMPTION: the current Profile is remembered per device, not carried in the URL (the spec's, rung 5). Overturned if
 // Creators edit two Profiles in two tabs; a `?profile=` query then wins over storage.
-const MAX_PROFILES = 3;
+const MAX_PROFILES = 10;
 const CURRENT = 'oflink.profile';
 let owned = []; // the account's Profiles by slot, as the last onboarded() read them
 
 export const useProfile = (id) => localStorage.setItem(CURRENT, id);
+
+// Drop the remembered current Profile when it is the one just deleted, so the next route() falls back to the lowest slot the
+// account still owns (onboarded()), or the claim step when none is left.
+export const forgetProfile = (id) => {
+  if (localStorage.getItem(CURRENT) === id) localStorage.removeItem(CURRENT);
+};
 
 // The lowest slot none of the account's Profiles holds, or 0 when every slot is taken.
 export function freeSlot() {

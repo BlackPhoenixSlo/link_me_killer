@@ -1,7 +1,7 @@
 import { test, expect, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { account, CLAIM, EDITOR, featured, fresh, heading, logIn, onLocalStack, phoneContext, proxy, readBack, refused, verifiedCreator } from './helpers';
 
-// Phase 6, tickets 1 to 3 (docs/spec/phase-06-sites-and-domains.md, § 2 Option A): an account owns up to three Profiles, one per
+// Phase 6, tickets 1 to 3 (docs/spec/phase-06-sites-and-domains.md, § 2 Option A): an account owns up to ten Profiles, one per
 // slot. Rule checks call the proxy over HTTP as 03 does; the Editor and Stats run at 375px wide. Every Creator is a throwaway
 // (helpers.ts, verifiedCreator), taken down with the test stack; Destinations are test-only example.com addresses.
 
@@ -31,18 +31,19 @@ const narrowPage = async (browser: Browser) => (await browser.newContext({ viewp
 const profileSelect = (page: Page) => page.getByLabel('Profile', { exact: true });
 
 test.describe('the cap, over HTTP at the public origin', () => {
-  test('a verified account claims slots 2 and 3; slot 4, slot 0, no slot and a taken slot are refused', async ({ request }) => {
+  test('a verified account claims slots 2 to 10; slot 11, slot 0, no slot and a taken slot are refused', async ({ request }) => {
     const { token, id, creator } = await verifiedCreator(request, []);
-    expect((await claim(request, token, id, 4)).status(), 'slot 4').toBe(400);
+    expect((await claim(request, token, id, 11)).status(), 'slot 11').toBe(400);
     expect((await claim(request, token, id, 0)).status(), 'slot 0').toBe(400);
     expect((await proxy(request, token).post('profiles/records', { username: username(), owner: id, mode: 'escape_ig' })).status(), 'no slot').toBe(400);
     expect((await claim(request, token, id, 1)).status(), 'slot 1, taken').toBe(400);
-    expect((await claim(request, token, id, 2)).status(), 'slot 2').toBe(200);
-    expect((await claim(request, token, id, 2)).status(), 'slot 2, taken').toBe(400);
-    expect((await claim(request, token, id, 3)).status(), 'slot 3').toBe(200);
-    expect((await claim(request, token, id, 4)).status(), 'slot 4 with every slot taken').toBe(400);
-    const owned = await (await proxy(request, token).get('profiles/records?sort=slot')).json();
-    expect(owned.items.map((p: { slot: number }) => p.slot), 'the slots the account holds').toEqual([1, 2, 3]);
+    for (let slot = 2; slot <= 10; slot++) {
+      expect((await claim(request, token, id, slot)).status(), `slot ${slot}`).toBe(200);
+      expect((await claim(request, token, id, slot)).status(), `slot ${slot}, taken`).toBe(400);
+    }
+    expect((await claim(request, token, id, 11)).status(), 'slot 11 with every slot taken').toBe(400);
+    const owned = await (await proxy(request, token).get('profiles/records?sort=slot&perPage=10')).json();
+    expect(owned.items.map((p: { slot: number }) => p.slot), 'the slots the account holds').toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(owned.items[0].username).toBe(creator.username);
     // Another account's slot 1 is its own.
     const other = await verifiedCreator(request, []);
@@ -66,6 +67,19 @@ test.describe('the cap, over HTTP at the public origin', () => {
       refused(await as.patch(`profiles/records/${second.profileId}`, change));
     }
     expect(await readBack(request, { token: a.token, profileId: second.profileId })).toEqual(before);
+  });
+
+  test('a Creator deletes their own Profile, another account cannot, and the slot frees', async ({ request }) => {
+    const a = await verifiedCreator(request, []);
+    const second = await onboardedProfile(request, a.token, a.id, 2, 'Second card');
+    const b = await verifiedCreator(request, []);
+    // Another account cannot delete someone else's Profile; its link stays.
+    refused(await proxy(request, b.token).delete(`profiles/records/${second.profileId}`));
+    expect((await proxy(request, a.token).get(`profiles/records/${second.profileId}`)).status(), 'still there').toBe(200);
+    // The owner can; PocketBase answers 204, the Links and stats cascade with it, and slot 2 frees.
+    expect((await proxy(request, a.token).delete(`profiles/records/${second.profileId}`)).status(), 'owner deletes slot 2').toBe(204);
+    refused(await proxy(request, a.token).get(`profiles/records/${second.profileId}`));
+    expect((await claim(request, a.token, a.id, 2)).status(), 'slot 2 re-claimed').toBe(200);
   });
 });
 
@@ -118,15 +132,37 @@ test.describe('the Editor and Stats with several Profiles, at 375px', () => {
 
   test('with every slot taken there is no "Add a Profile", and /edit/new opens the Editor', async ({ browser, request }) => {
     const { creator, token, id } = await verifiedCreator(request, [['Only card', '']]);
-    for (const slot of [2, 3]) expect((await claim(request, token, id, slot)).status(), `slot ${slot}`).toBe(200);
+    for (let slot = 2; slot <= 10; slot++) expect((await claim(request, token, id, slot)).status(), `slot ${slot}`).toBe(200);
     const page = await narrowPage(browser);
     await logIn(page, creator);
     await expect(heading(page, EDITOR)).toBeVisible();
-    await expect(profileSelect(page).locator('option')).toHaveCount(3);
+    await expect(profileSelect(page).locator('option')).toHaveCount(10);
     await expect(page.getByRole('link', { name: 'Add a Profile', exact: true })).toHaveCount(0);
     await page.goto('/edit/new');
     await expect(heading(page, EDITOR)).toBeVisible();
     await expect(page).toHaveURL(/\/edit\/home$/);
+    await page.context().close();
+  });
+
+  test('"Delete Profile" asks first, then removes the current Profile, switches to the one left and frees its slot', async ({ browser, request }) => {
+    const { creator, token, id } = await verifiedCreator(request, [['First card', '']]);
+    await onboardedProfile(request, token, id, 2, 'Second card');
+    const page = await narrowPage(browser);
+    await logIn(page, creator);
+    await expect(heading(page, EDITOR)).toBeVisible();
+    await expect(featured(page)).toHaveText(['First card']); // the account's first Profile is current after a fresh log-in
+
+    // "Keep it" (the default) changes nothing.
+    await page.locator('[data-test="delete-profile"]').click();
+    await page.locator('[data-test="delete-profile-cancel"]').click();
+    await expect(featured(page)).toHaveText(['First card']);
+
+    // Confirming deletes the current Profile; the Editor redraws on the one the account still owns.
+    await page.locator('[data-test="delete-profile"]').click();
+    await page.locator('[data-test="delete-profile-confirm"]').click();
+    await expect(featured(page)).toHaveText(['Second card']);
+    await expect(profileSelect(page)).toHaveCount(0); // one Profile left, so no switcher select
+    await expect(page.getByRole('link', { name: 'Add a Profile', exact: true })).toHaveCount(1); // the slot is free again
     await page.context().close();
   });
 

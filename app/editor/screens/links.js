@@ -4,7 +4,7 @@
 // brief's (docs/spec/editor-redesign.md, sections 4.9 to 4.12 and 5, as ruled in section 11).
 
 import { api, upload, el, render, message, say, select, check, fileInput, ICONS, MODE_NAMES, submitting, fieldReasons, show,
-  onboard, route, address, copyButton, creatorNav, linksOf, logOut, card, field, steps, icon, pageTitle, switcher, link as navLink } from '../app.js';
+  onboard, route, address, copyButton, creatorNav, linksOf, logOut, card, field, steps, icon, pageTitle, switcher, forgetProfile, link as navLink } from '../app.js';
 import { drawRetry } from './auth.js';
 import { profileForm, quickSettings } from './profile.js';
 
@@ -66,7 +66,8 @@ const BLANK_LINK = { title: '', destination: '', icon: '', backgroundImage: '', 
 export function drawLinkForm(profile, links, { link = null, onboarding = false } = {}) {
   const current = link || BLANK_LINK;
   const title = el('input', { className: 'e-input', name: 'title', autocomplete: 'off', value: current.title });
-  const destination = el('input', { className: 'e-input', name: 'destination', inputMode: 'url', autocomplete: 'off', autocapitalize: 'none', spellcheck: false, placeholder: 'https://', value: current.destination });
+  // A new Link's Destination starts at "https://" so the Creator types only the domain and path; an opened Link keeps its own.
+  const destination = el('input', { className: 'e-input', name: 'destination', inputMode: 'url', autocomplete: 'off', autocapitalize: 'none', spellcheck: false, placeholder: 'https://', value: link ? current.destination : 'https://' });
   // An opened Link's icon shows as the stock icon its file was made from (PocketBase keeps the sent name as the file name's
   // start, `igicon_<random>.webp`); one made from no stock icon shows as "Current icon". The icon is written only when changed.
   const stock = ICONS.find(([file]) => file && current.icon.startsWith(`${file.replace(/\.webp$/, '')}_`));
@@ -128,6 +129,7 @@ export function drawLinkForm(profile, links, { link = null, onboarding = false }
       event.preventDefault();
       for (const control of Object.values(named)) control.removeAttribute('aria-invalid');
       if (!title.value.trim()) return refuse('Enter a title.', ['title']);
+      if (destination.value.trim() === 'https://') return refuse('Enter a Destination after https://.', ['destination']);
       if (!/^\d*$/.test(code.value)) return refuse('Default Tracking Code: digits only, or leave it empty.', ['defaultTrackingCode']);
       const rule = geoRule(geo.value);
       if (rule === undefined) return refuse('Geo Rule: write a JSON object, such as {"US": "5"}, or leave it empty for no Geo Rule.', ['geo']);
@@ -243,7 +245,46 @@ export function drawHome(profile, links) {
     linksCard(profile, links),
     section('profile', 'Profile', profileForm(profile, { editor: true, button: 'Save profile', done: (status) => say(status, 'Profile saved.', 'ok') })),
     section('modes', 'Quick Settings', quickSettings(profile)),
+    deleteProfileCard(profile),
     el('button', { type: 'button', className: 'e-btn e-btn--ghost', onclick: logOut }, 'Log out'));
+}
+
+// "Delete Profile": removes the current Profile and, by the relations' cascade (links, events, its Custom Domain), everything
+// under it. Asked first in the page's own dialog, like a Link's delete and the Domain's remove: "Keep it" has focus first, and
+// it or Esc closes the dialog with nothing changed. On confirm the record is deleted; forgetProfile() drops it as the current
+// one and route() redraws from the server, another Profile the account still owns or the claim step when none is left. A
+// refusal is said in the card's status line.
+function deleteProfileCard(profile) {
+  const status = message();
+  const dialog = el('dialog', { className: 'e-dialog', role: 'alertdialog', 'aria-labelledby': 'delete-profile-title', 'aria-describedby': 'delete-profile-text', 'data-test': 'delete-profile-dialog' },
+    el('h2', { className: 'e-dialog__title', id: 'delete-profile-title' }, `Delete @${profile.username}?`),
+    el('p', { className: 'e-dialog__text', id: 'delete-profile-text' }, 'This Profile, its Links, its stats and any custom domain go at once. It cannot be undone.'),
+    el('div', { className: 'e-dialog__actions' },
+      el('button', { type: 'button', className: 'e-btn e-btn--danger', 'data-test': 'delete-profile-confirm', onclick: () => dialog.close('delete') }, 'Delete Profile'),
+      el('button', { type: 'button', className: 'e-btn e-btn--secondary', autofocus: true, 'data-test': 'delete-profile-cancel', onclick: () => dialog.close() }, 'Keep it')));
+  const button = el('button', {
+    type: 'button',
+    className: 'e-btn e-btn--danger e-btn--block',
+    'data-test': 'delete-profile',
+    onclick: () => {
+      dialog.returnValue = '';
+      dialog.showModal();
+    },
+  }, 'Delete Profile');
+  dialog.addEventListener('close', async () => {
+    if (dialog.returnValue !== 'delete') return button.focus();
+    button.disabled = true;
+    const res = await api(`profiles/records/${profile.id}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) {
+      button.disabled = false;
+      return say(status, `The Profile was not deleted (${res.data.message || res.status || 'no answer'}). Try again.`);
+    }
+    forgetProfile(profile.id);
+    return route();
+  });
+  return Object.assign(card('Delete Profile',
+    el('p', { className: 'e-field__hint' }, 'Permanently remove this Profile and everything under it. This frees its slot.'),
+    button, status, dialog), { id: 'delete-profile' });
 }
 
 // The chips under the h1: plain in-page links to the cards (the router leaves a jump within the screen alone).
