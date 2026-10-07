@@ -225,9 +225,35 @@ function drawInvalidLink(what, button, endpoint) {
 // comes, the page's loading skeleton (index.html) stays.
 export async function drawVerified() {
   const res = await api('users/confirm-verification', { method: 'POST', body: { token: linkToken() } });
-  if (!res.ok) return drawInvalidLink('verification', 'Resend email', 'request-verification');
-  return draw('Email verified', mark('check', 'ok'), pageTitle('Email verified'), lead('Your email is verified.'),
-    actions(primary('Continue', { type: 'button', onclick: () => go('/edit') })));
+  // A verification token is spent on first use, so the Creator's own click can land after something else already spent
+  // it — an email provider's link scanner, a preview fetch, or the link reopened in a second tab — and PocketBase then
+  // refuses it. A refusal is therefore not proof the email is unverified. When this device's signed-in account already
+  // reads as verified, the link did its job and the "invalid" screen would be a lie, so show success either way.
+  if (res.ok || (await verifiedNow())) {
+    return draw('Email verified', mark('check', 'ok'), pageTitle('Email verified'), lead('Your email is verified.'),
+      actions(primary('Continue', { type: 'button', onclick: () => go('/edit') })));
+  }
+  return drawInvalidLink('verification', 'Resend email', 'request-verification');
+}
+
+// Whether this device is signed in as the very account the refused link names, with its email now verified — read from a
+// token refresh without disturbing the stored token. The link's subject is read from its own JWT payload (not trusted for
+// auth; the server already decided verification). A different account, no session, or any refusal is false, so only a link
+// that truly did its job shows success and a genuinely bad one still shows as invalid.
+async function verifiedNow() {
+  const subject = tokenSubject(linkToken());
+  if (!subject) return false;
+  const res = await api('users/auth-refresh', { method: 'POST' });
+  return res.ok && !!res.data.record && res.data.record.id === subject && res.data.record.verified === true;
+}
+
+// The user id a PocketBase token names, from its unverified JWT payload; '' when the token is missing or unreadable.
+function tokenSubject(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).id || '';
+  } catch {
+    return '';
+  }
 }
 
 // The reset email's link: a new password for the account its token names. PocketBase says whether the token is good only when
