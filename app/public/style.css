@@ -352,3 +352,32 @@ h1 {
 
 
 }
+
+/* Desktop ambient backdrop.
+   On wide screens the centered 600px column leaves a flat black void on either
+   side. Paint a very dim brand-accent glow behind it so the page reads as
+   intentional/premium while staying dark and keeping content legible. Gated to
+   desktop only: below this breakpoint the page stays plain full-bleed black,
+   exactly as before. Static (no animation), so prefers-reduced-motion is a no-op. */
+@media (min-width: 768px) {
+    body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        /* Soft brand-accent glows (--accent-gradient colors) kept toward the
+           edges, with a dark center vignette so the content column stays dark. */
+        background:
+            radial-gradient(60% 55% at 18% 22%, rgba(131, 58, 180, 0.16), transparent 70%),
+            radial-gradient(55% 50% at 85% 28%, rgba(253, 29, 29, 0.10), transparent 70%),
+            radial-gradient(60% 55% at 78% 88%, rgba(252, 176, 69, 0.10), transparent 70%),
+            radial-gradient(ellipse at center, transparent 30%, rgba(0, 0, 0, 0.55) 100%);
+    }
+
+    /* Keep the content column above the backdrop and visually unchanged. */
+    .container {
+        position: relative;
+        z-index: 1;
+    }
+}
