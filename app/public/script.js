@@ -142,6 +142,12 @@ document.addEventListener('DOMContentLoaded', () => {
         profileContainer.bio.textContent = profile.bio;
         profileContainer.avatar.src = profile.avatarUrl;
 
+        // Desktop backdrop (style.css body::before): the avatar, blurred.
+        if (profile.avatarUrl) {
+            document.documentElement.style.setProperty('--backdrop-url',
+                'url("' + profile.avatarUrl.replace(/["\\]/g, '\\$&') + '")');
+        }
+
         // User Request: Avatar as Page Icon (Favicon)
         let link = document.querySelector("link[rel~='icon']");
         if (!link) {
