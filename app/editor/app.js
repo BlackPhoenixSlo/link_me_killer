@@ -218,8 +218,8 @@ export const pageTitle = (text) => el('h1', { className: 'e-page__title' }, text
 // An icon from editor.css, decoration only.
 export const icon = (name) => el('span', { className: `e-icon e-icon--${name}`, 'aria-hidden': 'true' });
 
-// The Onboarding step line: plain text, never a status, over a track the stylesheet fills to n/5 from `--e-step`.
-export const steps = (n) => el('p', { className: 'e-steps', style: `--e-step: ${n}` }, `Step ${n} of 5`,
+// The Onboarding step line: plain text, never a status, over a track the stylesheet fills to n/4 from `--e-step`.
+export const steps = (n) => el('p', { className: 'e-steps', style: `--e-step: ${n}` }, `Step ${n} of 4`,
   el('span', { className: 'e-steps__track', 'aria-hidden': 'true' }));
 
 // One labelled field (`e-field`): the label names `control` alone. A `hint` shows under it, tied to it by aria-describedby

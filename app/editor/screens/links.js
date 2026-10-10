@@ -51,7 +51,7 @@ function linkReason(res, creating) {
 
 // The Link form, the same for the first-Link step (`onboarding`, from the router's Onboarding rule), the Editor's "Add link"
 // and a Link opened from the Links list (`link`, the full record, Destination included, which its owner may read). The
-// first-Link step shows "Step 4 of 5", has no Cancel and goes on to the live address. A new Link starts on Profile default,
+// first-Link step shows "Step 3 of 4", has no Cancel and goes on to the live address. A new Link starts on Profile default,
 // which stores no Mode, and takes the highest order plus one; PocketBase gives it its Link Id. An opened Link's form is filled
 // with its values, a new one's with BLANK_LINK.
 // Its own screen (the brief's ruling 4): the document scrolls, and "Save link", Cancel beside it, and the screen's one status
@@ -187,7 +187,7 @@ export function drawLinkForm(profile, links, { link = null, onboarding = false }
   if (!onboarding) foot.append(el('button', { type: 'button', className: 'e-btn e-btn--secondary', onclick: route }, 'Cancel'));
   const heading = onboarding ? 'Add your first Link' : link ? 'Edit link' : 'Add link';
   render(heading, el('div', { className: 'e-sheet' },
-    el('div', { className: 'e-sheet__head' }, ...(onboarding ? [steps(4)] : []), pageTitle(heading),
+    el('div', { className: 'e-sheet__head' }, ...(onboarding ? [steps(3)] : []), pageTitle(heading),
       el('p', { className: 'e-page__lead' }, 'Where the card on your page leads.')),
     form,
     foot));
@@ -198,7 +198,7 @@ function drawLive(profile) {
   const url = address(profile);
   const status = message();
   render('Your page is live', el('div', { className: 'e-card' },
-    steps(5),
+    steps(4),
     pageTitle('Your page is live'),
     el('p', { className: 'e-page__lead' }, 'Paste this address into your Instagram or TikTok bio.'),
     el('p', { className: 'live-address e-live__address', 'data-test': 'live-address' }, url),

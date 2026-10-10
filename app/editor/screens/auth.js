@@ -183,7 +183,7 @@ export function drawVerify() {
       return onboard();
     },
   });
-  draw('Verify your email', steps(2), mark('mail'), pageTitle('Verify your email'),
+  draw('Verify your email', mark('mail'), pageTitle('Verify your email'),
     lead('We sent a link to ', el('strong', {}, account.email), '. Open it to verify your email, then press Continue.'),
     actions(status, next, resend));
 }
