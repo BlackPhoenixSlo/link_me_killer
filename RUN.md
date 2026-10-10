@@ -131,7 +131,7 @@ Self-service since Phase 6 (docs/spec/phase-06-sites-and-domains.md, § 3 Option
 
 **Once, on the VPS** (before the first Creator adds a domain): in the untracked `.env`, set `ORIGIN_IPV4=<the VPS's public IPv4>` and `ORIGIN_IPV6=<its public IPv6, or empty if it has none>`, and leave `DNS_SERVERS` empty (the test stack's fake DNS only). Then deploy by Phase 2's procedure. Until `ORIGIN_IPV4` is set, no domain can go live, and the check says so. These are the addresses every Creator's A and AAAA records name, so changing the VPS's address means every Creator edits their DNS.
 
-**The Creator's steps** (the Editor's Domain screen, `/edit/domain`; a verified email is needed, and one domain per Profile):
+**The Creator's steps** (the Editor's Domain screen, `/edit/domain`; one domain per Profile, verified email or not, ADR 0006):
 
 1. Type the domain, e.g. `jakabasej.com`, exactly as it will go in the bio, and press "Add domain".
 2. Add the records the screen lists where the domain's DNS is managed: `A` (and `AAAA` if `ORIGIN_IPV6` is set) to the VPS, and `TXT _oflink` holding `oflink-verify=<token>`. Every other A or AAAA for that name is deleted; on Cloudflare the record is DNS only (grey cloud). No CNAME to ofl.ink.
@@ -153,7 +153,7 @@ test "$(dig +short A "$DOMAIN")" = "$VPS_IPV4" && test "$(curl -s -o /dev/null -
 ssh "$VPS" "cd $V2_DIR && docker compose restart caddy"
 ```
 
-**Abuse.** Every verified sign-up can point a domain at the VPS and serve its own Links from it, and every Custom Domain is DNS-only, so it publishes the VPS's address that Cloudflare hides for ofl.ink. An abuse report to Hostinger names that address, and a suspension takes ofl.ink, every domain and n8n down together. The Operator's lever: delete the `customDomains` record, or the account (Phase 3 story 56), then restart Caddy as above. "Powered by ofl.ink" stays on every Custom Domain.
+**Abuse.** Every sign-up, verified or not, can point a domain at the VPS and serve its own Links from it, and every Custom Domain is DNS-only, so it publishes the VPS's address that Cloudflare hides for ofl.ink. An abuse report to Hostinger names that address, and a suspension takes ofl.ink, every domain and n8n down together. The Operator's lever: delete the `customDomains` record, or the account (Phase 3 story 56), then restart Caddy as above. "Powered by ofl.ink" stays on every Custom Domain.
 
 ## Cutover (docs/spec/phase-05-cutover-and-domains.md, Acceptance, steps 1 to 15)
 

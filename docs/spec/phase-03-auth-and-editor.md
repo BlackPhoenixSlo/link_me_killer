@@ -201,7 +201,7 @@ Operator
     - OnlyFans tracking: a boolean.
     - Default Tracking Code: digits only, or empty. v1's Reveal drops any code that is not all digits (observed: `linkme_clone3/netlify/functions/reveal.js:25`).
     - Order: a number per Link. A new Link takes the highest order plus one.
-  - **Email links.** The users collection's verification and password-reset templates point at `{APP_URL}/edit/verify?token={TOKEN}` and `{APP_URL}/edit/reset?token={TOKEN}`. PocketBase's Application URL is the public origin, and the Operator sets it (`# manual:`).
+  - **Email links.** The users collection's verification and password-reset templates point at `{APP_URL}/edit/verify?token={TOKEN}` and `{APP_URL}/edit/reset?token={TOKEN}`. PocketBase's Application URL is the public origin: a non-empty `PB_APP_URL` sets it on every PocketBase start (`pocketbase/pb_hooks/app_url.pb.js`), else the Operator sets it (`# manual:`).
 - **Sign-up is public** (rung 2: plan §9 D9, "PUBLIC sign-up … no invite list"). Anyone may create a users record, and the Operator shares the sign-up link privately. Email verification stays. Content rules, abuse reporting and captcha stay Bonus unless abuse appears (Out of Scope).
 - **Content writes do not need a verified email; only a password reset needs a confirmed mailbox** (ADR 0006). Keeping the claim at sign-up is rung 2: plan §6 says "username claimed on signup". Before verifying, an account may claim its Username, fill in its Profile, upload images and add, edit and delete Links. No profiles or links rule reads `@request.auth.verified`. Until the account is verified, the Editor shell shows a non-blocking notice: "Email not verified. You can use everything, but you can't reset your password until you confirm it." with a "Resend email" button. It goes once PocketBase reports the account verified.
   ASSUMPTION: the verified-email gate on content writes (rung 4: a closed rule is cheaper to undo than strangers' content on a shared domain that can be Flagged). Overturned 2026-10-10: the Operator wants a self-hosted deploy with no SMTP usable out of the box, so new Creators publish before verifying, and `1791140019` takes the clause out of the four rules (ADR 0006).
@@ -357,7 +357,7 @@ cd "$(git rev-parse --show-toplevel)"
 test -f tests/e2e/03-auth-and-editor.spec.ts
 npx playwright test tests/e2e/03-auth-and-editor.spec.ts
 test -s .scratch/goal_ai/shots/03-auth-and-editor.png
-# manual: in PocketBase's admin UI on the VPS, set Settings -> Application URL to the public origin and Settings -> Mail to the Operator's SMTP sender (host, port, user, password, from-address); a human-held credential, never committed.
+# manual: in PocketBase's admin UI on the VPS, set Settings -> Application URL to the public origin (unless PB_APP_URL sets it) and Settings -> Mail to the Operator's SMTP sender (host, port, user, password, from-address); a human-held credential, never committed.
 # manual: with SMTP set, sign up with a real inbox, follow the verification link (the screen says verified), then "Forgot password" -> follow the email link -> set a new password -> log in with it.
 # manual: on a real iPhone (Safari) and Android phone (Chrome), complete Onboarding with a camera photo (HEIC on iOS) as avatar and background; the public Profile shows both as webp.
 # manual: in PocketBase's admin UI on the VPS, Settings -> Backups: auto backups on, cron 0 3 * * *, keep 7. Public sign-up makes v2 the only copy of new Profiles from this deploy on (Further Notes, Backups).

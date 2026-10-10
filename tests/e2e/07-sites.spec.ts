@@ -1,5 +1,5 @@
 import { test, expect, type APIRequestContext, type Browser, type Page } from '@playwright/test';
-import { account, CLAIM, EDITOR, featured, fresh, heading, logIn, onLocalStack, phoneContext, proxy, readBack, refused, verifiedCreator } from './helpers';
+import { account, CLAIM, EDITOR, featured, fresh, heading, logIn, onLocalStack, phoneContext, proxy, readBack, refused, signUp, verifiedCreator } from './helpers';
 
 // Phase 6, tickets 1 to 3 (docs/spec/phase-06-sites-and-domains.md, § 2 Option A): an account owns up to ten Profiles, one per
 // slot. Rule checks call the proxy over HTTP as 03 does; the Editor and Stats run at 375px wide. Every Creator is a throwaway
@@ -127,6 +127,39 @@ test.describe('the Editor and Stats with several Profiles, at 375px', () => {
     await expect(featured(page)).toHaveText(['First card']);
     await expect(profileSelect(page).locator('option:checked')).toHaveText(`@${creator.username}`);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), 'no horizontal overflow').toBe(true);
+    await page.context().close();
+  });
+
+  // A fresh install has no SMTP, so no verification email ever goes out (ADR 0006). Here the verification request fails outright,
+  // and the account, never verified, still signs up, claims, goes through Onboarding and adds a second Profile in the Editor.
+  test('with the verification email failing, a never-verified account signs up, claims and adds a second Profile', async ({ browser, request }) => {
+    const page = await narrowPage(browser);
+    let asked = false;
+    await page.route('**/api/collections/users/request-verification', (route) => {
+      asked = true;
+      return route.abort('failed');
+    });
+    const creator = fresh();
+    await signUp(page, creator);
+    await expect(heading(page, 'Your Profile')).toBeVisible();
+    expect(asked, 'sign-up asked for the verification email').toBe(true);
+    await expect(page.locator('[data-test="unverified-banner"]')).toBeVisible();
+    await page.getByLabel('Display name').fill('No Mail');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByLabel('Title').fill('First card');
+    await page.getByLabel('Destination').fill(`https://example.com/${creator.username}/0`);
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await page.getByRole('button', { name: 'Go to the Editor' }).click();
+    await expect(heading(page, EDITOR)).toBeVisible();
+
+    await page.getByRole('link', { name: 'Add a Profile', exact: true }).click();
+    await expect(heading(page, CLAIM)).toBeVisible();
+    const second = username();
+    await page.getByLabel('Username').fill(second);
+    await page.getByRole('button', { name: 'Claim' }).click();
+    await expect(heading(page, 'Your Profile')).toBeVisible();
+    await expect(page.locator('[data-test="unverified-banner"]')).toBeVisible();
+    for (const name of [creator.username, second]) expect((await request.get(`/api/profiles/${name}.json`)).status(), name).toBe(200);
     await page.context().close();
   });
 

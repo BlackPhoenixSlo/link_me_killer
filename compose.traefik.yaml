@@ -1,0 +1,34 @@
+# Behind a Traefik container that already owns ports 80 and 443 (README, Deploy; written by deploy/install.sh): Traefik
+# terminates TLS for TRAEFIK_HOST with its own certificate resolver and hands plain HTTP to Caddy's container port 80
+# (SITE_ADDRESS=:80) over Traefik's network, so Caddy publishes no host port. Selected by
+# COMPOSE_FILE=compose.yaml:compose.traefik.yaml and the TRAEFIK_* lines in .env. The labels serve Traefik's Docker provider;
+# with its file provider only, install.sh writes a route to this container instead and the labels are inert.
+# Not TLS passthrough (that is compose.vps.yaml, the original box): Traefik holds the certificates, so a Custom Domain is
+# served only once the Operator adds a Traefik route for it.
+# On a shared network another project's container may answer to `app` (compose.vps.yaml), so Caddy reaches ours as oflink-app.
+services:
+  app:
+    networks:
+      default:
+        aliases: [oflink-app]
+  caddy:
+    ports: !reset []
+    environment:
+      APP_UPSTREAM: oflink-app:3000
+    networks:
+      default: {}
+      traefik: {}
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:?}
+      - traefik.http.routers.${TRAEFIK_ROUTER:?}.rule=Host(`${TRAEFIK_HOST:?}`)
+      - traefik.http.routers.${TRAEFIK_ROUTER:?}.entrypoints=${TRAEFIK_ENTRYPOINT:?}
+      - traefik.http.routers.${TRAEFIK_ROUTER:?}.service=${TRAEFIK_ROUTER:?}
+      # tls.certresolver=<resolver>, or tls=true when TRAEFIK_RESOLVER is empty: either turns TLS on.
+      - traefik.http.routers.${TRAEFIK_ROUTER:?}.tls${TRAEFIK_RESOLVER:+.certresolver}=${TRAEFIK_RESOLVER:-true}
+      - traefik.http.services.${TRAEFIK_ROUTER:?}.loadbalancer.server.port=80
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK:?}
+    external: true

@@ -251,6 +251,12 @@ const editor = (c) => staticFile(c, EDITOR, c.req.path.slice('/edit'.length));
 app.get('/edit', editor);
 app.get('/edit/*', editor);
 
+// Liveness for deploy/install.sh and the Operator: an empty 200 on every host once the app answers. Under the reserved
+// `internal`, as the TLS Ask below, so it takes no Username (Phase 3 spec, Reserved names) and needs no new migration.
+// ASSUMPTION: liveness only, no PocketBase read (rung 5: the app starts only once PocketBase's healthcheck passes, compose.yaml).
+// Overturned if the installer or a monitor must see PocketBase fail after start; the route then asks PocketBase's /api/health.
+app.get('/internal/healthz', (c) => c.body(null, 200, { 'Cache-Control': 'no-store' }));
+
 // The TLS Ask (Phase 5 spec, Interfaces): Caddy's question before it issues a certificate for `domain`. An empty 200 for a
 // primary host, a Spare Domain or a Custom Domain, 404 for anything else, 400 when `domain` is missing or not a hostname, and
 // 503 when PocketBase cannot be read for a non-primary host, which Caddy also takes as no. It confirms one hostname the caller

@@ -67,6 +67,9 @@ services:
     environment:
       PB_SUPERUSER_EMAIL: ${PB_SUPERUSER_EMAIL:?set PB_SUPERUSER_EMAIL (see .env.example)}
       PB_SUPERUSER_PASSWORD: ${PB_SUPERUSER_PASSWORD:?set PB_SUPERUSER_PASSWORD (see .env.example)}
+      # The site's public URL, which a startup hook sets as PocketBase's Application URL so verification and reset emails
+      # link to this host (see .env.example). Empty by default, as in tests.
+      PB_APP_URL: ${PB_APP_URL:-}
     volumes:
       - pb_data:/pb/pb_data
     healthcheck:

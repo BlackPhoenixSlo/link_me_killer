@@ -1,8 +1,8 @@
 /// <reference path="../pb_data/types.d.ts" />
 // Phase 3, ticket 31 (docs/spec/phase-03-auth-and-editor.md, Interfaces, Email links): the users collection's verification and
 // password-reset emails link to the Editor's two fixed URLs, `{APP_URL}/edit/verify?token={TOKEN}` and
-// `{APP_URL}/edit/reset?token={TOKEN}`, instead of PocketBase's admin UI. The Application URL is the public origin: the Operator
-// sets it on the VPS, and tests/stack.sh sets it in the test stack.
+// `{APP_URL}/edit/reset?token={TOKEN}`, instead of PocketBase's admin UI. The Application URL is the public origin: PB_APP_URL
+// sets it on start (pb_hooks/app_url.pb.js), else the Operator sets it on the VPS; tests/stack.sh sets it in the test stack.
 // ASSUMPTION: only the link in PocketBase's stock template changes and its wording stays (rung 5: one replace per template;
 // observed on 0.40.4: the stock bodies link to `{APP_URL}/_/#/auth/confirm-verification/{TOKEN}` and
 // `{APP_URL}/_/#/auth/confirm-password-reset/{TOKEN}`). Overturned if the Operator wants the emails reworded; that is a body
