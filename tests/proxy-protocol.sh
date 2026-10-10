@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Ticket 45, outside the Playwright loop: with Caddy's PROXY protocol flag on (PROXY_PROTOCOL_FROM, compose.yaml), two
-# Visitors behind one proxy stay two clients of the Reveal and /r limit, and nothing else Caddy hears is trusted.
+# Visitors behind one proxy stay two clients of the Reveal limit, and nothing else Caddy hears is trusted.
 # It brings the test stack up once through tests/side-stack.sh, under its own Compose project and host ports so it never meets
 # `./check.sh`'s oflinkv2-e2e stack, with REVEAL_LIMIT_PER_MINUTE=1 and the Fixture site alone, and takes it down with its
 # volumes on every exit path. Run it only while no oflinkv2 stack is up: tests/proxy-protocol.sh   # exit 0 on success
-# It prints status codes only: a /r answer's Location holds a Destination.
+# It prints status codes only: a Reveal answer's body holds a Destination.
 # ASSUMPTION: the allowed proxy is 127.0.0.1/32, with the probe sharing Caddy's network namespace, rather than a container
 # address on the Compose network (rung 5: a fixed value the stack can start with, where a container's address is known only
 # after the network exists; it also leaves the probe that runs on the Compose network, and the host's gateway address,
@@ -24,7 +24,7 @@ compose exec -T caddy caddy adapt --config /etc/caddy/Caddyfile 2> /dev/null | n
   console.log(`caddy'"'"'s listener wrappers: ${JSON.stringify(wrappers)}`);
   process.exit(wrappers.some((w) => w.wrapper === "proxy_protocol") ? 0 : 1)' || { echo "no proxy_protocol wrapper: the flag is off"; exit 1; }
 
-# The probe: one fresh TCP connection per step to Caddy's listener, each a GET /r/{Link Id} with the page's own Origin,
+# The probe: one fresh TCP connection per step to Caddy's listener, each a GET of Reveal for {Link Id} with the page's own Origin,
 # preceded by `PROXY TCP4 <src> ...` unless the step's source is `none`. Steps are `<src>=<status wanted>`; it waits out the
 # last 10 s of a minute first, so a step sequence never straddles the fixed window's boundary.
 probe='
@@ -34,7 +34,7 @@ probe='
   const ask = (src) => new Promise((resolve, reject) => {
     const socket = net.connect(Number(port), host, () => socket.write(
       (src === "none" ? "" : `PROXY TCP4 ${src} 10.0.0.1 40000 ${port}\r\n`) +
-      `GET /r/${linkId} HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nConnection: close\r\n\r\n`));
+      `GET /.netlify/functions/reveal?id=${linkId}&user=fixture HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nConnection: close\r\n\r\n`));
     let head = "";
     socket.setTimeout(5000, () => socket.destroy(new Error("timeout")));
     socket.on("data", (d) => { head += d; const m = /^HTTP\/1\.[01] (\d{3})/.exec(head); if (m) { resolve(m[1]); socket.destroy(); } });
@@ -58,7 +58,7 @@ app_image="$(docker inspect --format '{{.Image}}' "$(compose ps -q app)")"
 
 echo "from the allowed address (127.0.0.1, in Caddy's network namespace): Visitor A twice, Visitor B, then no header"
 docker run --rm --label "com.docker.compose.project=$COMPOSE_PROJECT_NAME" --network "container:$caddy" "$app_image" \
-  node -e "$probe" 127.0.0.1:80 "$link" 198.51.100.7=302 198.51.100.7=429 198.51.100.8=302 none=302 || exit 1
+  node -e "$probe" 127.0.0.1:80 "$link" 198.51.100.7=200 198.51.100.7=429 198.51.100.8=200 none=200 || exit 1
 echo "from a container on the Compose network (not allowed): no header, then a forged header naming a fresh source"
-compose run --rm --no-deps app node -e "$probe" caddy:80 "$link" none=302 203.0.113.9=429 || exit 1
+compose run --rm --no-deps app node -e "$probe" caddy:80 "$link" none=200 203.0.113.9=429 || exit 1
 echo "PASS: two Visitors behind the allowed proxy are two clients; a header from any other address is not trusted"

@@ -7,11 +7,11 @@ import {
 import { withoutBootstrap } from './domains-helpers';
 
 // Phase 4 (docs/spec/phase-04-stats.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL. Every Visitor
-// is a fresh browser context with its country sent as `CF-IPCountry`; `/r` is sent on for real without following its redirect
-// and fulfilled with a local stub page (throughR, below). The Stats Creator reads Stats at 390×844, by role.
+// is a fresh browser context with its country sent as `CF-IPCountry`; every Link Reveals on click, and the onward navigation
+// is fulfilled with a local stub page (throughReveal, below). The Stats Creator reads Stats at 390×844, by role.
 // The tests share the seeded Profiles (tests/stats-seed.js), which only this spec visits, so they run serially and count by
 // delta, each one also making traffic its assertion must leave out. It runs in the chromium project, so before the
-// reveal-guard project (playwright.config.ts) whose used-up window would refuse its `/r` calls.
+// reveal-guard project (playwright.config.ts) whose used-up window would refuse its Reveal calls.
 // Ticket 33: test 1, test 6, and the Page View Ping's unknown Username and GET.
 // Ticket 34: tests 2, 3 and 5, and test 4's first Visitor; a Destination handed out by Reveal is a fresh navigation, fulfilled
 // with the same stub page (throughReveal, below).
@@ -52,24 +52,11 @@ async function countedVisit(
   return visitor;
 }
 
-// `act` sends the Visitor to `/r`. Its request is sent on for real without following the redirect, which must be a 302 to
-// `destination`, and the navigation is fulfilled with a local stub page, so no browser looks up a `.test` host.
+// Every Link now Reveals on click (the `/r` redirector is gone), so a Visitor's click and a Link Shortcut both drive through
+// Reveal (throughReveal, below); the onward navigation is fulfilled with a local stub page, so no browser looks up a `.test` host.
 const STUB = '<!DOCTYPE html><title>Stub</title><h1>Stub Destination</h1>';
 const landedOnStub = (visitor: Page) => expect(visitor.getByRole('heading', { name: 'Stub Destination' })).toBeVisible();
-async function throughR(visitor: Page, destination: string, act: () => Promise<unknown>) {
-  let answer: { status: number; location?: string } | undefined;
-  await visitor.route('**/r/*', async (route) => {
-    const res = await route.fetch({ maxRedirects: 0 });
-    answer = { status: res.status(), location: res.headers().location };
-    await route.fulfill({ status: 200, contentType: 'text/html', body: STUB });
-  });
-  await act();
-  await landedOnStub(visitor);
-  expect(answer, `/r to ${destination}`).toEqual({ status: 302, location: destination });
-}
 const linkCard = (visitor: Page, title: string) => visitor.locator('.link-card', { hasText: title });
-// The Visitor clicks the Link titled `title`, which goes through `/r`.
-const followThroughR = (visitor: Page, title: string, destination: string) => throughR(visitor, destination, () => linkCard(visitor, title).click());
 
 // `act` makes the page Reveal a Link. The spec waits for Reveal's 200, and the page's onward navigation off `origin`, a fresh
 // navigation to the Destination Reveal handed out, is fulfilled with the stub page and must be at `destination`. Returns the
@@ -91,6 +78,9 @@ const passGateToStub = (visitor: Page, origin: string, title: string, destinatio
     await expect(visitor.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
     await visitor.getByRole('button', { name: 'Continue (18+)' }).click();
   });
+// The Visitor clicks the non-Adult Link titled `title`, which Reveals and navigates to its Destination.
+const followReveal = (visitor: Page, origin: string, title: string, destination: string) =>
+  throughReveal(visitor, origin, destination, () => linkCard(visitor, title).click());
 
 // The Link Id of the Link titled `title`, as the public Profile JSON serves it.
 async function servedLinkId(request: APIRequestContext, username: string, title: string) {
@@ -201,17 +191,17 @@ function expectCtrs(read: StatsRead) {
   for (const [name, row] of Object.entries(read.countries)) expect(row.CTR, `Countries: ${name}`).toBe(ctr(count(row.Clicks), count(row['Page Views'])));
 }
 
-test('1. a Page View and a Click through /r reach the Stats page, paged at any size, with no horizontal overflow at 390×844', async ({ browser, baseURL }) => {
+test('1. a Page View and a Click through Reveal reach the Stats page, paged at any size, with no horizontal overflow at 390×844', async ({ browser, baseURL }) => {
   const origin = new URL(baseURL!).origin;
   const { page, events, statsRequests } = await creatorOnStats(browser, origin);
   const before = await readStats(page);
 
   // Left out of the Stats Creator's numbers: the Other Profile's own Page View and Click, from the same country.
   const elsewhere = await countedVisit(browser, origin, other.username, { country: 'SI' });
-  await followThroughR(elsewhere, other.direct.title, other.direct.destination);
+  await followReveal(elsewhere, origin, other.direct.title, other.direct.destination);
   await elsewhere.context().close();
   const visitor = await countedVisit(browser, origin, stats.username, { country: 'SI' });
-  await followThroughR(visitor, stats.direct.title, stats.direct.destination);
+  await followReveal(visitor, origin, stats.direct.title, stats.direct.destination);
   await visitor.context().close();
 
   await page.reload();
@@ -286,7 +276,7 @@ test('2. Adult Link Clicks through the Age Gate count, and the Link and Country 
   await passGateToStub(adultSI, origin, stats.adult.title, stats.adult.destination);
   await adultSI.context().close();
   const directSI = await countedVisit(browser, origin, stats.username, { country: 'SI' });
-  await followThroughR(directSI, stats.direct.title, stats.direct.destination);
+  await followReveal(directSI, origin, stats.direct.title, stats.direct.destination);
   await directSI.context().close();
   const adultDE = await countedVisit(browser, origin, stats.username, { country: 'DE' });
   await passGateToStub(adultDE, origin, stats.adult.title, stats.adult.destination);
@@ -327,25 +317,24 @@ test('2. Adult Link Clicks through the Age Gate count, and the Link and Country 
   await page.context().close();
 });
 
-test('3. Link Shortcuts count through /r and through Reveal; an unknown Link Id and a refused Reveal count nothing', async ({ browser, baseURL, request }) => {
+test('3. Link Shortcuts count through Reveal; an unknown Link Id and a refused Reveal count nothing', async ({ browser, baseURL, request }) => {
   const origin = new URL(baseURL!).origin;
   const { page, events } = await creatorOnStats(browser, origin);
   const before = await readStats(page);
   const directId = await servedLinkId(request, stats.username, stats.direct.title);
   const adultId = await servedLinkId(request, stats.username, stats.adult.title);
 
-  // A non-Adult Link's Shortcut follows its `/r` url. An Adult Link's Shortcut Reveals on load; a Link Shortcut has no Age Gate
-  // (app/public/script.js), so none shows to pass. Each load is committed only: the page leaves it for the Destination at once.
-  const viaR = await (await phoneContext(browser, { origin })).newPage();
-  await throughR(viaR, stats.direct.destination, () => viaR.goto(`/${stats.username}?link=${directId}`, { waitUntil: 'commit' }));
-  await viaR.context().close();
+  // A Link Shortcut Reveals on load, the Adult Link included; a Link Shortcut has no Age Gate (app/public/script.js), so none
+  // shows to pass. Each load is committed only: the page leaves it for the Destination at once.
+  const viaDirect = await (await phoneContext(browser, { origin })).newPage();
+  await throughReveal(viaDirect, origin, stats.direct.destination, () => viaDirect.goto(`/${stats.username}?link=${directId}`, { waitUntil: 'commit' }));
+  await viaDirect.context().close();
   const viaReveal = await (await phoneContext(browser, { origin })).newPage();
   await throughReveal(viaReveal, origin, stats.adult.destination, () => viaReveal.goto(`/${stats.username}?link=${adultId}`, { waitUntil: 'commit' }));
   await viaReveal.context().close();
 
-  // Left out: an unknown Link Id on `/r` and on Reveal, and a Reveal for the Adult Link from another origin.
+  // Left out: an unknown Link Id on Reveal, and a Reveal for the Adult Link from another origin.
   const unknownId = '000000000000';
-  expect((await request.get(`/r/${unknownId}`, { maxRedirects: 0 })).status(), '/r for an unknown Link Id').toBe(404);
   expect((await request.get(`/.netlify/functions/reveal?id=${unknownId}&user=${stats.username}`)).status(), 'Reveal for an unknown Link Id').toBe(404);
   const foreign = await request.get(`/.netlify/functions/reveal?id=${adultId}&user=${stats.username}`, { headers: { Origin: 'https://elsewhere.test' } });
   expect(foreign.status(), 'a foreign-Origin Reveal for the Adult Link').toBe(403);
@@ -634,17 +623,17 @@ test('9. a deleted Link keeps its Clicks in the totals, under "Deleted link"', a
   const { page, events } = await creatorOnStats(browser, origin);
   const before = await readStats(page);
 
-  // The Operator adds a Link with a stub Destination, a Visitor opens its `/r`, and another follows the Direct Mode Link, a Click
-  // that must not move to "Deleted link".
+  // The Operator adds a Link with a stub Destination, a Visitor Reveals it through its Shortcut, and another follows the Direct
+  // Mode Link, a Click that must not move to "Deleted link".
   const doomed = { title: 'Stats Doomed', destination: 'https://stats-doomed.test/' };
   const { profileId } = await recordIds(stats.username);
   expect(await operator('POST', '/api/collections/links/records', { ...doomed, profile: profileId, order: 2, mode: 'direct' }), 'the Operator adds a Link').toBe(200);
   const link = await only(await superuserToken(), 'links', `profile='${profileId}' && title='${doomed.title}'`);
   const opener = await (await phoneContext(browser, { origin })).newPage();
-  await throughR(opener, doomed.destination, () => opener.goto(`/r/${link.linkId}`));
+  await throughReveal(opener, origin, doomed.destination, () => opener.goto(`/${stats.username}?link=${link.linkId}`, { waitUntil: 'commit' }));
   await opener.context().close();
   const visitor = await countedVisit(browser, origin, stats.username, { country: 'SI' });
-  await followThroughR(visitor, stats.direct.title, stats.direct.destination);
+  await followReveal(visitor, origin, stats.direct.title, stats.direct.destination);
   await visitor.context().close();
 
   await page.reload();
@@ -672,7 +661,7 @@ test('10. a deleted Profile takes its Events with it, and its delete succeeds', 
   expect(await eventCount(`profile='${profileId}'`), 'its Events after the delete').toBe(0);
 });
 
-test('11. while every Event write fails, /r still redirects and Reveal still answers, both to their Destinations', async ({ browser, baseURL }) => {
+test('11. while every Event write fails, Reveal still answers to its Destinations', async ({ browser, baseURL }) => {
   const origin = new URL(baseURL!).origin;
   const { profileId } = await recordIds(stats.username);
   const written = () => eventCount(`profile='${profileId}'`);
@@ -684,7 +673,7 @@ test('11. while every Event write fails, /r still redirects and Reveal still ans
     const was = await written();
     // The ping's write fails too, and is swallowed like the Clicks' writes, so the Visitor is still told 204.
     const direct = await countedVisit(browser, origin, stats.username, { country: 'SI' });
-    await followThroughR(direct, stats.direct.title, stats.direct.destination);
+    await followReveal(direct, origin, stats.direct.title, stats.direct.destination);
     await direct.context().close();
     const adult = await countedVisit(browser, origin, stats.username, { country: 'SI' });
     await passGateToStub(adult, origin, stats.adult.title, stats.adult.destination);
@@ -696,17 +685,18 @@ test('11. while every Event write fails, /r still redirects and Reveal still ans
   expect(await eventFields(), 'the events fields once the field is gone').toEqual(fields.map((f) => f.name));
 });
 
-test('12. the Page View Ping meets its own limit per client and Username, apart from other Profiles\' pings and from /r', async ({ request }) => {
+test('12. the Page View Ping meets its own limit per client and Username, apart from other Profiles\' pings and from Reveal', async ({ request }) => {
   // A Username unique to this run, so a window an earlier run used up cannot leak in.
   const flooded = `flood_${Date.now().toString(36)}`;
   await createOwnerlessProfile(flooded, 'Flood Profile', { title: 'Flood Direct', destination: 'https://flood-direct.test/' });
   expect(await callsTo429(() => request.post(`/v/${flooded}`), [204]), '429 within the Reveal threshold + 1 pings').toBeGreaterThan(0);
   const over = await request.post(`/v/${flooded}`);
   expect({ status: over.status(), body: await over.json() }, 'a ping over the limit, as Reveal answers one').toEqual({ status: 429, body: { error: 'Too many requests' } });
-  // Right after: the Stats Profile's ping and its Direct Mode Link's `/r`, each with a window of its own.
+  // Right after: the Stats Profile's ping and a Reveal of its Direct Mode Link, each with a window of its own.
   expect((await request.post(`/v/${stats.username}`)).status(), 'a ping for the Stats Profile').toBe(204);
-  const viaR = await request.get(`/r/${await servedLinkId(request, stats.username, stats.direct.title)}`, { maxRedirects: 0 });
-  expect({ status: viaR.status(), location: viaR.headers().location }, '/r for the Direct Mode Link').toEqual({ status: 302, location: stats.direct.destination });
+  const directId = await servedLinkId(request, stats.username, stats.direct.title);
+  const reveal = await request.get(`/.netlify/functions/reveal?id=${directId}&user=${stats.username}`);
+  expect({ status: reveal.status(), realUrl: (await reveal.json()).realUrl }, 'Reveal for the Direct Mode Link').toEqual({ status: 200, realUrl: stats.direct.destination });
   await deleteProfile(flooded);
 });
 

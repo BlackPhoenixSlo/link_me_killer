@@ -91,8 +91,8 @@ export function drawLinkForm(profile, links, { link = null, onboarding = false }
   const removeBackground = current.backgroundImage ? toggle('removeBackground', 'Remove background', 'Picking a new image replaces it instead.') : null;
   const adult = toggle('isAdult', '18+ Age Gate', 'Visitors who tap it on your page confirm they are 18 or older first. Works with any Mode.', current.isAdult);
   const profileMode = MODE_NAMES[profile.mode] || MODE_NAMES.escape_ig;
-  // The Deeplink Modes are Profile defaults only (ADR 0003, amended 2026-10-06): a Link offers Direct or Escape, or inherits.
-  const linkModes = Object.entries(MODE_NAMES).filter(([value]) => value === 'direct' || value === 'escape_ig');
+  // A Link offers Direct or Escape, or inherits the Profile's default.
+  const linkModes = Object.entries(MODE_NAMES);
   const mode = select('mode', [['', `Profile default (currently ${profileMode})`], ...linkModes], current.mode);
   const tracking = toggle('tracking', 'OnlyFans tracking', 'Adds a Tracking Code to the address so OnlyFans credits each subscriber to its source.', current.tracking);
   const code = el('input', { className: 'e-input', name: 'defaultTrackingCode', inputMode: 'numeric', autocomplete: 'off', value: current.defaultTrackingCode });

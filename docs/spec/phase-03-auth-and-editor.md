@@ -1,5 +1,7 @@
 # Phase 03 — Login, register, Profile creation, add Links, Editor UI
 
+> **Amendment 2026-10-10.** A Mode is Direct or Escape only; `deeplink` and `deeplink_open` are removed (iOS/Instagram escape is passive, with no native scheme). See phase-01's amendment note.
+
 **Objective.** Anyone holding the sign-up link can create an account, claim a Username, verify their email and build their Profile and Links in a phone-first Editor styled on the link.me Template. Every save is live on their v2 Profile at the next page load, and PocketBase's collection rules let only them change it.
 
 ## Problem Statement

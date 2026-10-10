@@ -81,13 +81,6 @@ async function shootClip(page: Page, origin: string, name: string, clip: (p: Pag
   await toWebp(png, name);
 }
 
-// A single element, cropped to its own box (the Editor's Quick Settings card).
-async function shootEl(page: Page, origin: string, name: string, selector: string) {
-  await settle(page, origin);
-  const png = join(PNG_DIR, `${name}.png`);
-  await page.locator(selector).screenshot({ path: png, animations: 'disabled' });
-  await toWebp(png, name);
-}
 
 // The PNG as WebP at q80, stepping the quality down until it fits MAX_BYTES, at exactly its <img>'s width and height.
 async function toWebp(png: string, name: string) {
@@ -173,7 +166,7 @@ test('the landing\'s four screenshots of a demo Creator', async ({ browser, base
   });
   await igPhone.close();
 
-  // Local Visitors: a Page View each, and a Click through /r for those that tap, its 302 fetched without following it.
+  // Local Visitors: a Page View each, and a Click through Reveal for those that tap, its onward navigation fulfilled with a stub.
   for (const [country, title] of VISITS) {
     const context = await fenced(browser, origin, { ...PHONE, extraHTTPHeaders: { 'CF-IPCountry': country } });
     const visitor = await context.newPage();
@@ -181,14 +174,11 @@ test('the landing\'s four screenshots of a demo Creator', async ({ browser, base
     await visitor.goto(`/${MIA.username}`);
     expect((await ping).status(), 'the Page View Ping').toBe(204);
     if (title) {
-      let status = 0;
-      await visitor.route('**/r/*', async (route) => {
-        status = (await route.fetch({ maxRedirects: 0 })).status();
-        await route.fulfill({ status: 200, contentType: 'text/html', body: STUB });
-      });
+      await visitor.route((url) => url.origin !== origin, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: STUB }));
+      const reveal = visitor.waitForResponse((res) => new URL(res.url()).pathname === '/.netlify/functions/reveal');
       await visitor.locator('.link-card', { hasText: title }).click();
+      expect((await reveal).status(), `Reveal for ${title}`).toBe(200);
       await expect(visitor.getByRole('heading', { name: 'Stub Destination' })).toBeVisible();
-      expect(status, `/r for ${title}`).toBe(302);
     }
     await context.close();
   }
@@ -198,16 +188,6 @@ test('the landing\'s four screenshots of a demo Creator', async ({ browser, base
   await expect(heading(page, 'Stats')).toBeVisible();
   await expect(page.getByRole('button', { name: '7D', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await shoot(page, origin, 'editor-stats-mobile');
-
-  // Where Deeplink is set: the Editor's "Quick Settings" card (profile.js quickSettings), the Profile's one default Mode. With
-  // "Deeplink on tap" chosen its help text shows and the fixed note ("Every Link left on 'Profile default' follows this Mode.")
-  // proves it is set once for the whole Profile, not per Link. The choice is not saved, so her default stays Escape. The card is
-  // shot as a single element, so it is cropped to itself with no full-page band.
-  await page.goto('/edit/home');
-  await page.locator('#modes').scrollIntoViewIfNeeded();
-  await page.getByLabel('Default Mode').selectOption({ label: 'Deeplink on tap' });
-  await expect(page.locator('#default-mode-help')).toContainText('Deeplink on tap');
-  await shootEl(page, origin, 'deeplink-setting-mobile', '#modes');
 
   // One adult Link, added now so profile-mobile (shot earlier) is unchanged, to trigger the 18+ Age Gate.
   await page.goto('/edit/home');

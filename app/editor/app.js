@@ -17,7 +17,7 @@
 // address or of "Add link" lands in the Editor. Overturned by a later ticket moving screens.
 // Ticket 27: the top of the Editor, laid out like the link.me Template's "Edit Profile" screen (link.me/profile/edit.html):
 // "Your Bio Link" with Copy, "Change Profile Picture", the Profile panel (display name, the @Username read-only, bio) and
-// "Quick Settings", whose "Deeplink Banner" row is the Profile's default Mode. No badge control, no Username change, no delete.
+// "Quick Settings", whose row is the Profile's default Mode. No badge control, no Username change, no delete.
 // Ticket 28: "Featured Links" edits, moves and deletes Links; the Link form opens a Link with its current values, Destination
 // included, and gains the Geo Rule textarea; a refused save shows its reason and keeps every field as typed.
 // Ticket 29: the session lasts until the Creator ends it. "Log out" drops the token on this device and shows log-in. An answer
@@ -458,7 +458,7 @@ export function submitting(form, busy) {
 }
 
 const IMAGE_TYPES = 'image/jpeg,image/png,image/heic,image/heif,image/gif,image/webp,.heic,.heif';
-export const MODE_NAMES = { direct: 'Direct', escape_ig: 'Escape', deeplink: 'Deeplink on tap', deeplink_open: 'Deeplink at open' };
+export const MODE_NAMES = { direct: 'Direct', escape_ig: 'Escape' };
 // v1's stock icons, the n8n Form's options. A chosen one is stored as the Page Copy's own WebP file in the Link's icon field,
 // byte for byte, the way the v1 Import stores an imported stock icon (app/bin/import-v1 copies a WebP image unchanged).
 // ASSUMPTION: the Editor fetches the stock WebP from `/images/` and sends it in the Link's own multipart write through the

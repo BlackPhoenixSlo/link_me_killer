@@ -53,14 +53,14 @@ The server exchanging a Link Id for its Destination at the moment of a Click, so
 _Avoid_: unlock, decrypt, resolve, "secret links via JS"
 
 **Link Shortcut**:
-A Profile URL carrying `?link={Link Id}`, which reveals that Link as soon as the page loads; in an In-App Browser an Escape or Deeplink Link then pops out to its Destination, on every load, as v1's `?link=` did.
+A Profile URL carrying `?link={Link Id}`, which reveals that Link as soon as the page loads; in an In-App Browser an Escape Link instead shows the Escape Overlay on every load, and on Android bounces out to its Destination, as v1's `?link=` did.
 _Avoid_: deep link, direct link
-ASSUMPTION: coined name for the `?link=` behaviour of v1's script.js, whose comments call it "deep link"; renamed so it cannot be confused with Deeplink Mode. Overturned if the Operator already calls these something else.
+ASSUMPTION: coined name for the `?link=` behaviour of v1's script.js, whose comments call it "deep link"; renamed so it is not confused with a Link's Mode. Overturned if the Operator already calls these something else.
 
 ## Escaping in-app browsers
 
 **In-App Browser**:
-The browser built into an app, that a Visitor lands in after tapping a link there. Escape Mode and Link Shortcuts recognise Instagram's, Facebook's, Threads' and TikTok's, as the plan names them; Deeplink Mode recognises any app's, by more apps' names in the User-Agent or by a webview's own shape when it names no app.
+The browser built into an app, that a Visitor lands in after tapping a link there. Escape Mode and Link Shortcuts recognise Instagram's, Facebook's, Threads' and TikTok's, as the plan names them.
 _Avoid_: webview, IG browser, embedded browser
 
 **System Browser**:
@@ -68,7 +68,7 @@ The phone's own browser (Safari on iOS, Chrome on Android), outside any In-App B
 _Avoid_: external browser, default browser, real browser
 
 **Escape**:
-An attempt to move a Visitor from an In-App Browser into the System Browser. In iOS Instagram it goes through `instagram://extbrowser/` (a real iPhone, 2026-10-06, showed Instagram drops `x-safari-https://`); elsewhere on iOS through `x-safari-https://`, on Android through the Chrome intent.
+An attempt to move a Visitor from an In-App Browser into the System Browser. Only Android does it by itself, by handing the page's https address to Chrome as an `intent://`; on iOS (Instagram included) the page stays passive and shows the Escape Overlay with no native scheme, since handing Instagram's own open-in-browser scheme a Destination is what flagged OnlyFans links in-app.
 _Avoid_: bounce, breakout, "move out of IG"
 
 **Escape Overlay**:
@@ -77,8 +77,8 @@ _Avoid_: IG overlay, Instagram overlay, menu instructions
 ASSUMPTION: coined name for v1's `igOverlay`; overturned by any name the Operator already uses for it.
 
 **Mode**:
-How a tap on a Link travels to its Destination: Direct Mode, Escape Mode or Deeplink on tap. Every Link has one: its own Direct or Escape Mode, or the default Mode of its Profile, which is the only place a Deeplink Mode is set (ADR 0003).
-_Avoid_: site option, link option, deeplink checkbox, escape checkbox
+How a tap on a Link travels to its Destination: Direct Mode or Escape Mode. Every Link has one: its own Direct or Escape Mode, or the default Mode of its Profile.
+_Avoid_: site option, link option, escape checkbox
 ASSUMPTION: the Profile's default Mode also decides whether the Escape Overlay shows when the page opens, since that happens before any Link is tapped; overturned if the on-load overlay should instead follow whether any Link on the Profile is in Escape Mode.
 
 **Direct Mode**:
@@ -88,18 +88,6 @@ _Avoid_: normal, none, "nothing from above"
 **Escape Mode**:
 Attempts an Escape on tap, with the Escape Overlay as the fallback. As a Profile's default Mode it also shows the Escape Overlay as soon as the page opens in an In-App Browser, as v1 does in Instagram; the Escape itself waits for the Visitor's tap.
 _Avoid_: escape_ig (outside stored data), IG mode, bounce mode
-
-**Deeplink Mode**:
-Deeplink on tap or Deeplink at open: both pop the Visitor out of the In-App Browser into the System Browser with no Escape Overlay. A tap pops out from the tap itself, as a real anchor tap to the escape link, never after a Reveal (Instagram dropped an `x-safari-https://` pop-out that waited on one or was set from script). Outside an In-App Browser the Destination is revealed and opened, on Android by handing its https link to the app that owns it.
-_Avoid_: app-link mode, deep link (for anything else)
-
-**Deeplink on tap**:
-The Deeplink Mode `deeplink`: a tap on the Link in an In-App Browser pops out at once to that Link's Link Shortcut, which the System Browser then reveals; if the page is still showing a moment later, the tap reveals and goes to the Destination in the app instead.
-_Avoid_: deeplink (alone, once the two are told apart), bounce
-
-**Deeplink at open**:
-The Deeplink Mode `deeplink_open`, a Profile's default only, never a Link's own (ADR 0003): the page pops out to itself as soon as its Profile has loaded in an In-App Browser, once per tab (phone-verified on iPhone Instagram, 2026-10-06); taps there behave as Deeplink on tap.
-_Avoid_: Pop Out Timing, at start, auto-bounce
 
 ## Attribution and Stats
 
@@ -115,7 +103,6 @@ _Avoid_: geo, geo config, geo-targeting
 **Page View**:
 A Visitor loading a Profile.
 _Avoid_: visit, view, impression, hit
-Known effect: Deeplink at open's pop-out out of an In-App Browser counts two Page Views for one Visitor, one in the app and one when the System Browser loads the Profile (with no In-App Browser).
 
 **Click**:
 A Visitor following a Link to its Destination, whether the Destination came by Reveal or by server redirect.
@@ -187,5 +174,5 @@ Pointing ofl.ink's DNS from v1 to v2, done only once v2 shows every v1 Profile i
 _Avoid_: go-live, switchover, launch
 
 **Fixture Profile**:
-The seeded test Profile, Username `fixture`, shaped like `juliafilippo_` but holding none of its data: one Direct Mode Link, one Escape Mode Link, one Link on the Profile default (the "Deeplink Link", Deeplink on tap under a Deeplink default) and one Adult Link, so that every Mode and behaviour is testable.
+The seeded test Profile, Username `fixture`, shaped like `juliafilippo_` but holding none of its data: one Direct Mode Link, one Escape Mode Link, one Link on the Profile default (seeded as the "Deeplink Link", now inheriting the Escape default since Deeplink Mode was removed) and one Adult Link, so that every Mode and behaviour is testable.
 _Avoid_: seed profile, test profile, demo profile

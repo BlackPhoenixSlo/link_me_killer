@@ -8,7 +8,7 @@ import {
   account, CLAIM, createOwnerlessProfile, EDITOR, expectServedWebp, expectVerifyScreen, featured, forgotPassword, fresh, furnishedCreator,
   handOver, heading, holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN, logIn, logInToHandedOver, mailedLink, mailedLinks, markVerified,
   onLocalStack, openProfile, openTracking, operator, ownerOf, passAgeGate, PHONE, phoneContext, pngFile, probe, proxy, reach, readBack,
-  recordIds, refused, recordNavigations, servedProfile, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees, extBrowser, igExt,
+  recordIds, refused, servedProfile, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees,
 } from './helpers';
 
 // Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL.
@@ -358,11 +358,11 @@ test.describe('Onboarding after verification', () => {
     expect(holdsEither(await (await request.get(`/${creator.username}`)).text()), 'a Destination in the HTML').toBe(false);
     expect(holdsEither(await (await request.get(`/api/profiles/${creator.username}.json`)).text()), 'a Destination in the Profile JSON').toBe(false);
 
-    // The non-Adult Link's /r answers 302 to its Destination.
+    // The non-Adult Link Reveals its Destination (200, realUrl), with no `/r` redirector any more.
     const directId = served.links.find((l) => l.title === 'Direct card')!.id;
-    const redirect = await request.get(`/r/${directId}`, { maxRedirects: 0 });
-    expect(redirect.status()).toBe(302);
-    expect(redirect.headers()['location'] === directDestination, 'the redirect goes to the Direct Link\'s Destination').toBe(true);
+    const reveal2 = await request.get(`/.netlify/functions/reveal?id=${directId}&user=${creator.username}`);
+    expect(reveal2.status()).toBe(200);
+    expect((await reveal2.json()).realUrl === directDestination, 'Reveal hands out the Direct Link\'s Destination').toBe(true);
 
     // The Adult Link: Age Gate, then Reveal's real answer is the entered Destination followed by /c7 (helpers.ts, passAgeGate).
     const adultId = served.links.find((l) => l.title === 'Adult card')!.id;
@@ -479,7 +479,7 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     await expect(page.getByRole('heading', { name: 'Quick Settings' })).toBeVisible();
     const mode = page.getByLabel('Default Mode');
     await expect(mode).toHaveValue('escape_ig');
-    await expect(mode.locator('option')).toHaveText(['Direct', 'Escape', 'Deeplink on tap', 'Deeplink at open']);
+    await expect(mode.locator('option')).toHaveText(['Direct', 'Escape']);
     await mode.selectOption({ label: 'Direct' });
     await page.getByRole('button', { name: 'Save default Mode' }).click();
     await expect(page.getByText('Default Mode saved.', { exact: true })).toBeVisible();
@@ -504,53 +504,32 @@ test.describe('the Editor\'s Profile and default Mode', () => {
     expect(served.links.map((l) => [l.title, l.mode])).toEqual([['Default card', 'direct'], ['Escape card', 'escape_ig']]);
   });
 
-  test('the default Mode offers "Deeplink on tap" and "Deeplink at open", a Link\'s Mode neither; saved, deeplink_open is served and pops an Instagram Visitor out on open', async ({ page, browser, request, baseURL }) => {
-    test.setTimeout(120_000);
-    const origin = new URL(baseURL!).origin;
+  test('the default Mode offers only Direct and Escape, a Link\'s Mode the same; a Link refuses an unknown Mode', async ({ page, request }) => {
     const { creator, token, linkIds } = await verifiedCreator(request, [['Default card', ''], ['Own card', 'direct']]);
-    // An Instagram Visitor's pop-outs on open, once the Profile has rendered.
-    const popsOnOpen = async () => {
-      const context = await phoneContext(browser, { origin, userAgent: INSTAGRAM_UA });
-      const visitor = await context.newPage();
-      const navigations = await recordNavigations(visitor);
-      await visitor.goto(`/${creator.username}`);
-      await expect(visitor.locator('.link-card .link-title')).toHaveText(['Default card', 'Own card']);
-      await visitor.waitForLoadState('networkidle');
-      const popped = extBrowser(navigations); // iOS Instagram's escape link (2026-10-06)
-      await context.close();
-      return popped;
-    };
-    expect(await popsOnOpen()).toEqual([]);
 
     await logIn(page, creator);
     await expect(heading(page, 'Edit Profile')).toBeVisible();
     const mode = page.getByLabel('Default Mode');
     await expect(page.getByLabel('Pop out')).toHaveCount(0);
-    await mode.selectOption({ label: 'Deeplink on tap' });
-    await expect(page.locator('#default-mode-help')).toHaveText(/^Deeplink on tap /);
-    await mode.selectOption({ label: 'Deeplink at open' });
-    await expect(page.locator('#default-mode-help')).toHaveText(/^Deeplink at open /);
+    await mode.selectOption({ label: 'Escape' });
+    await expect(page.locator('#default-mode-help')).toHaveText(/^Escape /);
     await page.getByRole('button', { name: 'Save default Mode' }).click();
     await expect(page.getByText('Default Mode saved.', { exact: true })).toBeVisible();
 
-    // Deeplink at open is a Profile default only: a Link refuses it, as it refuses any unknown Mode, and the Link form never
-    // offers it; a Link on "Profile default" inherits it.
+    // Direct and Escape are the only Modes: a Link refuses any other, and the Link form offers just those two beside "Profile
+    // default"; a Link on "Profile default" inherits the Profile's Mode.
     const as = proxy(request, token);
     refused(await as.patch(`links/records/${linkIds[1]}`, { mode: 'sideways' }));
+    refused(await as.patch(`links/records/${linkIds[1]}`, { mode: 'deeplink' }));
     refused(await as.patch(`links/records/${linkIds[1]}`, { mode: 'deeplink_open' }));
     const served = await servedProfile(request, creator.username);
-    expect([served.profile.mode, ...served.links.map((l) => l.mode)]).toEqual(['deeplink_open', 'deeplink_open', 'direct']);
-    expect(served.links[0].url, 'a Deeplink Link carries no url: its Destination comes by Reveal').toBe('');
-    expect(served.profile).not.toHaveProperty('popOutTiming');
+    expect([served.profile.mode, ...served.links.map((l) => l.mode)]).toEqual(['escape_ig', 'escape_ig', 'direct']);
+    expect('url' in served.links[0], 'every served Link carries no url: its Destination comes by Reveal').toBe(false);
     await page.reload();
-    await expect(page.getByLabel('Default Mode')).toHaveValue('deeplink_open');
+    await expect(page.getByLabel('Default Mode')).toHaveValue('escape_ig');
     await page.getByRole('button', { name: 'Add link' }).click();
     await expect(page.getByLabel('Mode').locator('option'))
-      .toHaveText(['Profile default (currently Deeplink at open)', 'Direct', 'Escape']);
-    expect(await popsOnOpen()).toEqual([igExt(`https://${new URL(origin).host}/${creator.username}`)]);
-
-    // Deeplink on tap is a Profile default only too (ADR 0003, amended 2026-10-06): a Link refuses it.
-    refused(await as.patch(`links/records/${linkIds[1]}`, { mode: 'deeplink' }));
+      .toHaveText(['Profile default (currently Escape)', 'Direct', 'Escape']);
   });
 });
 
