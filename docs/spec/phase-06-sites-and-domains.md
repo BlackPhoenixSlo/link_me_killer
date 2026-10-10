@@ -12,7 +12,7 @@
 
 Accounts and Profiles
 - At most one Profile per account: `idx_profiles_owner`, unique on `profiles(owner) WHERE owner != ''` (`pocketbase/pb_migrations/1791140004_sign_up_and_claim.js`); Phase 3 story 46 and "One Profile per Creator", whose ASSUMPTION is "overturned by agency-style accounts, which would drop the index". `tests/e2e/03-auth-and-editor.spec.ts` asserts "a second Profile" is refused (400).
-- The claim (`app/editor/screens/auth.js`) posts `{ username, owner, mode }`; the create rule allows nothing else, refuses reserved names and lets an unverified account claim. The update rule refuses `username`, `owner`, `verified`, `v1Key` and needs a verified email (`1791140005_content_rules.js`). The links and `dailyStats` rules key on `profile.owner`, so they already hold for any number of Profiles.
+- The claim (`app/editor/screens/auth.js`) posts `{ username, owner, mode }`; the create rule allows nothing else, refuses reserved names and lets an unverified account claim. The update rule refuses `username`, `owner`, `verified`, `v1Key` (`1791140005_content_rules.js`; its verified-email clause is dropped by `1791140019`, ADR 0006). The links and `dailyStats` rules key on `profile.owner`, so they already hold for any number of Profiles.
 - The Editor assumes one: `onboarded()` reads `profiles/records?perPage=1` and takes `items[0]` (`app/editor/app.js`), and every screen gets that `profile`. Stats sends no Profile filter and lets the list rule choose its rows (`app/editor/stats.js`, header), which is right only while an account owns one Profile. The Bio Link is `location.origin + '/' + username` (`address()`).
 
 Custom Domains and Spare Domains (Phase 5, built)
@@ -29,10 +29,10 @@ Custom Domains and Spare Domains (Phase 5, built)
 
 **Option A — several Profiles per account, a switcher in the Editor.**
 - Schema (`1791140010_several_profiles.js` or the next free number): `profiles.slot`, an integer, min 1, max N (the cap), not required (ownerless imported Profiles have none). `idx_profiles_owner` is replaced by a unique index on `(owner, slot) WHERE owner != ''`. The up migration sets `slot = 1` on every owned Profile, so nothing existing clashes; the down migration restores the old index and fails loudly if an account owns two.
-- Rules: the create rule also accepts `slot`, requires `@request.body.slot > 0`, and requires `@request.auth.verified = true` unless `@request.body.slot = 1` (an unverified account still claims exactly one, Phase 3). The update rule refuses `slot` alongside `username`, `owner`, `verified` and `v1Key`. `@request.body.owner = @request.auth.id` stays, so a Creator still cannot set the badge, change a Username or give a Profile to anyone. Two concurrent claims for one slot meet the unique index.
+- Rules: the create rule also accepts `slot`, and requires `@request.body.slot > 0`. An unverified account claims any free slot: `1791140019` drops the `@request.auth.verified = true` clause that held slots above 1 back (ADR 0006). The update rule refuses `slot` alongside `username`, `owner`, `verified` and `v1Key`. `@request.body.owner = @request.auth.id` stays, so a Creator still cannot set the badge, change a Username or give a Profile to anyone. Two concurrent claims for one slot meet the unique index.
 - Editor: `onboarded()` lists the account's Profiles (`perPage=N&sort=slot`) and works on the current one: the id kept in localStorage (`oflink.profile`), else the lowest slot. A switcher at the head of the Editor and Stats ("@jakabasej ▾") lists them by @Username, plus "Add a Profile" while a slot is free. That opens `/edit/new`, the claim step with the next free slot, followed by the same derived Onboarding for the new Profile. Stats adds `profile='{current id}'` to its filter. Hand-over: the Operator sets owner and a free slot, and the bare Profile no longer has to be deleted first (Phase 5 step 12 changes).
-- Tests: 03's "a second Profile" refusal becomes a cap test (slot 2 accepted when verified, refused when unverified, slot N+1 refused, a duplicate slot refused). 05's step-12 hand-over order test changes with it, and 04 and 06 gain the switcher. A one-Profile account sees no change anywhere.
-- Risk: low to medium. Every rule already keys on owner; the change is one index, one field and the Editor's "which Profile" question. Squatting grows from 1 to N Usernames per verified mailbox.
+- Tests: 03's "a second Profile" refusal becomes a cap test (slot 2 accepted, verified or not, slot N+1 refused, a duplicate slot refused). 05's step-12 hand-over order test changes with it, and 04 and 06 gain the switcher. A one-Profile account sees no change anywhere.
+- Risk: low to medium. Every rule already keys on owner; the change is one index, one field and the Editor's "which Profile" question. Squatting grows from 1 to N Usernames per account, verified or not (ADR 0006).
 
 **Option B — one Profile per account, more accounts.** No schema, rule, Editor or test change: the Creator signs up again with another address (`name+site2@…` is a new email to PocketBase) and logs out and in to switch. No risk in code, but one password and one inbox per site, no switcher, and it does not meet "one user". It works today as the stopgap.
 
@@ -44,14 +44,14 @@ ASSUMPTION: a slot number and a unique index rather than a counting rule or a Po
 ASSUMPTION (evidence blocked): PocketBase 0.40.4 lets a non-required number field with min 1 stay empty on ownerless Profiles. Overturned if it does not; the minimum then lives in the create rule only.
 ASSUMPTION: the current Profile is remembered per device in localStorage, not carried in the URL (rung 5). Overturned if Creators edit two Profiles in two tabs; a `?profile=` query then wins over storage.
 ASSUMPTION: Stats shows the current Profile only, with no all-Profiles total (rung 5; a one-Profile account sees exactly today's Stats). Overturned if the Operator wants a total.
-ASSUMPTION: "Add a Profile" shows only to a verified account, which is every account past Onboarding, so the claim's bare-400 "reserved" message (`claimReason`) stays true (rung 3). Overturned if unverified accounts get the switcher.
+ASSUMPTION: "Add a Profile" shows only to a verified account, which is every account past Onboarding, so the claim's bare-400 "reserved" message (`claimReason`) stays true (rung 3). Overturned 2026-10-10 (ADR 0006): unverified accounts reach the Editor and its switcher, and the message stays true because the create rule no longer refuses an unverified slot.
 ASSUMPTION: the Editor's copy says "Profile", never "site" (rung 3: CONTEXT.md). Overturned if the Operator wants "site" in the UI.
 
 ## 3. A domain per site
 
 **Option 1 — serve directly, Creator self-service.**
 - Schema (`customDomains` migration): a `customDomains` collection with `profile` (relation, required, cascade delete), `domain` (text, required, max 253, Phase 5's hostname pattern), `token` (text, autogenerated `[a-z0-9]{32}`), `status` (select `pending` | `live`) and `checked` (date, set by the app). Indexes: unique on `profile` (one domain per Profile, pending or live) and unique on `domain WHERE status = 'live'` (a pending claim never blocks the real owner).
-- Rules: list and view are `@request.auth.id != "" && profile.owner = @request.auth.id`. Create checks the same owner through `@request.body.profile.owner`, needs `@request.auth.verified = true`, and refuses `id`, `status`, `token` and `checked`. Update is null, so only the app and the Operator change a record. Delete is the owner.
+- Rules: list and view are `@request.auth.id != "" && profile.owner = @request.auth.id`. Create checks the same owner through `@request.body.profile.owner` and refuses `id`, `status`, `token` and `checked`. Update is null, so only the app and the Operator change a record. Delete is the owner.
 - Migration: every `profiles.customDomain` is copied into a `live` record (the Operator set those), then the field, its index and the `customDomain` clauses go. The proxy allow-list (`PROXIED` in `app/server.js`) gains `customDomains`.
 - Host Resolution: `profileWithDomain` reads `customDomains` with `status = 'live'` and expands the Profile. Everything else in the order is unchanged, so the TLS Ask answers 200 only for a live domain and 404 for a pending one.
 - Check route `POST /api/domain-check/:id`, beside `/api/upload` and on its pattern:
@@ -85,7 +85,7 @@ ASSUMPTION: domains proxied through the Creator's own Cloudflare are refused for
 **Certificates, limits and on-demand abuse.**
 - Let's Encrypt's limits (as published): 50 new certificates per registered domain per 7 days, 300 new orders per account per 3 hours, and 5 failed authorizations per hostname per account per hour. Each Creator domain is its own registered domain, so Creators never share the first. ofl.ink, every Spare Domain and every Custom Domain share the Operator's one ACME account for the rest.
 - The danger is an ask that says yes to names that do not point here: every SNI anyone sends straight to the VPS would start an order that fails validation. Phase 5's ask already refuses unknown names. This design keeps that by answering 200 only for `live`, and a record reaches `live` only after (b)–(e) prove that it points here and that its owner holds the DNS.
-- Caps: one domain per Profile, N Profiles per account, a verified email to add one, and exact hostnames only (no wildcard).
+- Caps: one domain per Profile, N Profiles per account, and exact hostnames only (no wildcard).
 - After `live` nothing re-checks the DNS, so a domain pointed away later fails only its own renewals.
 ASSUMPTION (evidence blocked): the figures above come from memory of Let's Encrypt's page, with no network reads. Overturned by the current page, which the Operator reads before the build.
 ASSUMPTION: the ask stays database-only, with no DNS lookup per ask (rung 5; rung 4: a resolver hiccup during a Caddy restart would otherwise take live domains dark). Overturned if Caddy's logs show renewal failures from moved domains; a daily re-check then sets them back to `pending`.
@@ -101,7 +101,7 @@ ASSUMPTION: rung 5 (Phase 5 Out of Scope, pairing www and apex). Overturned if V
 
 **Flagging and abuse.**
 - Isolation is the upside: a Flag on `jakabasej.com` hits one Creator.
-- DNS-only Custom Domains publish the VPS address that Cloudflare hides for ofl.ink and the Spare Domains, and self-service hands that address to every verified sign-up. A Flag aimed at the address, or at the page code every host shares, may carry across (Phase 5 Further Notes, D11, still open).
+- DNS-only Custom Domains publish the VPS address that Cloudflare hides for ofl.ink and the Spare Domains, and self-service hands that address to every sign-up, verified or not (ADR 0006). A Flag aimed at the address, or at the page code every host shares, may carry across (Phase 5 Further Notes, D11, still open).
 - A stranger can sign up, prove their own domain and serve their own Links from the VPS. An abuse report to Hostinger names the VPS address, and a suspension takes ofl.ink, every domain and n8n down together. The Operator's lever is deleting the record or the account (Phase 3 story 56).
 - "Powered by ofl.ink" stays on Custom Domains (Phase 5 Out of Scope), linking them to ofl.ink for anyone who looks.
 
@@ -177,7 +177,7 @@ test -z "$h"
 5. Should a domain go live after the DNS proof alone, or also need the Operator's approval (an `approved` flag the ask would also require)?
 6. Should Creators be able to proxy their domain through their own Cloudflare (real country, VPS address hidden)? That needs an HTTP-based check.
 7. Does the VPS have IPv6 (`ORIGIN_IPV6`)?
-8. Is giving the VPS address to every verified sign-up acceptable, or should Custom Domains get their own address (an extra Hostinger IP, which is a payment)?
+8. Is giving the VPS address to every sign-up acceptable, or should Custom Domains get their own address (an extra Hostinger IP, which is a payment)?
 9. What do Hostinger's acceptable-use terms say about third-party domains served from the VPS?
 
 ## 6. Other assumptions

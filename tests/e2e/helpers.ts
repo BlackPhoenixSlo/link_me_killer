@@ -269,7 +269,7 @@ export async function verifiedCreator(request: APIRequestContext, links: [string
 
 export type Served = {
   profile: { displayName: string; bio: string; avatarUrl: string; mode: string };
-  links: { title: string; mode: string; url: string; icon: string; backgroundImage: string; isAdult: boolean; tracking: boolean; default_tracknumber?: string }[];
+  links: { title: string; mode: string; icon: string; backgroundImage: string; isAdult: boolean; tracking: boolean; default_tracknumber?: string }[];
 };
 export const servedProfile = async (request: APIRequestContext, username: string): Promise<Served> => {
   const res = await request.get(`/api/profiles/${username}.json`);
@@ -318,15 +318,14 @@ export async function passAgeGate(visitor: Page, title: string, onward: string) 
   return reveal;
 }
 
-// A Creator arranged over HTTP at an Onboarding stage, named by its screen's heading: a refused claim (CLAIM), claimed but
-// unverified (VERIFY), verified with no display name, or named with no Link (moved here by ticket 30).
+// A Creator arranged over HTTP at an Onboarding stage, named by its screen's heading, its email never verified and no
+// verification email asked for (ADR 0006): a refused claim (CLAIM), claimed with no display name, or named with no Link (moved
+// here by ticket 30).
 export async function reach(request: APIRequestContext, stage: string) {
   const { creator, token, id } = await account(request);
   const as = proxy(request, token);
   const claimed = await as.post('profiles/records', { username: stage === CLAIM ? 'edit' : creator.username, owner: id, mode: 'escape_ig', slot: 1 });
   expect(claimed.status(), stage).toBe(stage === CLAIM ? 400 : 200);
-  if (stage === CLAIM || stage === VERIFY) return creator;
-  await verifyByMail(request, creator.email);
   if (stage === 'Add your first Link') expect((await as.patch(`profiles/records/${(await claimed.json()).id}`, { displayName: 'Half way' })).status()).toBe(200);
   return creator;
 }
@@ -501,8 +500,8 @@ export const UA = {
     'Chrome/120.0.0.0 Mobile Safari/537.36',
 };
 
-// Navigation recorder: the destination of every Navigation API navigate event on `page`, x-safari- and other app schemes
-// included. The page stays put on those schemes, so nothing leaves the machine.
+// Navigation recorder: the destination of every Navigation API navigate event on `page`, the Android Chrome intent and other
+// app schemes included. The page stays put on those schemes, so nothing leaves the machine.
 // Same-task mark: a capture-phase click listener sets a flag that a zero-delay timer clears, so a navigation started after any
 // request or other wait following the tap is not marked (Phase 1, story 15).
 export type Navigation = { url: string; inTapTask: boolean };
@@ -526,12 +525,9 @@ export async function recordNavigations(page: Page) {
   });
   return destinations;
 }
-export const xSafari = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('x-safari-'));
+// Android's Chrome intent, the only native escape scheme the page still fires (app/public/script.js escapeLink): iOS, including
+// Instagram, is passive now and fires none, so there is no x-safari- or instagram://extbrowser helper any more.
 export const intents = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith('intent:'));
-// iOS Instagram's escape link (a real iPhone, 2026-10-06: Instagram drops x-safari-, follows its own open-in-browser link).
-export const IG_EXT_BROWSER = 'instagram://extbrowser/?url=';
-export const igExt = (target: string) => IG_EXT_BROWSER + encodeURIComponent(target);
-export const extBrowser = (destinations: Navigation[]) => destinations.map(({ url }) => url).filter((url) => url.startsWith(IG_EXT_BROWSER));
 
 // The Escape Overlay.
 export const escapeOverlay = (page: Page) => page.locator('#igOverlay');

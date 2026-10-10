@@ -4,7 +4,7 @@
 // brief's (docs/spec/editor-redesign.md, sections 4.9 to 4.12 and 5, as ruled in section 11).
 
 import { api, upload, el, render, message, say, select, check, fileInput, ICONS, MODE_NAMES, submitting, fieldReasons, show,
-  onboard, route, address, copyButton, creatorNav, linksOf, logOut, card, field, steps, icon, pageTitle, switcher, link as navLink } from '../app.js';
+  onboard, route, address, copyButton, creatorNav, linksOf, logOut, card, field, steps, icon, pageTitle, switcher, forgetProfile, link as navLink } from '../app.js';
 import { drawRetry } from './auth.js';
 import { profileForm, quickSettings } from './profile.js';
 
@@ -51,7 +51,7 @@ function linkReason(res, creating) {
 
 // The Link form, the same for the first-Link step (`onboarding`, from the router's Onboarding rule), the Editor's "Add link"
 // and a Link opened from the Links list (`link`, the full record, Destination included, which its owner may read). The
-// first-Link step shows "Step 4 of 5", has no Cancel and goes on to the live address. A new Link starts on Profile default,
+// first-Link step shows "Step 3 of 4", has no Cancel and goes on to the live address. A new Link starts on Profile default,
 // which stores no Mode, and takes the highest order plus one; PocketBase gives it its Link Id. An opened Link's form is filled
 // with its values, a new one's with BLANK_LINK.
 // Its own screen (the brief's ruling 4): the document scrolls, and "Save link", Cancel beside it, and the screen's one status
@@ -66,7 +66,8 @@ const BLANK_LINK = { title: '', destination: '', icon: '', backgroundImage: '', 
 export function drawLinkForm(profile, links, { link = null, onboarding = false } = {}) {
   const current = link || BLANK_LINK;
   const title = el('input', { className: 'e-input', name: 'title', autocomplete: 'off', value: current.title });
-  const destination = el('input', { className: 'e-input', name: 'destination', inputMode: 'url', autocomplete: 'off', autocapitalize: 'none', spellcheck: false, placeholder: 'https://', value: current.destination });
+  // A new Link's Destination starts at "https://" so the Creator types only the domain and path; an opened Link keeps its own.
+  const destination = el('input', { className: 'e-input', name: 'destination', inputMode: 'url', autocomplete: 'off', autocapitalize: 'none', spellcheck: false, placeholder: 'https://', value: link ? current.destination : 'https://' });
   // An opened Link's icon shows as the stock icon its file was made from (PocketBase keeps the sent name as the file name's
   // start, `igicon_<random>.webp`); one made from no stock icon shows as "Current icon". The icon is written only when changed.
   const stock = ICONS.find(([file]) => file && current.icon.startsWith(`${file.replace(/\.webp$/, '')}_`));
@@ -90,8 +91,8 @@ export function drawLinkForm(profile, links, { link = null, onboarding = false }
   const removeBackground = current.backgroundImage ? toggle('removeBackground', 'Remove background', 'Picking a new image replaces it instead.') : null;
   const adult = toggle('isAdult', '18+ Age Gate', 'Visitors who tap it on your page confirm they are 18 or older first. Works with any Mode.', current.isAdult);
   const profileMode = MODE_NAMES[profile.mode] || MODE_NAMES.escape_ig;
-  // The Deeplink Modes are Profile defaults only (ADR 0003, amended 2026-10-06): a Link offers Direct or Escape, or inherits.
-  const linkModes = Object.entries(MODE_NAMES).filter(([value]) => value === 'direct' || value === 'escape_ig');
+  // A Link offers Direct or Escape, or inherits the Profile's default.
+  const linkModes = Object.entries(MODE_NAMES);
   const mode = select('mode', [['', `Profile default (currently ${profileMode})`], ...linkModes], current.mode);
   const tracking = toggle('tracking', 'OnlyFans tracking', 'Adds a Tracking Code to the address so OnlyFans credits each subscriber to its source.', current.tracking);
   const code = el('input', { className: 'e-input', name: 'defaultTrackingCode', inputMode: 'numeric', autocomplete: 'off', value: current.defaultTrackingCode });
@@ -128,6 +129,7 @@ export function drawLinkForm(profile, links, { link = null, onboarding = false }
       event.preventDefault();
       for (const control of Object.values(named)) control.removeAttribute('aria-invalid');
       if (!title.value.trim()) return refuse('Enter a title.', ['title']);
+      if (destination.value.trim() === 'https://') return refuse('Enter a Destination after https://.', ['destination']);
       if (!/^\d*$/.test(code.value)) return refuse('Default Tracking Code: digits only, or leave it empty.', ['defaultTrackingCode']);
       const rule = geoRule(geo.value);
       if (rule === undefined) return refuse('Geo Rule: write a JSON object, such as {"US": "5"}, or leave it empty for no Geo Rule.', ['geo']);
@@ -185,7 +187,7 @@ export function drawLinkForm(profile, links, { link = null, onboarding = false }
   if (!onboarding) foot.append(el('button', { type: 'button', className: 'e-btn e-btn--secondary', onclick: route }, 'Cancel'));
   const heading = onboarding ? 'Add your first Link' : link ? 'Edit link' : 'Add link';
   render(heading, el('div', { className: 'e-sheet' },
-    el('div', { className: 'e-sheet__head' }, ...(onboarding ? [steps(4)] : []), pageTitle(heading),
+    el('div', { className: 'e-sheet__head' }, ...(onboarding ? [steps(3)] : []), pageTitle(heading),
       el('p', { className: 'e-page__lead' }, 'Where the card on your page leads.')),
     form,
     foot));
@@ -196,7 +198,7 @@ function drawLive(profile) {
   const url = address(profile);
   const status = message();
   render('Your page is live', el('div', { className: 'e-card' },
-    steps(5),
+    steps(4),
     pageTitle('Your page is live'),
     el('p', { className: 'e-page__lead' }, 'Paste this address into your Instagram or TikTok bio.'),
     el('p', { className: 'live-address e-live__address', 'data-test': 'live-address' }, url),
@@ -243,7 +245,46 @@ export function drawHome(profile, links) {
     linksCard(profile, links),
     section('profile', 'Profile', profileForm(profile, { editor: true, button: 'Save profile', done: (status) => say(status, 'Profile saved.', 'ok') })),
     section('modes', 'Quick Settings', quickSettings(profile)),
+    deleteProfileCard(profile),
     el('button', { type: 'button', className: 'e-btn e-btn--ghost', onclick: logOut }, 'Log out'));
+}
+
+// "Delete Profile": removes the current Profile and, by the relations' cascade (links, events, its Custom Domain), everything
+// under it. Asked first in the page's own dialog, like a Link's delete and the Domain's remove: "Keep it" has focus first, and
+// it or Esc closes the dialog with nothing changed. On confirm the record is deleted; forgetProfile() drops it as the current
+// one and route() redraws from the server, another Profile the account still owns or the claim step when none is left. A
+// refusal is said in the card's status line.
+function deleteProfileCard(profile) {
+  const status = message();
+  const dialog = el('dialog', { className: 'e-dialog', role: 'alertdialog', 'aria-labelledby': 'delete-profile-title', 'aria-describedby': 'delete-profile-text', 'data-test': 'delete-profile-dialog' },
+    el('h2', { className: 'e-dialog__title', id: 'delete-profile-title' }, `Delete @${profile.username}?`),
+    el('p', { className: 'e-dialog__text', id: 'delete-profile-text' }, 'This Profile, its Links, its stats and any custom domain go at once. It cannot be undone.'),
+    el('div', { className: 'e-dialog__actions' },
+      el('button', { type: 'button', className: 'e-btn e-btn--danger', 'data-test': 'delete-profile-confirm', onclick: () => dialog.close('delete') }, 'Delete Profile'),
+      el('button', { type: 'button', className: 'e-btn e-btn--secondary', autofocus: true, 'data-test': 'delete-profile-cancel', onclick: () => dialog.close() }, 'Keep it')));
+  const button = el('button', {
+    type: 'button',
+    className: 'e-btn e-btn--danger e-btn--block',
+    'data-test': 'delete-profile',
+    onclick: () => {
+      dialog.returnValue = '';
+      dialog.showModal();
+    },
+  }, 'Delete Profile');
+  dialog.addEventListener('close', async () => {
+    if (dialog.returnValue !== 'delete') return button.focus();
+    button.disabled = true;
+    const res = await api(`profiles/records/${profile.id}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) {
+      button.disabled = false;
+      return say(status, `The Profile was not deleted (${res.data.message || res.status || 'no answer'}). Try again.`);
+    }
+    forgetProfile(profile.id);
+    return route();
+  });
+  return Object.assign(card('Delete Profile',
+    el('p', { className: 'e-field__hint' }, 'Permanently remove this Profile and everything under it. This frees its slot.'),
+    button, status, dialog), { id: 'delete-profile' });
 }
 
 // The chips under the h1: plain in-page links to the cards (the router leaves a jump within the screen alone).

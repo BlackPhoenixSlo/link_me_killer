@@ -78,4 +78,4 @@ function sameOrigin(request) {
   }
 }
 
-module.exports = { allow, allowPing, clientIp, originOf, sameOrigin };
+module.exports = { allow, allowPing, clientIp, sameOrigin };

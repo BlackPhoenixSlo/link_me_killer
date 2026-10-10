@@ -8,8 +8,9 @@ import { account, api, signedIn, signOut, refresh, el, render, message, say, use
 
 // ---- The parts every screen here is built from -----------------------------------------------------------------------------
 
-// An auth screen: one card in the page's narrow column (the brief's layout for auth and Onboarding), headed `heading`.
-const draw = (heading, ...children) => render(heading, el('div', { className: 'e-card' }, ...children));
+// An auth screen: one card in the page's narrow column (the brief's layout for auth and Onboarding), headed `heading`, without
+// the unverified banner (render()).
+const draw = (heading, ...children) => render(heading, el('div', { className: 'e-card' }, ...children), { banner: false });
 
 const lead = (...text) => el('p', { className: 'e-page__lead' }, ...text);
 const quiet = (...children) => el('p', { className: 'e-page__links' }, ...children);
@@ -103,7 +104,7 @@ export function drawSignup() {
       api('users/request-verification', { method: 'POST', body: { email: body.email }, keepalive: true }).catch(() => {});
       const claimed = await claim(wanted, 1);
       if (!claimed.ok) return show('/edit/claim', () => drawClaim({ username: wanted, error: claimReason(claimed, wanted) }));
-      return show('/edit/verify-email', drawVerify);
+      return onboard();
     },
   },
   field('auth-email', 'Email', email),
@@ -182,9 +183,31 @@ export function drawVerify() {
       return onboard();
     },
   });
-  draw('Verify your email', steps(2), mark('mail'), pageTitle('Verify your email'),
+  draw('Verify your email', mark('mail'), pageTitle('Verify your email'),
     lead('We sent a link to ', el('strong', {}, account.email), '. Open it to verify your email, then press Continue.'),
     actions(status, next, resend));
+}
+
+// The banner render() puts over every screen past the sign-in screens while the account's email is not verified. It never
+// blocks: verification gates only password reset (1791140019_unverified_can_edit.js). "Resend email" asks for the same email
+// as the verify screen's. Its answer is an aria-live line, not a `status`, so each screen keeps its own status line the only one.
+// ASSUMPTION: the banner goes once a refresh reads the email as verified, which every route() does, the verification link's
+// Continue included (rung 5: no polling). Overturned if it must go in a tab that stays open while the link is followed elsewhere.
+export function unverifiedBanner() {
+  const said = el('p', { 'aria-live': 'polite' });
+  const resend = el('button', {
+    type: 'button',
+    className: 'e-btn e-btn--secondary',
+    'data-test': 'resend-verification',
+    onclick: async () => {
+      const res = await pressed(resend, () => api('users/request-verification', { method: 'POST', body: { email: account.email } }));
+      said.textContent = res.ok ? resendAsked(account.email) : res.data.message || 'The email could not be sent. Try again.';
+    },
+  }, 'Resend email');
+  return el('div', { className: 'e-msg e-msg--info e-banner', 'data-test': 'unverified-banner' },
+    el('p', {}, 'Email not verified. You can use everything, but you can\'t reset your password until you confirm it.'),
+    resend,
+    said);
 }
 
 // ---- The emails' screens -------------------------------------------------------------------------------------------------
@@ -225,9 +248,35 @@ function drawInvalidLink(what, button, endpoint) {
 // comes, the page's loading skeleton (index.html) stays.
 export async function drawVerified() {
   const res = await api('users/confirm-verification', { method: 'POST', body: { token: linkToken() } });
-  if (!res.ok) return drawInvalidLink('verification', 'Resend email', 'request-verification');
-  return draw('Email verified', mark('check', 'ok'), pageTitle('Email verified'), lead('Your email is verified.'),
-    actions(primary('Continue', { type: 'button', onclick: () => go('/edit') })));
+  // A verification token is spent on first use, so the Creator's own click can land after something else already spent
+  // it — an email provider's link scanner, a preview fetch, or the link reopened in a second tab — and PocketBase then
+  // refuses it. A refusal is therefore not proof the email is unverified. When this device's signed-in account already
+  // reads as verified, the link did its job and the "invalid" screen would be a lie, so show success either way.
+  if (res.ok || (await verifiedNow())) {
+    return draw('Email verified', mark('check', 'ok'), pageTitle('Email verified'), lead('Your email is verified.'),
+      actions(primary('Continue', { type: 'button', onclick: () => go('/edit') })));
+  }
+  return drawInvalidLink('verification', 'Resend email', 'request-verification');
+}
+
+// Whether this device is signed in as the very account the refused link names, with its email now verified — read from a
+// token refresh without disturbing the stored token. The link's subject is read from its own JWT payload (not trusted for
+// auth; the server already decided verification). A different account, no session, or any refusal is false, so only a link
+// that truly did its job shows success and a genuinely bad one still shows as invalid.
+async function verifiedNow() {
+  const subject = tokenSubject(linkToken());
+  if (!subject) return false;
+  const res = await api('users/auth-refresh', { method: 'POST' });
+  return res.ok && !!res.data.record && res.data.record.id === subject && res.data.record.verified === true;
+}
+
+// The user id a PocketBase token names, from its unverified JWT payload; '' when the token is missing or unreadable.
+function tokenSubject(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).id || '';
+  } catch {
+    return '';
+  }
 }
 
 // The reset email's link: a new password for the account its token names. PocketBase says whether the token is good only when

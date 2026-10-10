@@ -62,6 +62,10 @@ DOMAIN=links.example.com PB_SUPERUSER_EMAIL=you@example.com \
 
 Point the domain's DNS `A` record at the VPS's public IP so Caddy can issue HTTPS.
 
+The app works without email set up: sign-ups go straight into the Editor unverified. To enable
+password reset, set Settings -> Mail (SMTP) and Settings -> Application URL in the PocketBase
+admin UI at `127.0.0.1:8090` over an SSH tunnel.
+
 ## Production
 
 [`RUN.md`](RUN.md) is the full operator runbook: the real-device escape test matrix, the

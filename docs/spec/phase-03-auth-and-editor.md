@@ -1,6 +1,10 @@
 # Phase 03 — Login, register, Profile creation, add Links, Editor UI
 
-**Objective.** Anyone holding the sign-up link can create an account, claim a Username, verify their email and build their Profile and Links in a phone-first Editor styled on the link.me Template. Every save is live on their v2 Profile at the next page load, and PocketBase's collection rules let only them change it.
+> **Amendment 2026-10-10.** A Mode is Direct or Escape only; `deeplink` and `deeplink_open` are removed (iOS/Instagram escape is passive, with no native scheme). See phase-01's amendment note.
+
+> **Amendment 2026-10-10 (ADR 0006).** An account whose email is not verified uses the whole Editor; verification matters only for a password reset. Migration `1791140019` drops `@request.auth.verified = true` from the content rules, and Onboarding no longer waits on the verify screen. The sections below follow; ## Review stays as written.
+
+**Objective.** Anyone holding the sign-up link can create an account, claim a Username and build their Profile and Links in a phone-first Editor styled on the link.me Template. Every save is live on their v2 Profile at the next page load, and PocketBase's collection rules let only them change it.
 
 ## Problem Statement
 
@@ -12,23 +16,21 @@ Phase 2 gives v2 a database, file storage and an admin screen, but only the Oper
 
 ## Solution
 
-v2 gets its own Editor at `/edit`, on the same origin as the Profiles. Anyone with the link opens the sign-up screen and enters an email, a password and the Username they want. Onboarding then takes them through five steps:
+v2 gets its own Editor at `/edit`, on the same origin as the Profiles. Anyone with the link opens the sign-up screen and enters an email, a password and the Username they want. Onboarding then takes them through four steps, with the verification email sent but not waited on (ADR 0006):
 
 1. claim the Username
-2. verify the email
-3. fill in the Profile
-4. add a first Link
-5. see the live address, with Open and Copy, to paste into their Instagram or TikTok bio
+2. fill in the Profile
+3. add a first Link
+4. see the live address, with Open and Copy, to paste into their Instagram or TikTok bio
 
 From then on, logging in lands them in the Editor, a phone-sized copy of the link.me Template's "Edit Profile" screen. In it the Creator can:
 
 - change their display name, bio, avatar and the Profile's default Mode
 - add, edit, reorder and delete Links. Each Link has a title, a Destination, an icon, a background image, an Adult flag, a Mode, OnlyFans tracking with a default Tracking Code, and a Geo Rule written as raw JSON
 
-Images upload in any common format and come out as webp. A save shows on the public Profile at the next page load, with no build and no commit. PocketBase sends the verification and password-reset emails. PocketBase's collection rules guarantee five things:
+Images upload in any common format and come out as webp. A save shows on the public Profile at the next page load, with no build and no commit. PocketBase sends the verification and password-reset emails. An unverified email holds nothing back in the Editor; only a password reset needs a confirmed mailbox (ADR 0006). PocketBase's collection rules guarantee four things:
 
 - only the owner can change a Profile or its Links
-- an account whose email is not verified can claim a Username and nothing more, so a stranger cannot publish on the shared domain before proving they hold the mailbox
 - no Visitor and no other Creator can read a Destination through PocketBase's API. A Visitor gets one only through Reveal or the redirect, one Click at a time (ADR 0004)
 - a Destination is an http(s) URL or a root-relative path, never a script
 - only the Operator can change the verified badge, the Username or ownership
@@ -45,9 +47,9 @@ Sign-up and verification
 4. As a Creator whose Username was refused after my account was made, I want to land, signed in, on the claim step and try again, so that a clash never leaves me with an account and no way forward.
 5. As a v1 Creator who tries my old Username, I want the refusal to say that the Operator hands over Usernames held on v1 at Cutover, so that I ask for mine instead of claiming a second, empty Profile.
 6. As a Creator, I want a verification email as soon as my account exists, so that my account is tied to a mailbox I control and a password reset can reach me.
-7. As a Creator who has claimed a Username but not verified, I want Onboarding to wait on a "verify your email" screen with "Resend email" and "Continue" buttons, so that I can carry on once I have followed the link.
+7. As a Creator who has claimed a Username but not verified, I want Onboarding to go straight on to my Profile, and the Editor to show a small notice with "Resend email" until I verify, so that I am never stuck waiting for an email and I know a password reset needs a confirmed address.
 8. As a Creator, I want the verification link to open a screen that says either that my email is verified, or that the link is invalid or expired with a way to resend it, so that I know where I stand.
-9. As the Operator, I want an account whose email is not verified to be unable to put anything but its Username on a Profile (no display name, bio, avatar, Link or image), so that a stranger cannot publish on the shared domain from an address they do not control.
+9. As the Operator, I want an account whose email is not verified to use the whole Editor, so that a self-hosted deploy with no SMTP, where every account stays unverified, works out of the box (ADR 0006).
 
 Log-in and session
 
@@ -125,7 +127,7 @@ Operator
   - **Editor client** (new). These are the Editor's screens:
     - sign-up, log-in and forgot-password
     - the verify-email and reset-password confirmations
-    - Onboarding: claim Username, then verify, then Profile, then first Link, then the live address
+    - Onboarding: claim Username, then Profile, then first Link, then the live address; the verify screen stays reachable, but Onboarding does not stop on it (ADR 0006)
     - the Editor itself: Bio Link, Profile panel, Quick Settings, Links list and Link form
 
     Its files live in `app/editor/`, outside the Page Copy at `app/public/` (Phase 0), which stays the public page alone.
@@ -135,7 +137,7 @@ Operator
   - **PocketBase API proxy** (a change to Phase 2's app). Forwards an allow-list of PocketBase's REST paths on the Profile origin, so the Editor reaches PocketBase same-origin.
   - **Auth-and-ownership migration** (a new PocketBase migration). It holds:
     - the sign-up, log-in, read and write rules on users, profiles and links
-    - the verified-email gate and the one-Profile-per-Creator index
+    - the verified-email gate (dropped since by `1791140019`, ADR 0006) and the one-Profile-per-Creator index
     - the Username validation and the reserved Usernames
     - the Destination check and the webp-only file fields
     - the action URLs in the verification and reset emails
@@ -164,18 +166,18 @@ Operator
             list/view     signed in AND owner = self
             create        signed in AND owner = self AND username not reserved
                           AND the request sets nothing but username, owner, default Mode
-            update        signed in AND owner = self AND email verified
+            update        signed in AND owner = self
                           AND the request sets none of username, owner, verified badge
             delete        superuser only
   links     background    file, image/webp only (icon too, where Phase 2 stores it as a file)
             list/view     signed in AND profile.owner = self
-            create        signed in AND profile.owner = self AND email verified
+            create        signed in AND profile.owner = self
                           AND the request sets neither the record id nor the Link Id
                           AND destination starts with https://, http:// or /
-            update        signed in AND profile.owner = self AND email verified
+            update        signed in AND profile.owner = self
                           AND the request sets neither profile nor the Link Id
                           AND destination, when sent, starts with https://, http:// or /
-            delete        signed in AND profile.owner = self AND email verified
+            delete        signed in AND profile.owner = self
   ```
 
   "Signed in" is `@request.auth.id != ""`, and it opens every rule that compares an owner. Imported Profiles have an empty owner, and an anonymous caller's `@request.auth.id` is empty too. So `owner = @request.auth.id` on its own would match every imported Profile for anyone, and the links read rule would hand out their Destinations (ADR 0004). The Link Id is Phase 2's own autogenerated `linkId` field, separate from the record id (observed: Phase 2 spec, Schema, `linkId`). The rules refuse a sent `linkId` as well as a sent `id`, so the Creator cannot choose the Link Id, whatever PocketBase does with a sent value.
@@ -189,7 +191,7 @@ Operator
     - Nothing else is forwarded: not `_superusers` or any other collection, not `/api/realtime`, `/api/batch`, `/api/settings` or `/api/logs`, not PocketBase's own `/api/files/…`, and not the admin UI at `/_/`. Phase 2's own `/api/…` routes keep their answers.
 
     ASSUMPTION: an allow-list, rather than all of `/api/collections/*` minus `_superusers` (rung 4: a closed default; a blanket proxy would publish the superuser login. Rung 5: no screen uses realtime or batch). Overturned if a later screen needs another path; that Phase adds it to the list.
-  - **Editor ↔ Phase 2's image upload endpoint.** The Editor sends the raw file (jpg, png, heic, gif or webp) with the Creator's token and a target: their Profile's avatar, or the background of one of their Links. The endpoint stores a webp (avatar 512px, background 1080px, q80, per D4) and returns the stored image reference. It writes with the caller's token, so collection rules decide ownership, the verified-email gate included (ADR 0002: "the Node app does not"). The browser never converts images.
+  - **Editor ↔ Phase 2's image upload endpoint.** The Editor sends the raw file (jpg, png, heic, gif or webp) with the Creator's token and a target: their Profile's avatar, or the background of one of their Links. The endpoint stores a webp (avatar 512px, background 1080px, q80, per D4) and returns the stored image reference. It writes with the caller's token, so collection rules decide ownership (ADR 0002: "the Node app does not"). The browser never converts images.
   - **Stored values the Editor writes.**
     - Mode: `direct`, `escape_ig` or `deeplink`, or empty for "Profile default" (ADR 0003).
     - Destination: text starting with `https://`, `http://` or `/`.
@@ -201,17 +203,17 @@ Operator
     - Order: a number per Link. A new Link takes the highest order plus one.
   - **Email links.** The users collection's verification and password-reset templates point at `{APP_URL}/edit/verify?token={TOKEN}` and `{APP_URL}/edit/reset?token={TOKEN}`. PocketBase's Application URL is the public origin, and the Operator sets it (`# manual:`).
 - **Sign-up is public** (rung 2: plan §9 D9, "PUBLIC sign-up … no invite list"). Anyone may create a users record, and the Operator shares the sign-up link privately. Email verification stays. Content rules, abuse reporting and captcha stay Bonus unless abuse appears (Out of Scope).
-- **Content writes need a verified email; the Username claim does not.** Keeping the claim at sign-up is rung 2: plan §6 says "username claimed on signup". Before verifying, an account may create its Profile with only a Username, itself as owner and the default Mode. Every other write to a Profile or its Links needs `@request.auth.verified`, and that includes avatar and background uploads, because the upload endpoint writes with the Creator's token.
-  ASSUMPTION: the verified-email gate on content writes (rung 4: a closed rule is cheaper to undo than strangers' content on a shared domain that can be Flagged). Overturned if the Operator wants new Creators to publish before verifying; one clause then comes out of four rules.
-  ASSUMPTION: two things are harmless: a bare Profile (Username only, no display name, no Link) reachable at `/{username}` before verification, and a Username held by an account that never verifies (rung 2 keeps the claim at sign-up; the Operator deletes squatters in the admin UI). Overturned if squatting appears. The profiles create rule then also requires a verified email, and the claim step moves after the verify screen.
+- **Content writes do not need a verified email; only a password reset needs a confirmed mailbox** (ADR 0006). Keeping the claim at sign-up is rung 2: plan §6 says "username claimed on signup". Before verifying, an account may claim its Username, fill in its Profile, upload images and add, edit and delete Links. No profiles or links rule reads `@request.auth.verified`. Until the account is verified, the Editor shell shows a non-blocking notice: "Email not verified. You can use everything, but you can't reset your password until you confirm it." with a "Resend email" button. It goes once PocketBase reports the account verified.
+  ASSUMPTION: the verified-email gate on content writes (rung 4: a closed rule is cheaper to undo than strangers' content on a shared domain that can be Flagged). Overturned 2026-10-10: the Operator wants a self-hosted deploy with no SMTP usable out of the box, so new Creators publish before verifying, and `1791140019` takes the clause out of the four rules (ADR 0006).
+  ASSUMPTION: content from an account that never verifies is harmless: a Profile with Links reachable at `/{username}`, and the Usernames it holds (rung 2 keeps the claim at sign-up; the Operator deletes abusive accounts and squatters in the admin UI, story 56). Overturned if abuse or squatting appears. The clause then goes back into the content rules in a later migration, and every deploy needs SMTP.
 - **The sign-up sequence:**
   1. create the account
   2. sign in
   3. request the verification email
   4. claim the Username by creating the Profile
-  5. show the "verify your email" screen
+  5. go on to the Profile step, without waiting for the email (ADR 0006)
 
-  If the claim fails (taken, reserved or invalid), the Creator is already signed in and lands on the claim step. PocketBase's unique index and validation reject the Username, and the Editor shows the reason. There is no separate availability lookup (rung 5; the owner-only read rules leave nothing to look up anyway). On the verify screen, "Continue" refreshes the session and moves on once PocketBase reports the account verified.
+  If the claim fails (taken, reserved or invalid), the Creator is already signed in and lands on the claim step. PocketBase's unique index and validation reject the Username, and the Editor shows the reason. There is no separate availability lookup (rung 5; the owner-only read rules leave nothing to look up anyway). With no SMTP, PocketBase logs a send error and the account stays unverified. The verify screen (`/edit/verify-email`) is no longer on the way, but stays reachable; there "Continue" refreshes the session and moves on once PocketBase reports the account verified.
   ASSUMPTION (evidence blocked): with an empty auth rule, PocketBase lets an account whose email is unverified sign in with its password. Overturned if the pinned version blocks this. The claim then moves to the first log-in after verification, and the tracer-bullet test verifies the account before logging in.
 - **Username rules.** A Username is lowercase letters, digits and underscore, 3 to 30 characters, and the Editor lowercases input as it is typed. PocketBase enforces this with a field pattern and a unique index, not only in the browser. All 27 v1 Snapshot Profile file names fit (observed: `ls linkme_clone3/api/profiles` gives 4 to 13 characters from `[a-z0-9_]`).
   - **Reserved names.** `api`, `edit`, `images`, `internal` and `netlify` are reserved, plus every other top-level path segment of 3 or more characters that the app routes when this Phase lands, read from the app's routes at build time.
@@ -228,7 +230,6 @@ Operator
   ASSUMPTION (evidence blocked): PocketBase accepts a partial unique index (`WHERE owner != ''`) and stores an unset relation as an empty string. Overturned if it does not. The profiles create rule then refuses a Profile whose owner already owns one.
 - **"Publish" is the last Onboarding screen, not a state.** A Profile is public as soon as it exists, as D2 and §6 require ("live instantly"). The publish step shows the live address with Open and Copy (rung 5: no published field and no change to Phase 2's public page). Onboarding progress is derived, not stored, and a Creator lands on the first of these that applies:
   - no Profile → the claim step
-  - email not verified → the verify screen
   - no display name → the Profile step
   - no Link → the first-Link step
   - otherwise → the Editor
@@ -297,13 +298,13 @@ One seam: **the running v2 stack at Playwright's `baseURL`**, which is the publi
 Behaviours the spec covers:
 
 1. **Tracer bullet, the plan's DONE** ("new user signs up, adds a link with image, page live"):
-   - A stranger signs up with no invitation, claims a new Username and lands on "verify your email".
-   - While the account is unverified, its token can create nothing but the claim. Over HTTP it can neither update the Profile, add a Link nor upload an avatar.
-   - The verification email reaches the local mail catcher. Following its link shows "verified", and "Continue" moves on.
+   - A stranger signs up with no invitation, claims a new Username and lands on the Profile step, with the email still unverified.
+   - Every step below, up to the verification link, runs while the account is unverified (ADR 0006).
    - The Profile step takes a display name and a PNG avatar.
    - The first-Link step takes a title, an OnlyFans-style Destination, the OnlyFans stock icon, a PNG background, Adult on, Escape Mode, tracking on and default Tracking Code `7`.
    - The last screen shows the live address with Open and Copy.
    - In the Editor, the Creator adds a second Link: Adult off, Direct Mode, a different Destination.
+   - The Editor shows the "Email not verified" notice with "Resend email". The verification email reaches the local mail catcher. Following its link shows "verified", and after "Continue" the notice is gone.
    - In a fresh browser context, `/{username}` shows the display name and both Link titles, and serves the avatar and background as `image/webp`.
    - Neither Destination string appears in that page's HTML, its Profile JSON or any of its network responses before a Link is pressed.
    - The non-Adult Link's `/r/{Link Id}` answers 302 to its Destination.
@@ -420,7 +421,7 @@ test -s .scratch/goal_ai/shots/03-auth-and-editor.png
 
 - **Between this Phase and Cutover, saves show only on v2's own address.** ofl.ink serves v1 until Phase 5, and live v1 edits still go through the n8n Form. This is the plan's own sequencing (D1, Phase 5), recorded here and not reopened.
 - **Phase 5's parity check and handed-over Profiles.** CONTEXT.md defines Cutover as done "only once v2 shows every v1 Profile identically". The hand-over waits for the last v1 Import, so parity is checked on every Profile before any is handed over. A handed-over Profile may differ from v1 afterwards, by design.
-- **Someone may sign up with another person's email address.** Such an account cannot verify, so it can hold at most a bare Username. The real owner of the address uses "Forgot password", which reaches their mailbox, to take the account over. The Operator deletes or renames the squatted Username in the admin UI.
+- **Someone may sign up with another person's email address.** Such an account cannot verify, but it can still build a Profile with Links (ADR 0006). With SMTP, the real owner of the address uses "Forgot password", which reaches their mailbox, to take the account over; without SMTP no mail arrives and only the Operator can undo it. The Operator deletes the squatted Profile, or renames its Username, in the admin UI.
   ASSUMPTION (evidence blocked): a password reset in PocketBase ends the account's other sessions. Overturned if the pinned version does not; the Operator then deletes the account in the admin UI instead.
 - **PocketBase behaviours this spec relies on but could not observe.** No PocketBase binary or image is on this machine, and network fetches are out of bounds. Each is flagged where it is used:
   - an unverified account can sign in

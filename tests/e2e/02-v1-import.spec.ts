@@ -353,7 +353,7 @@ test.describe('repairs, seen over HTTP on the seeded stack', () => {
     }
   });
 
-  test('the four non-Adult Links that had a secrets entry reach their file\'s url through /r', async ({ request }) => {
+  test('the four non-Adult Links that had a secrets entry reach their file\'s url through Reveal', async ({ request }) => {
     const secrets: Record<string, string> = JSON.parse(readFileSync(join(SNAPSHOT, 'netlify', 'functions', 'secrets.json'), 'utf8'));
     const cards = usernames().flatMap((username) =>
       v1File(username).links.flatMap((l, i) => (l.isAdult !== true && Object.hasOwn(secrets, l.id) ? [{ username, i, url: l.url ?? '' }] : [])),
@@ -363,9 +363,9 @@ test.describe('repairs, seen over HTTP on the seeded stack', () => {
     for (const { username, i, url } of cards) {
       const at = `${username} card ${i + 1}`;
       const link = (await served(request, username)).links[i];
-      const res = await request.get(`/r/${link.id}`, { maxRedirects: 0 });
-      expect(res.status(), at).toBe(302);
-      expect(res.headers()['location'] === rootRelative(url), `${at} Location is its file's url`).toBe(true);
+      const res = await request.get('/.netlify/functions/reveal', { params: { id: link.id, user: username }, maxRedirects: 0 });
+      expect(res.status(), at).toBe(200);
+      expect((await res.json()).realUrl === rootRelative(url), `${at} realUrl is its file's url`).toBe(true);
     }
   });
 });
@@ -433,6 +433,8 @@ test.describe('on the test stack', () => {
   // refuses a Creator setting one (1791140008_domains.js); 05-domains proves both.
   // Amended by ticket 4 (Phase 6): the Custom Domain moves to its own collection, so the field and the clause go again
   // (1791140012_custom_domains.js); 05-domains and 07-domains prove the collection.
+  // Amended by ADR 0006: `@request.auth.verified = true` leaves the profiles update, every links write and the slot clause of
+  // the claim (1791140019_unverified_can_edit.js).
   test('the schema: fields, patterns, relations, file fields, and every rule superuser-only but the ones Phase 3 opens', async () => {
     const collection = async (name: string) => (await pb(`/api/collections/${name}`, { token })).json();
     const [users, profiles, links, events] = await Promise.all(['users', 'profiles', 'links', 'events'].map(collection));
@@ -442,24 +444,24 @@ test.describe('on the test stack', () => {
     expect(users.type === 'auth' && rulesClosed(users, ['updateRule', 'deleteRule']) && users.manageRule === null, 'users update and delete closed').toBe(true);
     expect(users.authRule === '' && users.listRule === OWN && users.viewRule === OWN, 'users sign in, and read only their own record').toBe(true);
     expect(users.createRule.includes('@request.body.verified:isset = false'), 'users sign-up sets nothing but email and password').toBe(true);
-    expect(rulesClosed(profiles, ['deleteRule']), 'profiles delete closed').toBe(true);
-    expect(profiles.updateRule, 'profiles updated by their verified owner, not Username, owner, badge or v1Key').toBe(
-      `${OWNER} && @request.auth.verified = true && @request.body.username:isset = false && @request.body.owner:isset = false && @request.body.verified:isset = false && @request.body.v1Key:isset = false && @request.body.slot:isset = false`,
+    expect(profiles.deleteRule, 'profiles deleted by their owner (1791140017_profile_self_delete.js)').toBe(OWNER);
+    expect(profiles.updateRule, 'profiles updated by their owner, not Username, owner, badge or v1Key').toBe(
+      `${OWNER} && @request.body.username:isset = false && @request.body.owner:isset = false && @request.body.verified:isset = false && @request.body.v1Key:isset = false && @request.body.slot:isset = false`,
     );
     expect(profiles.listRule === OWNER && profiles.viewRule === OWNER, 'profiles read by their owner only').toBe(true);
     expect(profiles.createRule.startsWith('@request.auth.id != "" && @request.body.owner = @request.auth.id && '), 'profiles claimed by a signed-in Creator for itself').toBe(true);
-    expect(profiles.createRule.endsWith(' && @request.body.slot > 0 && (@request.body.slot = 1 || @request.auth.verified = true)'), 'a claim names a slot; past slot 1 only verified').toBe(true);
+    expect(profiles.createRule.endsWith(' && @request.body.slot > 0'), 'a claim names a slot').toBe(true);
     expect(profiles.indexes.some((i: string) => /UNIQUE INDEX .*\(owner, slot\) WHERE owner != ''/.test(i)), 'one Profile per owner and slot, ownerless ones exempt').toBe(true);
     const LINK_OWNER = '@request.auth.id != "" && profile.owner = @request.auth.id';
     const DESTINATION_OK = '(@request.body.destination ~ "https://%" || @request.body.destination ~ "http://%" || @request.body.destination ~ "/%")';
     expect(links.listRule === LINK_OWNER && links.viewRule === LINK_OWNER, 'links read by the owner of their Profile only').toBe(true);
-    expect(links.createRule, 'links added by the verified owner, no id, Link Id or v1Key, a checked Destination').toBe(
-      `@request.auth.id != "" && @request.body.profile.owner = @request.auth.id && @request.auth.verified = true && @request.body.id:isset = false && @request.body.linkId:isset = false && @request.body.v1Key:isset = false && ${DESTINATION_OK}`,
+    expect(links.createRule, 'links added by the owner, no id, Link Id or v1Key, a checked Destination').toBe(
+      `@request.auth.id != "" && @request.body.profile.owner = @request.auth.id && @request.body.id:isset = false && @request.body.linkId:isset = false && @request.body.v1Key:isset = false && ${DESTINATION_OK}`,
     );
-    expect(links.updateRule, 'links edited by the verified owner, not Profile, Link Id or v1Key, a sent Destination checked').toBe(
-      `${LINK_OWNER} && @request.auth.verified = true && @request.body.profile:isset = false && @request.body.linkId:isset = false && @request.body.v1Key:isset = false && (@request.body.destination:isset = false || ${DESTINATION_OK})`,
+    expect(links.updateRule, 'links edited by the owner, not Profile, Link Id or v1Key, a sent Destination checked').toBe(
+      `${LINK_OWNER} && @request.body.profile:isset = false && @request.body.linkId:isset = false && @request.body.v1Key:isset = false && (@request.body.destination:isset = false || ${DESTINATION_OK})`,
     );
-    expect(links.deleteRule, 'links deleted by the verified owner').toBe(`${LINK_OWNER} && @request.auth.verified = true`);
+    expect(links.deleteRule, 'links deleted by the owner').toBe(LINK_OWNER);
     expect(events.type === 'base' && rulesClosed(events), 'events closed').toBe(true);
     type Field = { name: string; type: string; system?: boolean; [k: string]: unknown };
     const field = (c: { fields: Field[] }, name: string) => c.fields.find((f) => f.name === name) || ({} as Field);
@@ -488,9 +490,9 @@ test.describe('on the test stack', () => {
     expect(field(events, 'kind').maxSelect).toBe(1);
     expect(field(events, 'created').onCreate === true && field(events, 'created').onUpdate === false).toBe(true);
     for (const c of [profiles, links]) expect(field(c, 'mode').required).toBe(false);
-    // The Deeplink Modes are Profile defaults only (1791140010_deeplink_open.js, 1791140014_link_modes_direct_escape.js);
-    // the scripted test variant is gone (1791140015_drop_deeplink_script.js).
-    expect(field(profiles, 'mode').values).toEqual(['direct', 'escape_ig', 'deeplink', 'deeplink_open']);
+    // Direct and Escape are the only Modes, for a Profile default as for a Link: the Deeplink Modes were dropped
+    // (1791140018_drop_deeplink.js).
+    expect(field(profiles, 'mode').values).toEqual(['direct', 'escape_ig']);
     expect(field(links, 'mode').values).toEqual(['direct', 'escape_ig']);
     // Pop out timing is gone (1791140010_deeplink_open.js), its create rule clause with it.
     expect(profiles.createRule.includes('popOutTiming'), 'no Pop out timing clause in the claim rule').toBe(false);
@@ -621,14 +623,14 @@ test.describe('on the test stack', () => {
     expect(res.status()).toBe(200);
     const served = (await res.json()).links as { id: string; title: string }[];
     expect(served.length).toBe(4);
-    // Once more, with a Link read first: `/r` lists links before anything lists profiles, so a guest's empty links list must not
+    // Once more, with a Link read first: Reveal lists links before anything lists profiles, so a guest's empty links list must not
     // read as an unknown Link Id.
     const reset2 = await pb(`/api/collections/_superusers/records/${superuser.id}`, { ...json({ password, passwordConfirm: password }), method: 'PATCH', token });
     expect(reset2.status).toBe(200);
     await signIn();
     const direct = served.find((l) => l.title === 'Direct Link')!;
-    const redirect = await request.get(`/r/${direct.id}`, { maxRedirects: 0 });
-    expect(redirect.status()).toBe(302);
+    const revealed = await request.get('/.netlify/functions/reveal', { params: { id: direct.id, user: 'fixture' }, maxRedirects: 0 });
+    expect(revealed.status()).toBe(200);
   });
 
   test('PocketBase refuses a Destination that is neither absolute http(s) nor root-relative', async () => {
@@ -807,7 +809,7 @@ test.describe('on the test stack', () => {
   // Ticket 20: last in the last project, so after every other spec. Only a migration made the events collection: it was created
   // before the first request PocketBase logged on this stack's empty volume, so no API call made it. Migrations run before
   // PocketBase serves. The check needs at least one request log by the end of the run, and asserts it.
-  // Ticket 33 dropped the check that it holds no record: from Phase 4 on every Profile load and `/r` Click writes an Event.
+  // Ticket 33 dropped the check that it holds no record: from Phase 4 on every Profile load and Reveal Click writes an Event.
   // Ticket 36 dropped the check that it was also last changed before that request: Phase 4's test 11 (tests/e2e/04-stats.spec.ts)
   // has the Operator add a temporary required field to it through the API and remove it again, as the Phase 4 spec requires,
   // which moves its `updated` time. The schema check above, which also runs after every other spec, still finds the

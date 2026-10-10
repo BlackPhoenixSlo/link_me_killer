@@ -1,5 +1,7 @@
 # Phase 00 — New-repo ground
 
+> **Amendment 2026-10-10.** Deeplink and `deeplink_open` Modes are removed; only Direct and Escape remain, and iOS/Instagram escape is passive (no native scheme). See phase-01's amendment note. The Fixture's "Deeplink Link" now inherits the Escape default.
+
 **Objective.** This repo has its own copy of v1's public page and a test-only Fixture Profile. The local test loop serves and asserts on those two alone. Neither git nor any test output ever holds the v1 Snapshot or any of its Destinations.
 
 ## Problem Statement

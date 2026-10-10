@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Browser, type Page, type Req
 import { join } from 'node:path';
 import {
   account, asSuperuser, createOwnerlessProfile, EDITOR, escapeOverlay, eventCount, featured, fresh, handOver, heading, intents, logIn, only,
-  onLocalStack, operator, ownerOf, phoneContext, proxy, recordIds, recordNavigations, superuserToken, UA, verifiedCreator, extBrowser, igExt,
+  onLocalStack, operator, ownerOf, phoneContext, proxy, recordIds, recordNavigations, superuserToken, UA, verifiedCreator,
 } from './helpers';
 
 // Phase 5 (docs/spec/phase-05-cutover-and-domains.md, Testing Decisions): one seam, this spec against the local stack at the
@@ -13,7 +13,7 @@ import {
 // credited to the resolved Profile, nothing is requested from another of ofl.ink's hosts, and Reveal refuses another origin.
 // Ticket 41: the hand-over order of the Cutover runbook's step 12, on a throwaway Profile (the last test).
 // Escapes are captured with Phase 1's navigation recorder and User-Agents (helpers.ts); a Destination a page navigates
-// to is fulfilled with a harmless page, and a redirect hop after `/r`, which no route sees, is stopped by the network guard.
+// to (after a Reveal, with no `/r` redirector any more) is fulfilled with a harmless page.
 // Set-up, not a second seam: `beforeAll` gives the Fixture Profile the Custom Domain `creator.test` and lists the Spare Domain
 // `spare.test` as a superuser through PocketBase's REST API; `afterAll` removes both. `unknown.test` is never added, and the
 // seed is unchanged.
@@ -275,9 +275,8 @@ const codedPath = (host: string, code: string) => (host === CUSTOM ? `/${code}` 
 const card = (visitor: Page, title: string) => visitor.locator('.link-card', { hasText: title });
 const STUB = '<!DOCTYPE html><title>Stub</title><h1>Stub Destination</h1>';
 
-// `act` sends the page off `origin` to a Destination. A fresh navigation there (after a Reveal) is fulfilled with a harmless page;
-// a redirect hop after `/r`, which no route sees, is stopped by the network guard. Returns that navigation's request: callers
-// compare its URL, a Destination, and never print it.
+// `act` sends the page off `origin` to a Destination. A fresh navigation there (after a Reveal) is fulfilled with a harmless
+// page. Returns that navigation's request: callers compare its URL, a Destination, and never print it.
 async function onward(visitor: Page, origin: string, act: () => Promise<unknown>) {
   await visitor.route((url) => url.origin !== origin, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: STUB }));
   const left = visitor.waitForEvent('request', (req) => req.isNavigationRequest() && new URL(req.url()).origin !== origin);
@@ -324,36 +323,23 @@ async function storedLink(linkId: string): Promise<{ id: string; mode: string }>
   return found.items[0];
 }
 
-// The Deeplink Link travels as Deeplink under a Deeplink default (the Deeplink Modes are Profile defaults only, ADR 0003,
-// amended 2026-10-06): each host's page gets its Profile JSON as the app serves it under one, in flight, as overlayShows does
-// below, so the stored default other specs read never changes.
-test('on every host the Direct Mode Link and the Deeplink Mode Link each end at the same Destination, through `/r` and Reveal on the page\'s own host', async ({ browser, request }) => {
+// Every Link's served url is empty, so each Click Reveals on the page's own host and lands on its Destination; that Destination
+// is the Creator's, the same on every host, and the Profile JSON serves no `/r` redirector to it.
+test('on every host the Direct Mode Link and the plain Link each reveal on the page\'s own host and end at the same Destination', async ({ browser, request }) => {
   test.setTimeout(120_000); // six page loads
-  const deeplink = await fixtureLinkId(request, 'Deeplink Link');
-  const deeplinkDefault = async (host: string) => {
-    const served = await (await request.get('/api/profiles/fixture.json', { headers: { host: new URL(at(host)).host } })).json();
-    served.profile.mode = 'deeplink';
-    served.links.find((l: { id: string }) => l.id === deeplink).mode = 'deeplink';
-    return served;
-  };
   for (const title of ['Direct Link', 'Deeplink Link']) {
     const linkId = await fixtureLinkId(request, title);
     const ends: string[] = [];
     for (const host of HOSTS) {
       const origin = at(host);
       const where = `Link ${linkId} on ${host}${codedPath(host, '111')}`;
-      const visitor = await visit(browser, origin, codedPath(host, '111'), await deeplinkDefault(host));
+      const visitor = await visit(browser, origin, codedPath(host, '111'));
       await showsFixture(visitor, where);
       const reveals: URL[] = [];
       visitor.on('request', (req) => { if (new URL(req.url()).pathname === REVEAL) reveals.push(new URL(req.url())); });
       const left = await onward(visitor, origin, () => card(visitor, title).click());
-      // Direct Mode reaches its Destination through `/r` on the page's own host; Deeplink Mode through Reveal there.
-      if (title === 'Direct Link') {
-        expect(left.redirectedFrom()?.url(), `the Click route ${where} went through`).toBe(`${origin}/r/${linkId}`);
-        expect(reveals, `Reveal requests for ${where}`).toEqual([]);
-      } else {
-        expect(reveals.map((url) => `${url.origin} ${url.searchParams.get('id')}`), `the Reveal for ${where}`).toEqual([`${origin} ${linkId}`]);
-      }
+      expect(reveals.map((url) => `${url.origin} ${url.searchParams.get('id')}`), `the Reveal for ${where}`).toEqual([`${origin} ${linkId}`]);
+      expect(left.redirectedFrom(), `no /r hop for ${where}`).toBeNull();
       ends.push(left.url());
       await visitor.context().close();
     }
@@ -364,9 +350,8 @@ test('on every host the Direct Mode Link and the Deeplink Mode Link each end at 
 
 // Is the Escape Overlay showing once the Fixture Profile's Links have rendered at `origin` + `path` with an iOS Instagram
 // User-Agent? `mode`, when given, replaces the Profile's default Mode in the Profile JSON the page receives, as the app serves
-// it for that host (fetched at the baseURL under that host's Host header, which Caddy passes on; observed to give that host's
-// `/r` urls; the ASSUMPTION above the cross-origin Reveal test covers this use of `request`), so the page sees the other default
-// without any shared record changing.
+// it for that host (fetched at the baseURL under that host's Host header, which Caddy passes on; the ASSUMPTION above the
+// cross-origin Reveal test covers this use of `request`), so the page sees the other default without any shared record changing.
 // ASSUMPTION: "exactly when" is proven both ways, shown with the stored Escape Mode default and hidden with a Direct one, the
 // second through an in-flight Profile JSON as Phase 1's serveVariant does (rung 3), not by changing the Fixture's stored default,
 // which specs running beside this one read (rung 4). Overturned if the parity must be shown on stored data; the default is then
@@ -398,37 +383,52 @@ test('with an iOS Instagram User-Agent, creator.test/ shows the Escape Overlay e
   expect(shown, 'the Escape Overlay with the stored default, then with Direct Mode').toEqual([true, false]);
 });
 
-// The Escapes fired at `origin` + `path` with `userAgent`, each an `instagram://extbrowser/` (iOS Instagram, 2026-10-06) or
-// `intent://` URL as Phase 1 captures it. The
-// Fixture's Escape Mode default pops nothing out on open; after closing the Escape Overlay it shows, a tap on the Escape Link
-// fires the one Escape.
+// The Escapes fired at `origin` + `path` with an Android In-App Browser `userAgent`: each a Chrome `intent://` URL as Phase 1
+// captures it. The Fixture's Escape Mode default pops nothing out on open; after closing the Escape Overlay it shows, a tap on
+// the Escape Link fires the one intent. Only Android fires a scheme now.
 async function escapesFired(browser: Browser, origin: string, path: string, userAgent: string) {
   const context = await phoneContext(browser, { origin, userAgent });
   const visitor = await context.newPage();
   const navigations = await recordNavigations(visitor);
-  const fired = () => [...extBrowser(navigations), ...intents(navigations)];
   await visitor.goto(origin + path);
   await showsFixture(visitor, `${origin}${path}`);
   await escapeOverlay(visitor).getByRole('button', { name: 'Close' }).click();
   await card(visitor, 'Escape Link').click();
-  await expect.poll(fired, `the Escapes fired on ${origin}${path}`).toHaveLength(1);
+  await expect.poll(() => intents(navigations), `the Escapes fired on ${origin}${path}`).toHaveLength(1);
   await context.close();
-  return fired();
+  return intents(navigations);
 }
 
-test('an Escape from creator.test/{code} targets creator.test and /{code}, with no Username segment, on iOS and as the Android intent', async ({ browser, request }) => {
+// iOS is passive: an Escape Link tap fires no scheme and shows the Escape Overlay, whose "Open in browser" link's href is the
+// page's own https address. Returns that href for the test to compare to the escape target.
+async function iosEscapeTarget(browser: Browser, origin: string, path: string) {
+  const context = await phoneContext(browser, { origin, userAgent: UA.iosInstagram });
+  const visitor = await context.newPage();
+  const navigations = await recordNavigations(visitor);
+  await visitor.goto(origin + path);
+  await showsFixture(visitor, `${origin}${path}`);
+  await escapeOverlay(visitor).getByRole('button', { name: 'Close' }).click();
+  await card(visitor, 'Escape Link').click();
+  await expect(escapeOverlay(visitor)).toBeVisible();
+  const href = await escapeOverlay(visitor).getByRole('link', { name: 'Open in browser' }).getAttribute('href');
+  const schemes = navigations.map(({ url }) => url).filter((url) => /^(instagram:|x-safari-|intent:)/.test(url));
+  expect(schemes, `no native scheme fired on iOS for ${origin}${path}`).toEqual([]);
+  await context.close();
+  return href;
+}
+
+test('an Escape from creator.test/{code} targets creator.test and /{code}, with no Username segment, passively on iOS and as the Android intent', async ({ browser, request }) => {
   const linkId = await fixtureLinkId(request, 'Escape Link');
   const target = `https://${CUSTOM}:${PORT}/111?link=${linkId}`; // the escape target, spelled out as the Phase 1 spec spells it
-  expect(await escapesFired(browser, at(CUSTOM), '/111', UA.iosInstagram), `the iOS Escape for Link ${linkId} on ${CUSTOM}/111`)
-    .toEqual([igExt(target)]);
+  expect(await iosEscapeTarget(browser, at(CUSTOM), '/111'), `the iOS escape target for Link ${linkId} on ${CUSTOM}/111`).toBe(target);
   expect(await escapesFired(browser, at(CUSTOM), '/111', UA.androidInstagram), `the Android Escape for Link ${linkId} on ${CUSTOM}/111`)
     .toEqual([`intent://${CUSTOM}:${PORT}/111?link=${linkId}#Intent;scheme=https;package=com.android.chrome;end`]);
 });
 
 test('an Escape from spare.test/{username}/{code} keeps /{username}/{code}', async ({ browser, request }) => {
   const linkId = await fixtureLinkId(request, 'Escape Link');
-  expect(await escapesFired(browser, at(SPARE), '/fixture/222', UA.iosInstagram), `the iOS Escape for Link ${linkId} on ${SPARE}/fixture/222`)
-    .toEqual([igExt(`https://${SPARE}:${PORT}/fixture/222?link=${linkId}`)]);
+  expect(await iosEscapeTarget(browser, at(SPARE), '/fixture/222'), `the iOS escape target for Link ${linkId} on ${SPARE}/fixture/222`)
+    .toBe(`https://${SPARE}:${PORT}/fixture/222?link=${linkId}`);
 });
 
 // Events this spec's Visitors make carry their own country, which no other spec sends, so other workers' Fixture traffic is left

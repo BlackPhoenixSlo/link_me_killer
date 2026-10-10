@@ -27,9 +27,7 @@ const ENV: Record<string, string> = Object.fromEntries(
 );
 const PB = `http://127.0.0.1:${ENV.PB_PORT}`;
 const TEST_SECRETS: Record<string, string> = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'netlify', 'functions', 'secrets.json'), 'utf8'));
-const MODES = ['direct', 'escape_ig', 'deeplink'] as const;
-// A Link's own Modes: the Deeplink Modes are Profile defaults only (ADR 0003, amended 2026-10-06).
-const LINK_MODES = ['direct', 'escape_ig'] as const;
+const MODES = ['direct', 'escape_ig'] as const;
 
 const pb = (pathname: string, { token, ...init }: RequestInit & { token?: string } = {}) =>
   fetch(PB + pathname, { ...init, headers: { ...(init.headers as Record<string, string>), ...(token ? { Authorization: token } : {}) } });
@@ -59,7 +57,7 @@ test.describe('live edits through PocketBase\'s API', () => {
     const res = await pb(`/api/collections/${collection}/records/${id}`, { ...send('PATCH', body), token });
     expect(res.status, `patch ${collection}`).toBe(200);
   };
-  type Served = { profile: { displayName: string; mode: string }; links: { id: string; title: string; mode: string; url: string }[] };
+  type Served = { profile: { displayName: string; mode: string }; links: { id: string; title: string; mode: string }[] };
   const served = async (request: APIRequestContext) => {
     const res = await request.get(`/api/profiles/${username}.json`);
     const body = await res.text();
@@ -129,10 +127,9 @@ test.describe('live edits through PocketBase\'s API', () => {
     await expect(page.locator('.link-card .link-title')).toHaveText(['Second Link']);
   });
 
-  test('the Profile\'s Mode and a Link\'s Mode show as the effective Mode; a Deeplink Link\'s url is empty', async ({ request, baseURL }) => {
-    const origin = new URL(baseURL!).origin;
+  test('the Profile\'s Mode and a Link\'s Mode show as the effective Mode; every Link carries no url', async ({ request }) => {
     for (const profileMode of ['', ...MODES]) {
-      for (const linkMode of ['', ...LINK_MODES]) {
+      for (const linkMode of ['', ...MODES]) {
         const at = `Profile Mode '${profileMode}', Link Mode '${linkMode}'`;
         await patch('profiles', profileId, { mode: profileMode });
         await patch('links', links.second.id, { mode: linkMode });
@@ -141,7 +138,7 @@ test.describe('live edits through PocketBase\'s API', () => {
         expect(json.profile.mode, at).toBe(profileMode || 'escape_ig');
         expect(json.links.length, at).toBe(1);
         expect(json.links[0].mode, at).toBe(effective);
-        expect(json.links[0].url, at).toBe(effective === 'deeplink' ? '' : `${origin}/r/${links.second.linkId}`);
+        expect('url' in json.links[0], at).toBe(false); // every Link Reveals on click, so it carries no url
       }
     }
   });

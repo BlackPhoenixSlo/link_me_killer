@@ -92,10 +92,10 @@ export function profileForm(profile, { editor = false, button, done }) {
   return form;
 }
 
-// The Profile step, Onboarding step 3 of 5, in one card: the Profile's own form, then on to the next Onboarding step.
+// The Profile step, Onboarding step 2 of 4, in one card: the Profile's own form, then on to the next Onboarding step.
 export function drawProfileStep(profile) {
   render('Your Profile', el('div', { className: 'e-card' },
-    steps(3),
+    steps(2),
     pageTitle('Your Profile'),
     el('p', { className: 'e-page__lead' }, 'What Visitors see at the top of your page. A photo in jpg, png, heic, gif or webp.'),
     profileForm(profile, { button: 'Continue', done: () => onboard() })));
@@ -105,8 +105,6 @@ export function drawProfileStep(profile) {
 const MODE_HELP = {
   direct: 'Direct opens the Destination straight away.',
   escape_ig: 'Escape shows Visitors in the Instagram or TikTok browser a screen that helps them into Safari or Chrome; a Visitor already in a real browser never sees it.',
-  deeplink: 'Deeplink on tap sends the Visitor to Safari or Chrome the moment they tap the Link, from Instagram, TikTok and other apps\' in-app browsers on iPhone and Android, with no how-to screen. Safari or Chrome then opens the Destination.',
-  deeplink_open: 'Deeplink at open sends the Visitor to Safari or Chrome as soon as your page opens in Instagram, TikTok and other apps\' in-app browsers on iPhone and Android, once per tab, with no how-to screen. Taps there behave like Deeplink on tap.',
 };
 
 // A select field whose hint (`{id}-help`) explains the option chosen and changes with it (aria-live); a change saves nothing.
@@ -128,7 +126,7 @@ function explained(id, label, control, help) {
 // Operator wants the Template's toggle that acts at once.
 // An empty stored default Mode shows as Escape, as PocketBase's field reads it (pocketbase/pb_migrations/1791140001_profiles.js:22).
 export function quickSettings(profile) {
-  const mode = select('mode', Object.entries(MODE_NAMES), profile.mode || 'escape_ig');
+  const mode = select('mode', Object.entries(MODE_NAMES), MODE_NAMES[profile.mode] ? profile.mode : 'escape_ig');
   const modeField = explained('default-mode', 'Default Mode', mode, MODE_HELP);
   modeField.querySelector('#default-mode-help').setAttribute('data-test', 'default-mode-help');
   modeField.append(el('p', { className: 'e-field__hint', id: 'default-mode-note' }, 'Every Link left on “Profile default” follows this Mode.'));

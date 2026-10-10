@@ -90,8 +90,8 @@ test.describe('the Editor\'s home and Link form', () => {
     await expect(saved).toBeVisible();
     expect((await servedProfile(request, creator.username)).profile.mode).toBe('direct');
     // A choice changed after the save is not saved yet, so the message goes.
-    await mode.selectOption({ label: 'Deeplink on tap' });
-    await expect(help).toHaveText(/^Deeplink /);
+    await mode.selectOption({ label: 'Escape' });
+    await expect(help).toHaveText(/^Escape /);
     await expect(saved).toHaveCount(0);
   });
 
