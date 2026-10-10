@@ -104,7 +104,7 @@ h1[tabindex="-1"]:focus { outline: none; }
 .e-page__icon--ok { background: var(--e-color-success-soft); color: var(--e-color-success); }
 
 
-/* Onboarding's "Step n of 5" over a 4px track filled to n/5 (`style="--e-step: n"`). */
+/* Onboarding's "Step n of 4" over a 4px track filled to n/4 (`style="--e-step: n"`). */
 .e-steps {
   display: flex;
   flex-direction: column;
@@ -119,7 +119,7 @@ h1[tabindex="-1"]:focus { outline: none; }
   height: 4px;
   border-radius: var(--e-radius-pill);
   overflow: hidden;
-  background: linear-gradient(90deg, var(--e-color-primary) calc(var(--e-step, 0) * 20%), var(--e-color-border) 0);
+  background: linear-gradient(90deg, var(--e-color-primary) calc(var(--e-step, 0) * 25%), var(--e-color-border) 0);
 }
 
 
@@ -592,6 +592,8 @@ h1[tabindex="-1"]:focus { outline: none; }
 .e-msg--error { color: var(--e-color-danger); }
 .e-msg--ok { color: var(--e-color-success); }
 .e-msg--info { padding: var(--e-space-3) var(--e-space-4); border-radius: var(--e-radius-md); background: var(--e-color-primary-soft); }
+/* The unverified banner (screens/auth.js, unverifiedBanner): the info notice with its text, "Resend email" and the answer stacked. */
+.e-banner { display: flex; flex-direction: column; align-items: flex-start; gap: var(--e-space-2); }
 
 /* Works on a <p> with plain text as well as on a block with an icon, a title and a text. */
 .e-empty {

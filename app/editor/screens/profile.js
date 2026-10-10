@@ -92,10 +92,10 @@ export function profileForm(profile, { editor = false, button, done }) {
   return form;
 }
 
-// The Profile step, Onboarding step 3 of 5, in one card: the Profile's own form, then on to the next Onboarding step.
+// The Profile step, Onboarding step 2 of 4, in one card: the Profile's own form, then on to the next Onboarding step.
 export function drawProfileStep(profile) {
   render('Your Profile', el('div', { className: 'e-card' },
-    steps(3),
+    steps(2),
     pageTitle('Your Profile'),
     el('p', { className: 'e-page__lead' }, 'What Visitors see at the top of your page. A photo in jpg, png, heic, gif or webp.'),
     profileForm(profile, { button: 'Continue', done: () => onboard() })));

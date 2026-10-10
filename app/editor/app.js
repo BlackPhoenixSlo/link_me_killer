@@ -6,8 +6,11 @@
 // and the router, started at the end once every module has loaded. The screens are in screens/auth.js, screens/links.js,
 // screens/profile.js and stats.js; they import the helpers from here, and the router imports them.
 // Ticket 25: log-in, sign-up, the claim step and the "verify your email" screen. `/edit` sends a Creator with no session to
-// log-in, and a signed-in one to the first Onboarding step that applies: no Profile, the claim step; email not verified, the
-// verify screen.
+// log-in, and a signed-in one to the first Onboarding step that applies: no Profile, the claim step.
+// An unverified email no longer holds Onboarding on the verify screen (the Operator, 2026-10-10; the rules' side is
+// 1791140019_unverified_can_edit.js): the account goes on to the Profile step and uses the whole Editor, and every screen past
+// the sign-in screens shows the unverified banner (screens/auth.js, unverifiedBanner) until a refresh reads the email as
+// verified. `/edit/verify-email` stays, opened by its URL.
 // Ticket 26: then no display name, the Profile step; no Link, the first-Link step (the Link form), followed by the live
 // address; otherwise the Editor, which for now holds "Your Bio Link", the Links list in Visitor order and "Add link". Progress
 // is derived from the records each time, never stored.
@@ -31,7 +34,7 @@
 // ASSUMPTION: the screen path `/edit/stats` (rung 6, as above; it adds no top-level path, so no Username is reserved).
 // Overturned by a later ticket moving it.
 
-import { drawLogin, drawSignup, drawClaim, drawRetry, drawVerify, drawVerified, drawReset, drawForgot } from './screens/auth.js';
+import { drawLogin, drawSignup, drawClaim, drawRetry, drawVerify, drawVerified, drawReset, drawForgot, unverifiedBanner } from './screens/auth.js';
 import { drawLinkForm, drawHome } from './screens/links.js';
 import { drawProfileStep } from './screens/profile.js';
 import { openStats } from './stats.js';
@@ -171,11 +174,16 @@ export function el(tag, props = {}, ...children) {
 
 // Draws a screen: `heading` goes to the tab title (the top bar shows the wordmark alone), `children` into one `e-page` column in
 // <main>. A new screen starts at the top with the focus on its h1. A last argument `{ focus: false }` redraws the same screen in
-// place (a Stats filter or range tab): the scroll and the focus are left to the caller.
+// place (a Stats filter or range tab): the scroll and the focus are left to the caller. While the signed-in account's email is
+// not verified, the unverified banner heads the column, after the Creator nav when there is one; the sign-in screens
+// (screens/auth.js) pass `{ banner: false }`, since the verify screen is about the same email and the rest come before it.
 let shown = location.pathname + location.search; // the address of the screen last drawn or being opened (route())
 export function render(heading, ...children) {
   const last = children[children.length - 1];
-  const { focus = true } = last && Object.getPrototypeOf(last) === Object.prototype ? children.pop() : {};
+  const { focus = true, banner = true } = last && Object.getPrototypeOf(last) === Object.prototype ? children.pop() : {};
+  if (banner && account && !account.verified) {
+    children.splice(children[0] instanceof Element && children[0].classList.contains('e-nav') ? 1 : 0, 0, unverifiedBanner());
+  }
   document.title = `${heading} · ofl.ink`;
   shown = location.pathname + location.search;
   screen.removeAttribute('aria-busy');
@@ -210,8 +218,8 @@ export const pageTitle = (text) => el('h1', { className: 'e-page__title' }, text
 // An icon from editor.css, decoration only.
 export const icon = (name) => el('span', { className: `e-icon e-icon--${name}`, 'aria-hidden': 'true' });
 
-// The Onboarding step line: plain text, never a status, over a track the stylesheet fills to n/5 from `--e-step`.
-export const steps = (n) => el('p', { className: 'e-steps', style: `--e-step: ${n}` }, `Step ${n} of 5`,
+// The Onboarding step line: plain text, never a status, over a track the stylesheet fills to n/4 from `--e-step`.
+export const steps = (n) => el('p', { className: 'e-steps', style: `--e-step: ${n}` }, `Step ${n} of 4`,
   el('span', { className: 'e-steps__track', 'aria-hidden': 'true' }));
 
 // One labelled field (`e-field`): the label names `control` alone. A `hint` shows under it, tied to it by aria-describedby
@@ -389,7 +397,6 @@ export async function onboarded() {
   owned = res.data.items;
   const profile = owned.find((p) => p.id === localStorage.getItem(CURRENT)) || owned[0];
   if (!profile) return show('/edit/claim', () => drawClaim());
-  if (!account.verified) return show('/edit/verify-email', drawVerify);
   if (!profile.displayName) return show('/edit/profile', () => drawProfileStep(profile));
   const links = await linksOf(profile);
   if (!links.ok) return drawRetry(links.data.message);
@@ -416,6 +423,7 @@ export async function route() {
   if (path === '/edit/forgot') return drawForgot();
   if (!(await refresh())) return show('/edit/login', drawLogin);
   if (path === '/edit/stats') return openStats();
+  if (path === '/edit/verify-email') return drawVerify();
   if (path === '/edit/domain') { const done = await onboarded(); if (done) show('/edit/domain', () => drawDomain(done.profile, done.domain)); return; }
   if (path === '/edit/new') return openNew();
   return onboard();

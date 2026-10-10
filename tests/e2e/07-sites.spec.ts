@@ -50,11 +50,11 @@ test.describe('the cap, over HTTP at the public origin', () => {
     expect((await claim(request, other.token, other.id, 2)).status(), 'another account\'s slot 2').toBe(200);
   });
 
-  test('an unverified account claims slot 1 only', async ({ request }) => {
+  test('an unverified account claims past slot 1 as well (ADR 0006)', async ({ request }) => {
     const { token, id } = await account(request);
-    expect((await claim(request, token, id, 2)).status(), 'slot 2 before any').toBe(400);
+    expect((await claim(request, token, id, 2)).status(), 'slot 2 before any').toBe(200);
     expect((await claim(request, token, id, 1)).status(), 'slot 1').toBe(200);
-    expect((await claim(request, token, id, 2)).status(), 'slot 2 after slot 1').toBe(400);
+    expect((await claim(request, token, id, 2)).status(), 'slot 2, taken').toBe(400);
   });
 
   test('the owner of a second Profile cannot change its slot, Username, owner or badge', async ({ request }) => {

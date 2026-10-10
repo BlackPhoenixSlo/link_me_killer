@@ -7,3 +7,5 @@ n8n_oflink_Feb18.json
 goal.txt
 vendor/
 .env
+.DS_Store
+.scratch/e2e-logs/

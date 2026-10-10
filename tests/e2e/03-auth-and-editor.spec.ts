@@ -8,13 +8,14 @@ import {
   account, CLAIM, createOwnerlessProfile, EDITOR, expectServedWebp, expectVerifyScreen, featured, forgotPassword, fresh, furnishedCreator,
   handOver, heading, holdsDestination, INSTAGRAM_UA, isWebp, LOG_IN, logIn, logInToHandedOver, mailedLink, mailedLinks, markVerified,
   onLocalStack, openProfile, openTracking, operator, ownerOf, passAgeGate, PHONE, phoneContext, pngFile, probe, proxy, reach, readBack,
-  recordIds, refused, servedProfile, SIGN_UP, signUp, upload, VERIFY, verifiedCreator, visitorSees,
+  recordIds, refused, servedProfile, SIGN_UP, signUp, upload, verifiedCreator, visitorSees,
 } from './helpers';
 
 // Phase 3 (docs/spec/phase-03-auth-and-editor.md, Testing Decisions): one seam, the running v2 stack at Playwright's baseURL.
 // Creator journeys run at 390×844, the Visitor and every second log-in in a fresh context; rule checks call the proxy over HTTP.
 // Ticket 25: sign-up, the claim and its refusals, the verify screen, the landing page's button, and the proxy's allow-list.
-// Ticket 26: the verified-email gate over HTTP, and Onboarding after verification to a live Profile like an imported one.
+// Ticket 26: content writes over HTTP, and Onboarding to a live Profile like an imported one; since ADR 0006 both run unverified,
+// and the tracer verifies at the end, where the Editor's unverified notice goes.
 // Ticket 31: every verified Creator follows the verification link mailed to the local mail catcher (helpers.ts, mailedLink);
 // marking an account verified as a superuser is left to the hand-over alone (spec, Testing Decisions, Mail).
 // Every account is a throwaway with a fresh `signup_<hex>` email and Username; nothing is cleaned up, because the test stack
@@ -24,19 +25,25 @@ const ROOT = join(__dirname, '..', '..');
 test.use({ viewport: PHONE });
 
 test.describe('sign-up and the claim', () => {
-  test('at 390×844 a stranger signs up with no invitation and lands signed in on "verify your email"; Continue keeps them there', async ({ page, request }) => {
+  test('at 390×844 a stranger signs up with no invitation and lands signed in on the Profile step, unverified; the verify screen\'s Continue keeps them there', async ({ page, request }) => {
     const creator = fresh();
     await signUp(page, creator);
-    await expectVerifyScreen(page);
-    await expect(page.getByRole('main')).toContainText(creator.email);
+    // Onboarding does not wait on the email (ADR 0006).
+    await expect(heading(page, 'Your Profile')).toBeVisible();
+    await expect(page).toHaveURL(/\/edit\/profile$/);
+    await expect(page.locator('[data-test="unverified-banner"]')).toBeVisible();
     // The claim made the Profile, so it is live at once.
     expect((await request.get(`/api/profiles/${creator.username}.json`)).status()).toBe(200);
+    // The verify screen stays reachable by its URL, and its Continue holds an unverified account there.
+    await page.goto('/edit/verify-email');
+    await expectVerifyScreen(page);
+    await expect(page.getByRole('main')).toContainText(creator.email);
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByText('Your email is not verified yet.')).toBeVisible();
     await expectVerifyScreen(page);
-    // Still signed in: opening the Editor again lands on the same step.
+    // Still signed in: opening the Editor again lands on the Profile step.
     await page.goto('/edit');
-    await expectVerifyScreen(page);
+    await expect(heading(page, 'Your Profile')).toBeVisible();
   });
 
   test('"Julia" typed into the Username field shows as "julia"', async ({ page }) => {
@@ -76,18 +83,18 @@ test.describe('sign-up and the claim', () => {
     }
     await field.fill(creator.username);
     await page.getByRole('button', { name: 'Claim' }).click();
-    await expectVerifyScreen(page);
+    await expect(heading(page, 'Your Profile')).toBeVisible();
   });
 
-  test('logging in again in a fresh context lands on the verify screen; after a failed claim, on the claim step', async ({ page, browser }) => {
+  test('logging in again in a fresh context lands on the Profile step; after a failed claim, on the claim step', async ({ page, browser }) => {
     const claimed = fresh();
     await signUp(page, claimed);
-    await expectVerifyScreen(page);
+    await expect(heading(page, 'Your Profile')).toBeVisible();
     const unclaimed = fresh();
     await signUp(page, { ...unclaimed, username: 'edit' });
     await expect(heading(page, CLAIM)).toBeVisible();
 
-    for (const [creator, step] of [[claimed, VERIFY], [unclaimed, CLAIM]] as const) {
+    for (const [creator, step] of [[claimed, 'Your Profile'], [unclaimed, CLAIM]] as const) {
       const context = await phoneContext(browser);
       const second = await context.newPage();
       await logIn(second, creator);
@@ -139,7 +146,7 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
     expect(ok.status()).toBe(200);
   });
 
-  test('the claim sets only Username, owner, default Mode and slot, for the Creator alone, and an unverified account claims one', async ({ request }) => {
+  test('the claim sets only Username, owner, default Mode and slot, for the Creator alone, and an unverified account claims more than one', async ({ request }) => {
     const first = await account(request);
     const other = await account(request);
     const as = proxy(request, first.token);
@@ -156,9 +163,9 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
     const claimed = await as.post('profiles/records', { username: username(), owner: first.id, mode: 'escape_ig', slot: 1 });
     expect(claimed.status()).toBe(200);
     expect((await claimed.json()).mode).toBe('escape_ig');
-    // A second Profile needs a verified email (Phase 6; tests/e2e/07-sites.spec.ts holds the cap's other cases).
+    // A second Profile needs no verified email either (ADR 0006; tests/e2e/07-sites.spec.ts holds the cap's other cases).
     const second = await as.post('profiles/records', { username: username(), owner: first.id, mode: 'escape_ig', slot: 2 });
-    expect(second.status(), 'a second Profile while unverified').toBe(400);
+    expect(second.status(), 'a second Profile while unverified').toBe(200);
     // A sign-up that sets anything but email and password is refused.
     const c = fresh();
     for (const extra of [{ verified: true }, { name: 'x' }, { emailVisibility: true }]) {
@@ -207,37 +214,40 @@ test.describe('rules and the proxy, over HTTP at the public origin', () => {
   });
 });
 
-// ---- Ticket 26: the verified-email gate, and Onboarding to a live Profile -------------------------------------------------
+// ---- Ticket 26: content writes before verification, and Onboarding to a live Profile -----------------------------------------
+// The verified-email gate is gone (ADR 0006, 1791140019_unverified_can_edit.js): an unverified account writes everything.
 
-test.describe('the verified-email gate', () => {
-  test('over HTTP an unverified Creator\'s token cannot update its Profile, add a Link or upload an avatar; the owner reads both back unchanged', async ({ request }) => {
+test.describe('content writes with an unverified email', () => {
+  test('over HTTP an unverified Creator\'s token updates its Profile, adds, edits and deletes a Link and uploads an avatar; the owner reads each back', async ({ request }) => {
     const { token, id, creator } = await account(request);
     const as = proxy(request, token);
     const claimed = await as.post('profiles/records', { username: creator.username, owner: id, mode: 'escape_ig', slot: 1 });
     expect(claimed.status()).toBe(200);
     const profileId = (await claimed.json()).id as string;
-    const before = await readBack(request, { token, profileId });
-    expect(before.links).toEqual([]);
 
-    // PocketBase answers an update its rule refuses as a record it cannot find (404), and a refused create with a bare 400.
-    const update = await as.patch(`profiles/records/${profileId}`, { displayName: 'Not yet', bio: 'not yet' });
-    expect(update.status(), 'Profile update').toBe(404);
-    const link = await as.post('links/records', { profile: profileId, title: 'Not yet', order: 0, destination: `https://example.com/${creator.username}` });
-    expect(link.status(), 'Link create').toBe(400);
-    // The upload endpoint writes with the caller's token, so PocketBase's refusal is its answer.
+    const update = await as.patch(`profiles/records/${profileId}`, { displayName: 'Unverified', bio: 'unverified' });
+    expect(update.status(), 'Profile update').toBe(200);
+    const link = await as.post('links/records', { profile: profileId, title: 'First', order: 0, destination: `https://example.com/${creator.username}` });
+    expect(link.status(), 'Link create').toBe(200);
+    const linkId = (await link.json()).id as string;
+    expect((await as.patch(`links/records/${linkId}`, { title: 'Edited' })).status(), 'Link update').toBe(200);
+    const spare = await as.post('links/records', { profile: profileId, title: 'Spare', order: 1, destination: `https://example.com/${creator.username}/spare` });
+    expect(spare.status(), 'second Link create').toBe(200);
+    expect((await as.delete(`links/records/${(await spare.json()).id}`)).status(), 'Link delete').toBe(204);
+    // The upload endpoint writes with the caller's token.
     const avatar = await upload(request, token, `profiles/${profileId}/avatar`);
-    expect(avatar.status(), 'avatar upload').toBe(404);
+    expect(avatar.status(), 'avatar upload').toBe(200);
 
     const after = await readBack(request, { token, profileId });
-    expect(after).toEqual(before);
-    expect(after.profile.displayName === '' && after.profile.bio === '' && after.profile.avatar === '').toBe(true);
+    expect(after.profile.displayName === 'Unverified' && after.profile.bio === 'unverified' && after.profile.avatar !== '').toBe(true);
+    expect(after.links.map((l: { title: string }) => l.title)).toEqual(['Edited']);
   });
 });
 
-test.describe('Onboarding after verification', () => {
+test.describe('Onboarding before verification', () => {
   test.skip(!onLocalStack(), 'the mail catcher and the Operator\'s PocketBase port are on the local test stack only');
 
-  test('at 390×844 a verified Creator goes through Onboarding to a live Profile whose Links act like imported ones', async ({ page, browser, request, baseURL }) => {
+  test('at 390×844 an unverified Creator goes through Onboarding and the Editor to a live Profile whose Links act like imported ones, then verifies', async ({ page, browser, request, baseURL }) => {
     test.setTimeout(180_000);
     const creator = fresh();
     const origin = new URL(baseURL!).origin;
@@ -248,11 +258,8 @@ test.describe('Onboarding after verification', () => {
     const holdsEither = (body: string) => body.includes(adultDestination) || body.includes(directDestination);
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
 
+    // Everything up to the verification link runs with the email unverified (ADR 0006).
     await signUp(page, creator);
-    await expectVerifyScreen(page);
-    await page.goto(await mailedLink(creator.email, '/edit/verify'));
-    await expect(heading(page, 'Email verified')).toBeVisible();
-    await page.getByRole('button', { name: 'Continue' }).click();
 
     // The Profile step: no display name, no move.
     await expect(heading(page, 'Your Profile')).toBeVisible();
@@ -305,6 +312,32 @@ test.describe('Onboarding after verification', () => {
     await page.getByRole('button', { name: 'Save link' }).click();
     await expect(heading(page, 'Edit Profile')).toBeVisible();
     await expect(rows).toHaveText(['Adult card', 'Direct card']);
+    // A third Link, edited and then deleted, still unverified.
+    await page.getByRole('button', { name: 'Add link' }).click();
+    await page.getByLabel('Title').fill('Spare card');
+    await page.getByLabel('Destination').fill(`${directDestination}/spare`);
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(rows).toHaveText(['Adult card', 'Direct card', 'Spare card']);
+    await page.getByRole('button', { name: 'Spare card', exact: true }).click();
+    await expect(heading(page, 'Edit link')).toBeVisible();
+    await page.getByLabel('Title').fill('Spare edited');
+    await page.getByRole('button', { name: 'Save link' }).click();
+    await expect(rows).toHaveText(['Adult card', 'Direct card', 'Spare edited']);
+    await page.getByRole('button', { name: 'Delete Spare edited' }).click();
+    await page.getByRole('alertdialog', { name: 'Delete this link?' }).getByRole('button', { name: 'Delete link', exact: true }).click();
+    await expect(rows).toHaveText(['Adult card', 'Direct card']);
+
+    // The unverified notice, with "Resend email"; then the mailed link verifies the email and the notice is gone.
+    const banner = page.locator('[data-test="unverified-banner"]');
+    await expect(banner.locator('p').first()).toHaveText('Email not verified. You can use everything, but you can\'t reset your password until you confirm it.');
+    await expect(banner.locator('[data-test="resend-verification"]')).toHaveText('Resend email');
+    await banner.locator('[data-test="resend-verification"]').click();
+    await expect(banner).toContainText(`We asked for a new link to ${creator.email}.`);
+    await page.goto(await mailedLink(creator.email, '/edit/verify'));
+    await expect(heading(page, 'Email verified')).toBeVisible();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(heading(page, 'Edit Profile')).toBeVisible();
+    await expect(page.locator('[data-test="unverified-banner"]')).toHaveCount(0);
     await page.screenshot({ path: join(ROOT, '.scratch', 'goal_ai', 'shots', '03-auth-and-editor.png'), fullPage: true });
     // Progress is derived: opening /edit again lands in the Editor.
     await page.goto('/edit');
@@ -853,14 +886,14 @@ test.describe('owner rules, over HTTP at the public origin', () => {
     }
   });
 
-  test('the owner cannot change their Username, owner, badge or slot, delete their Profile, add one on a taken slot or past the cap, choose a Link Id, upload a file directly or store a Destination outside https://, http:// and /', async ({ request }) => {
+  test('the owner cannot change their Username, owner, badge or slot, add one on a taken slot or past the cap, choose a Link Id, upload a file directly or store a Destination outside https://, http:// and /', async ({ request }) => {
     const [a, b] = [await furnishedCreator(request), await furnishedCreator(request)];
     const before = await readBack(request, a);
     const as = probe(request, a.token, b.secret);
     const link = { profile: a.profileId, title: 'Probe', order: 9, destination: 'https://example.com/probe' };
     for (const change of [{ username: `${a.creator.username}x` }, { owner: b.id }, { verified: true }, { slot: 2 }]) refused(await as.patch(`profiles/records/${a.profileId}`, change));
-    refused(await as.delete(`profiles/records/${a.profileId}`));
-    for (const slot of [1, 4]) refused(await as.post('profiles/records', { username: `${a.creator.username}x`, owner: a.id, mode: 'escape_ig', slot }));
+    // The owner may delete their own Profile (1791140017_profile_self_delete.js; 07-sites proves it), and the cap is 10 (1791140016).
+    for (const slot of [1, 11]) refused(await as.post('profiles/records', { username: `${a.creator.username}x`, owner: a.id, mode: 'escape_ig', slot }));
     for (const chosen of [{ id: 'chosenrecord123' }, { linkId: 'chosenlinkid' }]) refused(await as.post('links/records', { ...link, ...chosen }));
     refused(await as.patch(`links/records/${a.linkIds[0]}`, { linkId: 'chosenlinkid' }));
     refused(await as.patchFiles(`profiles/records/${a.profileId}`, { avatar: pngFile('direct.png', [0, 200, 0]) }));
@@ -917,9 +950,9 @@ test.describe('the session and where log-in lands', () => {
     await expect(featured(page)).toHaveText(['Session card']);
   });
 
-  test('a Creator who logs in partway through Onboarding resumes at the claim step, the verify screen, the Profile step or the first-Link step', async ({ browser, request }) => {
-    // Each stage arranged over HTTP as the Creator would reach it (helpers.ts, reach), the mailed verification link included.
-    const stages: [string, RegExp][] = [[CLAIM, /\/edit\/claim$/], [VERIFY, /\/edit\/verify-email$/], ['Your Profile', /\/edit\/profile$/], ['Add your first Link', /\/edit\/first-link$/]];
+  test('a Creator who logs in partway through Onboarding, unverified, resumes at the claim step, the Profile step or the first-Link step', async ({ browser, request }) => {
+    // Each stage arranged over HTTP as the Creator would reach it (helpers.ts, reach), the email never verified.
+    const stages: [string, RegExp][] = [[CLAIM, /\/edit\/claim$/], ['Your Profile', /\/edit\/profile$/], ['Add your first Link', /\/edit\/first-link$/]];
     for (const [stage, url] of stages) {
       const creator = await reach(request, stage);
       const context = await phoneContext(browser);
@@ -978,8 +1011,11 @@ test.describe('the session and where log-in lands', () => {
     await expect(heading(page, 'Link invalid or expired')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Resend email' })).toBeVisible();
     // Claimed over HTTP, so no verification email was ever asked for (helpers.ts, reach): the one that arrives is Resend's.
-    const creator = await reach(request, VERIFY);
+    // Log-in lands on the Profile step; the verify screen is opened by its URL.
+    const creator = await reach(request, 'Your Profile');
     await logIn(page, creator);
+    await expect(heading(page, 'Your Profile')).toBeVisible();
+    await page.goto('/edit/verify-email');
     await expectVerifyScreen(page);
     expect(await mailedLinks(creator.email, '/edit/verify')).toHaveLength(0);
     await page.getByRole('button', { name: 'Resend email' }).click();
