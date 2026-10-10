@@ -1,5 +1,7 @@
 # Phase 01 — Link Modes and in-app-browser Escape
 
+> **Amendment 2026-10-10.** Deeplink Mode (`deeplink`) and Deeplink at open (`deeplink_open`) are removed; only Direct and Escape remain, for a Link and for a Profile default alike (a legacy Deeplink value degrades to Escape). iOS/Instagram escape is now passive: the page shows the Escape Overlay with no native scheme (no `instagram://extbrowser`, no `x-safari-https://`); only Android still pops out by itself, by the Chrome `intent://` on tap, since handing Instagram's own open-in-browser scheme a Destination is what flagged OnlyFans links. The `/r/:linkId` redirector and the served link `url` field are gone; every Link reveals on click. Where the text below conflicts with this note, this note wins.
+
 **Objective.** On v2's public page, every Link travels by its own Mode (Direct, Escape or Deeplink on tap; a Profile's default may also be Deeplink at open). The Escape Overlay appears only where Escape Mode calls for it. An Escape fires from the Visitor's own tap on iOS and Android and always has a fallback that gets out, and the Tracking Code survives the move into the System Browser.
 
 ## Problem Statement
@@ -113,7 +115,7 @@ The Age Gate still guards every Adult Link, whatever its Mode. A Profile whose d
 
   ```ts
   type LinkMode = "direct" | "escape_ig";  // a Link's own Mode (amended 2026-10-06: the Deeplink Modes are Profile defaults only)
-  type Mode = LinkMode | "deeplink" | "deeplink_open";
+  type Mode = LinkMode;  // amended 2026-10-10: the Deeplink Modes are removed; see the amendment note at the top
   profile.mode?: Mode   // the Profile's default Mode
   links[].mode?: Mode   // served as the Link's effective Mode: its own LinkMode, else the Profile's default
   links[].url?: string  // where a Direct or Escape tap on a non-Adult Link goes; absent or "" → Reveal; never read in Deeplink Mode

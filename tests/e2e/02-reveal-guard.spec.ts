@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { callsTo429, ENV } from './helpers';
 
-// Ticket 22 (spec, Testing Decisions, 02-reveal-guard; Reveal hardening (D8)): Reveal answers only v2's own origin, and Reveal
-// and `/r` share one per-client limit. Runs in the last project (playwright.config.ts), after every other spec, because it uses
-// up the window. It uses the Fixture Profile alone, whose Test Secrets are all on example.com; ids are read from the served
-// Profile JSON. Destinations are compared as booleans and never printed.
+// Ticket 22 (spec, Testing Decisions, 02-reveal-guard; Reveal hardening (D8)): Reveal answers only v2's own origin, and holds a
+// per-client limit (the `/r` redirector is gone, so Reveal is the only door). Runs in the last project (playwright.config.ts),
+// after every other spec, because it uses up the window. It uses the Fixture Profile alone, whose Test Secrets are all on
+// example.com; ids are read from the served Profile JSON. Destinations are compared as booleans and never printed.
 // Every call from this process reaches Caddy from one peer address. Caddy, trusting no proxy, drops a client-set
 // X-Forwarded-For and writes that peer address alone (observed: with a temporary log of the entry count, every call of this
 // spec, the two-entry ones included, reached the app with one entry). So the X-Forwarded-For check proves at the stack that a
@@ -32,10 +32,9 @@ const noCors = (res: APIResponse) => !Object.keys(res.headers()).some((h) => h.s
 
 let links: ServedLink[];
 let origin: string;
-// The Fixture's Deeplink Link: the one with no Mode of its own, as the Deeplink Modes are Profile defaults only (ADR 0003,
-// amended 2026-10-06).
-const deeplink = () => links.find((l) => !l.isAdult && !fixtureLinks.find((f) => f.title === l.title)!.mode)!;
-const direct = () => links.find((l) => !l.isAdult && l.mode === 'direct')!;
+// A plain non-Adult Link (the Fixture's old "Deeplink Link", now just a Link with no Mode of its own): any non-Adult Link
+// Reveals its Destination, so it stands in for the limit and origin checks.
+const plain = () => links.find((l) => !l.isAdult && !fixtureLinks.find((f) => f.title === l.title)!.mode)!;
 
 test.beforeAll(async ({ playwright }) => {
   const baseURL = test.info().project.use.baseURL!;
@@ -50,10 +49,8 @@ test.beforeAll(async ({ playwright }) => {
 // The checks build on each other: the origin checks need a window that is not yet used up, and the limit checks use it up.
 test.describe.configure({ mode: 'serial' });
 
-const reveal = (request: APIRequestContext, headers: Record<string, string> = {}, id = deeplink().id) =>
+const reveal = (request: APIRequestContext, headers: Record<string, string> = {}, id = plain().id) =>
   request.get(REVEAL_PATH, { params: { id, user: 'fixture' }, headers, maxRedirects: 0 });
-const click = (request: APIRequestContext, headers: Record<string, string> = {}) =>
-  request.get(`/r/${direct().id}`, { headers, maxRedirects: 0 });
 
 // A refused answer: the status, no-store, no CORS header, a fixed JSON body holding no Destination, and no Location.
 async function expectRefused(res: APIResponse, status: number, label: string) {
@@ -95,7 +92,7 @@ test.describe('Reveal answers only its own origin', () => {
       expect(res.status(), label).toBe(200);
       expect(res.headers()['cache-control'], label).toBe('no-store');
       expect(noCors(res), `${label}: no CORS header`).toBe(true);
-      expect((await res.json()).realUrl === destinationOf(deeplink()), `${label}: its Test Secrets Destination`).toBe(true);
+      expect((await res.json()).realUrl === destinationOf(plain()), `${label}: its Test Secrets Destination`).toBe(true);
     }
   });
 
@@ -106,28 +103,25 @@ test.describe('Reveal answers only its own origin', () => {
   });
 });
 
-test.describe('Reveal and /r share one limit per client', () => {
-  test(`repeated Reveal and /r calls, half through each, reach 429 within ${LIMIT} + 1, and no 429 holds a Destination`, async ({ request }) => {
+test.describe('Reveal\'s per-client limit', () => {
+  test(`repeated Reveal calls reach 429 within ${LIMIT} + 1, and no 429 holds a Destination`, async ({ request }) => {
     expect(LIMIT, 'REVEAL_LIMIT_PER_MINUTE in tests/e2e.env').toBeGreaterThan(0);
-    // Alternating: with a window per door, neither would count more than half of these calls.
-    const calls = await callsTo429((i) => (i % 2 ? reveal(request, { Origin: origin }) : click(request)), [200, 302]);
+    const calls = await callsTo429(() => reveal(request, { Origin: origin }), [200]);
     expect(calls, '429 within the limit plus one').toBeGreaterThan(0);
-    // Both doors are now over the limit, with fixed bodies and no Location.
+    // Now over the limit, with fixed bodies and no Location.
     await expectRefused(await reveal(request, { Origin: origin }), 429, 'Reveal over the limit');
     await expectRefused(await reveal(request), 429, 'Reveal over the limit, no header');
-    await expectRefused(await click(request), 429, '/r over the limit');
-    expect(await (await click(request)).json()).toEqual({ error: 'Too many requests' });
+    expect(await (await reveal(request, { Origin: origin })).json()).toEqual({ error: 'Too many requests' });
   });
 
   test('a client-set first X-Forwarded-For entry neither resets nor escapes the limit', async ({ request }) => {
     const forwardedAs = (i: number) => ({ 'X-Forwarded-For': `203.0.113.${i % 250}, 198.51.100.${i % 200}` });
     // Each call claims a fresh address of its own; counted by any of them, every call would pass.
-    const calls = await callsTo429((i) => (i % 2 ? reveal(request, forwardedAs(i)) : click(request, forwardedAs(i))), [200, 302]);
+    const calls = await callsTo429((i) => reveal(request, forwardedAs(i)), [200]);
     expect(calls, '429 within the limit plus one, whatever the first entry').toBeGreaterThan(0);
     // Once refused, a new claimed address does not start a fresh count.
     for (let i = 1; i <= 5; i++) {
       await expectRefused(await reveal(request, forwardedAs(1000 + i)), 429, `Reveal claiming address ${i}`);
-      await expectRefused(await click(request, forwardedAs(2000 + i)), 429, `/r claiming address ${i}`);
     }
   });
 });

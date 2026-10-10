@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { withoutBootstrap } from './domains-helpers';
 
 // Phase 2 parity (docs/spec/phase-02-vps-foundation.md, Testing Decisions, 02-profile-parity): the Fixture Profile half, and
-// the v1 Snapshot half below (ticket 17: pages, Profile JSON, paths, leaks; ticket 18: /r, Reveal, journeys, old ids). Every id is read from the served Profile JSON. A Link's Test Secrets
+// the v1 Snapshot half below (ticket 17: pages, Profile JSON, paths, leaks; ticket 18: Reveal, journeys, old ids). Every id is read from the served Profile JSON. A Link's Test Secrets
 // Destination is found through the Fixture Profile file's card of the same title. Destinations are compared as booleans
 // and never printed. The Tracking Code oracle is v1's own Reveal handler (the Fixture site's verbatim copy), run in this
 // process with the Fixture's own v1 ids.
@@ -16,10 +16,10 @@ const PROFILE_JSON = '/api/profiles/fixture.json';
 const REVEAL_PATH = '/.netlify/functions/reveal';
 const MUST_REVALIDATE = 'public, max-age=0, must-revalidate';
 const IMMUTABLE = 'public, max-age=31536000, immutable';
-const MODES = ['direct', 'escape_ig', 'deeplink'];
+const MODES = ['direct', 'escape_ig'];
 
 type FixtureLink = { id: string; title: string; url: string; isAdult: boolean; mode?: string; icon?: string; backgroundImage?: string; default_tracknumber?: string };
-type ServedLink = { id: string; title: string; url: string; isAdult: boolean; tracking: boolean; mode: string; icon: string; backgroundImage: string; default_tracknumber?: string };
+type ServedLink = { id: string; title: string; isAdult: boolean; tracking: boolean; mode: string; icon: string; backgroundImage: string; default_tracknumber?: string };
 type Served = { profile: Record<string, unknown> & { username: string; mode: string; avatarUrl: string }; links: ServedLink[] };
 
 const fixture: { profile: { avatarUrl: string; mode: string }; links: FixtureLink[] } = JSON.parse(
@@ -52,7 +52,7 @@ const queryWith = (query: Record<string, string>, trackingId?: string | null) =>
 const v1Reveal = (v1Id: string, trackingId?: string) =>
   runV1Reveal(join(FIXTURES, 'netlify', 'functions'), queryWith({ id: v1Id, user: 'fixture' }, trackingId));
 
-// The paced helper (spec, Testing Decisions, Reveal pacing): every Reveal and `/r` call this spec makes takes a slot here first,
+// The paced helper (spec, Testing Decisions, Reveal pacing): every Reveal call this spec makes takes a slot here first,
 // whether the request fixture sends it (clickCall) or a page does (clickSlot, taken just before the tap or load that sends it).
 // Against a remote host (PLAYWRIGHT_BASE_URL) slots are 1.25 s apart, so no 60 s window holds more than 49 calls, and the run
 // is one worker (playwright.config.ts); locally they are unpaced. A 429 fails the call, locally as remotely. With
@@ -82,9 +82,9 @@ let origin: string;
 const linkBy = (pick: (l: ServedLink) => boolean) => served!.links.find(pick)!;
 const onlyFixture = () => test.beforeEach(() => test.skip(!served, `${PROFILE_JSON} is not served here: a VPS run`));
 const direct = () => linkBy((l) => !l.isAdult && l.mode === 'direct');
-// The Fixture's Deeplink Link: the one with no Mode of its own, as the Deeplink Modes are Profile defaults only (ADR 0003,
-// amended 2026-10-06). It travels as Deeplink under a Deeplink default.
-const deeplink = () => linkBy((l) => !l.isAdult && !fileCard(l).mode);
+// A non-Adult Link with no Mode of its own, so its effective Mode is the Profile default (the Fixture's old "Deeplink Link",
+// now just a plain Link). Every Link's served url is empty, so it Reveals on click like any other.
+const plain = () => linkBy((l) => !l.isAdult && !fileCard(l).mode);
 const adult = () => linkBy((l) => l.isAdult);
 
 test.beforeAll(async ({ playwright }) => {
@@ -121,59 +121,37 @@ test.describe('Fixture Profile journeys (desktop Chrome)', () => {
     });
   });
 
-  // The hop after `/r/{id}`'s 302 is the browser's own request to the Location. Playwright's routes never see a redirect
-  // hop, so the network guard in playwright.config.ts fails it locally, and it is observed as that failed request.
-  // ASSUMPTION: "ends at its Test Secrets Destination" is proven by the browser's request redirected from `/r/{id}`, not by
-  // page.route answering it, because Playwright routes no redirect hop (rung 1: Playwright 1.58 page.route docs, and a probe
-  // run for this ticket). Overturned if Playwright starts routing redirect hops; the hop is then answered like the others.
-  const hopFrom = (page: Page, id: string) =>
-    page.waitForEvent('requestfailed', (req) => req.redirectedFrom()?.url() === `${origin}/r/${id}`);
-
-  test('the Direct Link\'s Click goes through /r/{Link Id} and ends at its Test Secrets Destination', async ({ page }) => {
-    const link = direct();
-    await page.goto('/fixture');
-    await expect(page.locator('.link-card .link-title')).toHaveCount(served!.links.length);
-    const hop = hopFrom(page, link.id);
-    await clickSlot();
-    await page.locator('.link-card', { hasText: link.title }).click();
-    const request = await hop;
-    expect(request.url() === destinationOf(link)).toBe(true);
-    expect(request.failure()?.errorText).toBe('net::ERR_NAME_NOT_RESOLVED'); // the network guard, never the network
-    expect(paths.filter((p) => p === REVEAL_PATH)).toEqual([]);
-  });
-
-  test('the Deeplink Link\'s Click sends Reveal with its id, never requests /r, then requests its Test Secrets Destination', async ({ page }) => {
-    const link = deeplink();
-    const destination = destinationOf(link);
-    // The Profile JSON as the app serves it under a Deeplink default, in flight, so the stored default other specs read stays.
-    await page.route(`**${PROFILE_JSON}`, async (route) => {
-      const response = await route.fetch();
-      const json: Served = await response.json();
-      json.profile.mode = 'deeplink';
-      json.links.find((l) => l.id === link.id)!.mode = 'deeplink';
-      await route.fulfill({ response, json });
+  // Every Link's served url is empty, so a Click Reveals with the Link's id and then the browser navigates straight to Reveal's
+  // answer, its Test Secrets Destination, with no `/r/{id}` redirector in between (so the navigation carries no redirectedFrom).
+  // That off-host navigation is answered by this describe's own page.route (offHost), not the browser's network.
+  for (const pick of ['Direct', 'plain'] as const) {
+    test(`the ${pick} Link's Click sends Reveal with its id, never requests /r, then navigates to its Test Secrets Destination`, async ({ page }) => {
+      const link = pick === 'Direct' ? direct() : plain();
+      const destination = destinationOf(link);
+      await page.goto('/fixture');
+      await expect(page.locator('.link-card .link-title')).toHaveCount(served!.links.length);
+      const reveal = page.waitForRequest((req) => new URL(req.url()).pathname === REVEAL_PATH);
+      const landed = page.waitForRequest((req) => req.url() === destination);
+      await clickSlot();
+      await page.locator('.link-card', { hasText: link.title }).click();
+      expect(new URL((await reveal).url()).searchParams.get('id')).toBe(link.id);
+      expect((await landed).redirectedFrom()).toBeNull(); // no /r hop
+      await expect.poll(() => offHost.some((r) => r.url() === destination)).toBe(true); // answered by this spec's page.route
+      expect(paths.filter((p) => p.startsWith('/r/'))).toEqual([]);
     });
-    await page.goto('/fixture');
-    await expect(page.locator('.link-card .link-title')).toHaveCount(served!.links.length);
+  }
+
+  test('/fixture?link={Direct Link\'s id} reveals on load and navigates to the Direct Link\'s Test Secrets Destination', async ({ page }) => {
+    const link = direct();
+    const destination = destinationOf(link);
     const reveal = page.waitForRequest((req) => new URL(req.url()).pathname === REVEAL_PATH);
     const landed = page.waitForRequest((req) => req.url() === destination);
     await clickSlot();
-    await page.locator('.link-card', { hasText: link.title }).click();
-    expect(new URL((await reveal).url()).searchParams.get('id')).toBe(link.id);
-    const request = await landed;
-    expect(request.redirectedFrom()).toBeNull();
-    await expect.poll(() => offHost.some((r) => r.url() === destination)).toBe(true); // answered by this spec's page.route
-    expect(paths.filter((p) => p.startsWith('/r/'))).toEqual([]);
-  });
-
-  test('/fixture?link={Direct Link\'s id} ends at the Direct Link\'s Test Secrets Destination', async ({ page }) => {
-    const link = direct();
-    const hop = hopFrom(page, link.id);
-    await clickSlot();
     await page.goto(`/fixture?link=${link.id}`);
-    const request = await hop;
-    expect(request.url() === destinationOf(link)).toBe(true);
-    expect(paths.filter((p) => p === REVEAL_PATH)).toEqual([]);
+    expect(new URL((await reveal).url()).searchParams.get('id')).toBe(link.id);
+    expect((await landed).redirectedFrom()).toBeNull();
+    await expect.poll(() => offHost.some((r) => r.url() === destination)).toBe(true);
+    expect(paths.filter((p) => p.startsWith('/r/'))).toEqual([]);
   });
 });
 
@@ -193,8 +171,7 @@ test.describe('Profile JSON', () => {
       const card = `card ${i + 1}`;
       expect(link.id, card).toMatch(/^[a-z0-9]{12}$/);
       expect(link.id === fileCard(link).id, card).toBe(false);
-      const expectedUrl = !link.isAdult && link.mode !== 'deeplink' ? `${origin}/r/${link.id}` : '';
-      expect(link.url === expectedUrl, `${card} url`).toBe(true);
+      expect('url' in link, `${card} carries no url: every Link Reveals on click`).toBe(false);
       expect(link.mode, card).toBe(fileCard(link).mode ?? fixture.profile.mode); // its own Mode, else the Profile default
       expect('default_tracknumber' in link, card).toBe(fileCard(link).default_tracknumber !== undefined);
     }
@@ -252,7 +229,7 @@ test.describe('Profile JSON', () => {
   });
 });
 
-test.describe('Reveal and /r', () => {
+test.describe('Reveal', () => {
   onlyFixture();
   const noCors = (headers: Record<string, string>) => !Object.keys(headers).some((h) => h.startsWith('access-control-'));
 
@@ -269,8 +246,8 @@ test.describe('Reveal and /r', () => {
     });
   }
 
-  test('Reveal answers for a non-Adult Link too: the Deeplink Link gets its Destination', async ({ request }) => {
-    const link = deeplink();
+  test('Reveal answers for a non-Adult Link too: a plain Link gets its Destination', async ({ request }) => {
+    const link = plain();
     const res = await reveal(request, { id: link.id, user: 'fixture' });
     expect(res.status()).toBe(200);
     expect(noCors(res.headers())).toBe(true);
@@ -287,21 +264,6 @@ test.describe('Reveal and /r', () => {
     }
   });
 
-  for (const pick of ['Direct', 'Adult'] as const) {
-    test(`/r/{${pick} Link Id} answers 302 to its Destination with no-store`, async ({ request }) => {
-      const link = pick === 'Direct' ? direct() : adult();
-      const res = await clickCall(request, `/r/${link.id}`);
-      expect(res.status()).toBe(302);
-      expect(res.headers()['cache-control']).toBe('no-store');
-      expect(res.headers()['location'] === destinationOf(link)).toBe(true); // /r appends no Tracking Code
-    });
-  }
-
-  test('/r for an unknown Link Id answers 404 with no-store', async ({ request }) => {
-    const res = await clickCall(request, '/r/zzzzzzzzzzzz');
-    expect(res.status()).toBe(404);
-    expect(res.headers()['cache-control']).toBe('no-store');
-  });
 });
 
 test.describe('Other paths', () => {
@@ -480,7 +442,7 @@ test.describe('v1 Snapshot', () => {
           expect(/^[a-z0-9]{12}$/.test(link.id), `${at} Link Id shape`).toBe(true);
           expect(V1_IDS.has(link.id), `${at} Link Id is a v1 id or secrets key`).toBe(false);
           expect(link.id.includes(username), `${at} Link Id holds the Username`).toBe(false);
-          expect(link.url === (link.isAdult ? '' : `${origin}/r/${link.id}`), `${at} url`).toBe(true);
+          expect('url' in link, `${at} carries no url: every Link Reveals on click`).toBe(false);
           expect(link.mode, `${at} mode`).toBe('escape_ig');
           const code = typeof v1Link.default_tracknumber === 'string' && v1Link.default_tracknumber !== '' ? v1Link.default_tracknumber : undefined;
           expect(link.default_tracknumber, `${at} default Tracking Code`).toBe(code);
@@ -551,7 +513,7 @@ test.describe('v1 Snapshot', () => {
   // ---- Clicks (ticket 18) ----
   // Every Click on a v1 Link against v1's own Reveal handler, loaded from the Snapshot in this process (runV1Reveal), with the
   // same Username and the card's v1 id; v2 is asked with the card's served Link Id. Over the files that parse as they are.
-  // Every Reveal and `/r` call takes a paced slot. Destinations are compared as booleans; messages name a Username and card.
+  // Every Reveal call takes a paced slot. Destinations are compared as booleans; messages name a Username and card.
   test.describe('Clicks', () => {
     const SNAPSHOT_FUNCTIONS = join(SNAPSHOT, 'netlify', 'functions');
     const snapshotReveal = (file: V1File, link: V1Link, trackingId?: string | null, headers?: Record<string, string>) =>
@@ -586,11 +548,11 @@ test.describe('v1 Snapshot', () => {
     const v2Id = (file: V1File, i: number) => servedIds.get(file.username)![i];
 
     for (const { file, link, i, at } of nonAdult) {
-      test(`/r for ${at} (non-Adult) answers 302 to the card's v1 url`, async ({ request }) => {
-        const res = await clickCall(request, `/r/${v2Id(file, i)}`);
-        expect(res.status(), at).toBe(302);
+      test(`Reveal for ${at} (non-Adult) answers 200 with the card's v1 url`, async ({ request }) => {
+        const res = await reveal(request, { id: v2Id(file, i), user: file.username });
+        expect(res.status(), at).toBe(200);
         expect(res.headers()['cache-control'], at).toBe('no-store');
-        expect(res.headers()['location'] === rootRelative(link.url!), `${at} Location is its v1 url`).toBe(true);
+        expect((await res.json()).realUrl === rootRelative(link.url!), `${at} realUrl is its v1 url`).toBe(true);
       });
     }
 
@@ -686,17 +648,16 @@ test.describe('v1 Snapshot', () => {
     });
 
     for (const { file, link, i, at } of adultWithoutEntry) {
-      test(`${at}, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does, and from /r`, async ({ request }) => {
+      test(`${at}, an Adult Link without a secrets entry, answers 404 from Reveal as v1's handler does`, async ({ request }) => {
         expect((await snapshotReveal(file, link)).statusCode, `${at} v1`).toBe(404);
         const res = await reveal(request, { id: v2Id(file, i), user: file.username });
         expect(res.status(), at).toBe(404);
         expect((await res.json()).error === 'Link not found', `${at} Reveal's error`).toBe(true);
-        expect((await clickCall(request, `/r/${v2Id(file, i)}`)).status(), `${at} /r`).toBe(404);
       });
     }
 
-    test('every v1 Link Id and every secrets key answers 404 from Reveal and from /r', async ({ request }) => {
-      test.setTimeout(30_000 + V1_IDS.size * 2 * PACE_GAP_MS);
+    test('every v1 Link Id and every secrets key answers 404 from Reveal', async ({ request }) => {
+      test.setTimeout(30_000 + V1_IDS.size * PACE_GAP_MS);
       // Named by Username and card, or by the secrets key's position; never by the id itself.
       const owners = new Map<string, string>();
       for (const f of V1_FILES) f.links.forEach((l, i) => owners.has(l.id) || owners.set(l.id, `${f.username} card ${i + 1}'s v1 id`));
@@ -705,15 +666,13 @@ test.describe('v1 Snapshot', () => {
       for (const id of V1_IDS) {
         const name = owners.get(id) ?? `secrets key ${keys.indexOf(id) + 1}`;
         if ((await reveal(request, { id })).status() !== 404) failing.push(`${name}: Reveal`);
-        if ((await clickCall(request, `/r/${encodeURIComponent(id)}`)).status() !== 404) failing.push(`${name}: /r`);
       }
       expect(failing).toEqual([]);
     });
 
     test.describe('Journeys', () => {
-      // Every host but the one under test is answered with an empty page (the Destination's host on a page navigation);
-      // the hop after `/r`'s 302 is not routed by Playwright and is failed by the network guard (playwright.config.ts) when
-      // it leaves the host. Either way it is observed as the browser's request.
+      // Every host but the one under test is answered with an empty page (the Destination's host on a page navigation); a
+      // non-Adult Link now Reveals and navigates straight to its Destination, with no `/r` redirect in between.
       let host: string;
       test.beforeEach(async ({ page }) => {
         host = new URL(origin).host;
@@ -724,16 +683,19 @@ test.describe('v1 Snapshot', () => {
       const revealAnswer = (page: Page) => page.waitForResponse((res) => new URL(res.url()).pathname === REVEAL_PATH);
 
       for (const { file, link, i, at } of nonAdult) {
-        test(`${at} (non-Adult) goes through /r/{Link Id} to its v1 url`, async ({ page }) => {
+        test(`${at} (non-Adult) reveals and navigates to its v1 url`, async ({ page }) => {
           const id = v2Id(file, i);
+          const target = new URL(rootRelative(link.url!), origin).href;
           await page.goto(`/${file.username}`);
           await expect(page.locator('.link-card')).toHaveCount(file.links.length);
-          const hop = page.waitForRequest((req) => req.redirectedFrom()?.url() === `${origin}/r/${id}`);
+          const answer = revealAnswer(page);
+          const landed = page.waitForRequest((req) => req.isNavigationRequest() && req.url() === target);
           await clickSlot();
           await page.locator('.link-card').nth(i).click();
-          const request = await hop;
-          expect((await request.redirectedFrom()!.response())?.status(), `${at} /r`).toBe(302);
-          expect(request.url() === new URL(rootRelative(link.url!), origin).href, `${at} lands on its v1 url`).toBe(true);
+          const res = await answer;
+          expect(res.status(), `${at} Reveal`).toBe(200);
+          expect(new URL(res.url()).searchParams.get('id') === id, `${at} Reveal carries its Link Id`).toBe(true);
+          expect((await landed).redirectedFrom(), `${at} no /r hop`).toBeNull();
         });
       }
 

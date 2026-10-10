@@ -27,9 +27,7 @@ const { toWebp, TARGETS } = require('../src/image');
 // ASSUMPTION: the import follows Phase 3's 3-to-30 length (rung 3: the field's pattern; every v1 file name has 4 to 13
 // characters). Overturned if a v1 Username outside that length must import; the field's pattern then has to change too.
 const USERNAME = /^[a-z0-9_]{3,30}$/;
-const MODES = new Set(['direct', 'escape_ig', 'deeplink']);
-// A Link's own Mode: Direct or Escape; the Deeplink Modes are Profile defaults only (ADR 0003, amended 2026-10-06).
-const LINK_MODES = new Set(['direct', 'escape_ig']);
+const MODES = new Set(['direct', 'escape_ig']);
 const DEFAULT_MODE = 'escape_ig';
 // Absolute http(s) URL or root-relative path: the same source as links.destination's pattern (1791140002_links.js).
 // JS's \s covers more than Go RE2's, so the import refuses at least what PocketBase refuses.
@@ -225,7 +223,7 @@ function planImport(sites) {
         if (typeof l.title !== 'string' || l.title === '') return bad(file, `card ${card} has no title`);
         let linkMode = '';
         if (l.mode !== undefined && l.mode !== null && l.mode !== '') {
-          if (LINK_MODES.has(l.mode)) linkMode = l.mode;
+          if (MODES.has(l.mode)) linkMode = l.mode;
           else return bad(file, `card ${card} mode is not a Mode`);
         }
         const n = (occurrences.get(l.id) || 0) + 1;

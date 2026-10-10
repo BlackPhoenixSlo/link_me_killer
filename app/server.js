@@ -16,7 +16,7 @@ const { toPublicProfile } = require('./src/public-profile');
 const { resolveDestination } = require('./src/destination');
 const { visitorLocation } = require('./src/visitor-location');
 const { toWebp, TARGETS } = require('./src/image');
-const { allow, allowPing, clientIp, originOf, sameOrigin } = require('./src/click-guard');
+const { allow, allowPing, clientIp, sameOrigin } = require('./src/click-guard');
 const { createEventRecorder } = require('./src/event-recorder');
 const { createHostResolver } = require('./src/host-resolver');
 const { checkDomain, recordsFor } = require('./src/domain-check');
@@ -71,23 +71,15 @@ app.get('/api/profiles/:file', async (c, next) => {
   c.header('Cache-Control', MUST_REVALIDATE);
   const found = await gateway.getProfile(file.slice(0, -'.json'.length));
   if (!found) return c.json({ error: 'Profile not found' }, 404);
-  return c.json(toPublicProfile(found.profile, found.links, originOf(c.req.raw)));
+  return c.json(toPublicProfile(found.profile, found.links));
 });
 
 // The Click guard's answers are fixed bodies, checked before the Link lookup: a refused call costs no PocketBase read.
 const underLimit = (c) => allow(clientIp(c.req.raw));
 const TOO_MANY = { error: 'Too many requests' };
 
-// Once the Link resolves, `/r` records a Click, then redirects; from outside it looks as before.
-app.get('/r/:linkId', async (c) => {
-  c.header('Cache-Control', 'no-store');
-  if (!underLimit(c)) return c.json(TOO_MANY, 429);
-  const link = await gateway.getLink(c.req.param('linkId'));
-  const destination = resolveDestination(link);
-  if (!destination) return c.json({ error: 'Link not found' }, 404);
-  await events.recordClick(c.req.raw, link.profile, link.id);
-  return c.redirect(destination, 302);
-});
+// No `/r/:linkId` redirector: a same-domain 302 whose Location is the raw destination hands Instagram the OnlyFans URL and
+// has no clone3 equivalent. Clicks are recorded by Reveal instead (below), so the destination never appears in a response.
 
 // The Page View Ping (Phase 4 spec, Contracts): POST only, so a GET under /v/ still reaches the Profile route below and no
 // Username is reserved. 204 once the Event Recorder has returned; an unknown Username is 404 and records nothing. Over its own
@@ -106,8 +98,8 @@ app.post('/v/:username', async (c) => {
 });
 
 // Reveal at v1's path. `user` is accepted and ignored: a v2 Link Id is unique across all Profiles. No CORS header.
-// Each Destination it returns records a Click first (Phase 4 spec, Interfaces); a refusal, 429 or 404 records nothing. For any
-// one Click either Reveal or `/r` hands out the Destination, never both, so no Click counts twice.
+// Each Destination it returns records a Click first (Phase 4 spec, Interfaces); a refusal, 429 or 404 records nothing. Reveal
+// is now the only path that hands out the Destination (the `/r` redirector was removed), so each Click is counted once, here.
 // ASSUMPTION: the same-origin check runs before the limit, so a cross-origin call refused with 403 does not use up the window
 // of the IP it came from (rung 5). Overturned if cross-origin attempts must count against the limit too; `allow` then moves first.
 app.get('/.netlify/functions/reveal', async (c) => {

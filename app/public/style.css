@@ -227,7 +227,7 @@ h1 {
     cursor: not-allowed;
 }
 
-/* The Age Gate's Continue is an anchor, so a Deeplink pop-out from it is a real anchor tap; it keeps the button's look */
+/* The Age Gate's Continue button */
 #overlay .continue-btn {
     display: block;
     box-sizing: border-box;
