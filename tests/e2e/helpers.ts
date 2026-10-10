@@ -318,15 +318,14 @@ export async function passAgeGate(visitor: Page, title: string, onward: string) 
   return reveal;
 }
 
-// A Creator arranged over HTTP at an Onboarding stage, named by its screen's heading: a refused claim (CLAIM), claimed but
-// unverified (VERIFY), verified with no display name, or named with no Link (moved here by ticket 30).
+// A Creator arranged over HTTP at an Onboarding stage, named by its screen's heading, its email never verified and no
+// verification email asked for (ADR 0006): a refused claim (CLAIM), claimed with no display name, or named with no Link (moved
+// here by ticket 30).
 export async function reach(request: APIRequestContext, stage: string) {
   const { creator, token, id } = await account(request);
   const as = proxy(request, token);
   const claimed = await as.post('profiles/records', { username: stage === CLAIM ? 'edit' : creator.username, owner: id, mode: 'escape_ig', slot: 1 });
   expect(claimed.status(), stage).toBe(stage === CLAIM ? 400 : 200);
-  if (stage === CLAIM || stage === VERIFY) return creator;
-  await verifyByMail(request, creator.email);
   if (stage === 'Add your first Link') expect((await as.patch(`profiles/records/${(await claimed.json()).id}`, { displayName: 'Half way' })).status()).toBe(200);
   return creator;
 }

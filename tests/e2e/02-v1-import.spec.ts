@@ -433,6 +433,8 @@ test.describe('on the test stack', () => {
   // refuses a Creator setting one (1791140008_domains.js); 05-domains proves both.
   // Amended by ticket 4 (Phase 6): the Custom Domain moves to its own collection, so the field and the clause go again
   // (1791140012_custom_domains.js); 05-domains and 07-domains prove the collection.
+  // Amended by ADR 0006: `@request.auth.verified = true` leaves the profiles update, every links write and the slot clause of
+  // the claim (1791140019_unverified_can_edit.js).
   test('the schema: fields, patterns, relations, file fields, and every rule superuser-only but the ones Phase 3 opens', async () => {
     const collection = async (name: string) => (await pb(`/api/collections/${name}`, { token })).json();
     const [users, profiles, links, events] = await Promise.all(['users', 'profiles', 'links', 'events'].map(collection));
@@ -442,24 +444,24 @@ test.describe('on the test stack', () => {
     expect(users.type === 'auth' && rulesClosed(users, ['updateRule', 'deleteRule']) && users.manageRule === null, 'users update and delete closed').toBe(true);
     expect(users.authRule === '' && users.listRule === OWN && users.viewRule === OWN, 'users sign in, and read only their own record').toBe(true);
     expect(users.createRule.includes('@request.body.verified:isset = false'), 'users sign-up sets nothing but email and password').toBe(true);
-    expect(rulesClosed(profiles, ['deleteRule']), 'profiles delete closed').toBe(true);
-    expect(profiles.updateRule, 'profiles updated by their verified owner, not Username, owner, badge or v1Key').toBe(
-      `${OWNER} && @request.auth.verified = true && @request.body.username:isset = false && @request.body.owner:isset = false && @request.body.verified:isset = false && @request.body.v1Key:isset = false && @request.body.slot:isset = false`,
+    expect(profiles.deleteRule, 'profiles deleted by their owner (1791140017_profile_self_delete.js)').toBe(OWNER);
+    expect(profiles.updateRule, 'profiles updated by their owner, not Username, owner, badge or v1Key').toBe(
+      `${OWNER} && @request.body.username:isset = false && @request.body.owner:isset = false && @request.body.verified:isset = false && @request.body.v1Key:isset = false && @request.body.slot:isset = false`,
     );
     expect(profiles.listRule === OWNER && profiles.viewRule === OWNER, 'profiles read by their owner only').toBe(true);
     expect(profiles.createRule.startsWith('@request.auth.id != "" && @request.body.owner = @request.auth.id && '), 'profiles claimed by a signed-in Creator for itself').toBe(true);
-    expect(profiles.createRule.endsWith(' && @request.body.slot > 0 && (@request.body.slot = 1 || @request.auth.verified = true)'), 'a claim names a slot; past slot 1 only verified').toBe(true);
+    expect(profiles.createRule.endsWith(' && @request.body.slot > 0'), 'a claim names a slot').toBe(true);
     expect(profiles.indexes.some((i: string) => /UNIQUE INDEX .*\(owner, slot\) WHERE owner != ''/.test(i)), 'one Profile per owner and slot, ownerless ones exempt').toBe(true);
     const LINK_OWNER = '@request.auth.id != "" && profile.owner = @request.auth.id';
     const DESTINATION_OK = '(@request.body.destination ~ "https://%" || @request.body.destination ~ "http://%" || @request.body.destination ~ "/%")';
     expect(links.listRule === LINK_OWNER && links.viewRule === LINK_OWNER, 'links read by the owner of their Profile only').toBe(true);
-    expect(links.createRule, 'links added by the verified owner, no id, Link Id or v1Key, a checked Destination').toBe(
-      `@request.auth.id != "" && @request.body.profile.owner = @request.auth.id && @request.auth.verified = true && @request.body.id:isset = false && @request.body.linkId:isset = false && @request.body.v1Key:isset = false && ${DESTINATION_OK}`,
+    expect(links.createRule, 'links added by the owner, no id, Link Id or v1Key, a checked Destination').toBe(
+      `@request.auth.id != "" && @request.body.profile.owner = @request.auth.id && @request.body.id:isset = false && @request.body.linkId:isset = false && @request.body.v1Key:isset = false && ${DESTINATION_OK}`,
     );
-    expect(links.updateRule, 'links edited by the verified owner, not Profile, Link Id or v1Key, a sent Destination checked').toBe(
-      `${LINK_OWNER} && @request.auth.verified = true && @request.body.profile:isset = false && @request.body.linkId:isset = false && @request.body.v1Key:isset = false && (@request.body.destination:isset = false || ${DESTINATION_OK})`,
+    expect(links.updateRule, 'links edited by the owner, not Profile, Link Id or v1Key, a sent Destination checked').toBe(
+      `${LINK_OWNER} && @request.body.profile:isset = false && @request.body.linkId:isset = false && @request.body.v1Key:isset = false && (@request.body.destination:isset = false || ${DESTINATION_OK})`,
     );
-    expect(links.deleteRule, 'links deleted by the verified owner').toBe(`${LINK_OWNER} && @request.auth.verified = true`);
+    expect(links.deleteRule, 'links deleted by the owner').toBe(LINK_OWNER);
     expect(events.type === 'base' && rulesClosed(events), 'events closed').toBe(true);
     type Field = { name: string; type: string; system?: boolean; [k: string]: unknown };
     const field = (c: { fields: Field[] }, name: string) => c.fields.find((f) => f.name === name) || ({} as Field);

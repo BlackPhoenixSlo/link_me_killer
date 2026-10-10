@@ -51,7 +51,8 @@ test('the customDomains rules: the owner adds one for their own Profile and noth
   const unverified = await account(request);
   const claimed = await proxy(request, unverified.token).post('profiles/records', { username: unverified.creator.username, owner: unverified.id, mode: 'escape_ig', slot: 1 });
   expect(claimed.status(), 'the unverified account\'s claim').toBe(200);
-  expect((await proxy(request, unverified.token).post('customDomains/records', { profile: (await claimed.json()).id, domain })).status(), 'an unverified account\'s create').toBe(400);
+  // No verified email needed (ADR 0006); its own domain, so the owner's below is still free.
+  expect((await proxy(request, unverified.token).post('customDomains/records', { profile: (await claimed.json()).id, domain: `unverified-${domain}` })).status(), 'an unverified account\'s create').toBe(200);
 
   const created = await as.post('customDomains/records', { profile: owner.profileId, domain });
   expect(created.status(), 'the owner\'s create').toBe(200);
