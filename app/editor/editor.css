@@ -592,6 +592,8 @@ h1[tabindex="-1"]:focus { outline: none; }
 .e-msg--error { color: var(--e-color-danger); }
 .e-msg--ok { color: var(--e-color-success); }
 .e-msg--info { padding: var(--e-space-3) var(--e-space-4); border-radius: var(--e-radius-md); background: var(--e-color-primary-soft); }
+/* The unverified banner (screens/auth.js, unverifiedBanner): the info notice with its text, "Resend email" and the answer stacked. */
+.e-banner { display: flex; flex-direction: column; align-items: flex-start; gap: var(--e-space-2); }
 
 /* Works on a <p> with plain text as well as on a block with an icon, a title and a text. */
 .e-empty {

@@ -8,8 +8,9 @@ import { account, api, signedIn, signOut, refresh, el, render, message, say, use
 
 // ---- The parts every screen here is built from -----------------------------------------------------------------------------
 
-// An auth screen: one card in the page's narrow column (the brief's layout for auth and Onboarding), headed `heading`.
-const draw = (heading, ...children) => render(heading, el('div', { className: 'e-card' }, ...children));
+// An auth screen: one card in the page's narrow column (the brief's layout for auth and Onboarding), headed `heading`, without
+// the unverified banner (render()).
+const draw = (heading, ...children) => render(heading, el('div', { className: 'e-card' }, ...children), { banner: false });
 
 const lead = (...text) => el('p', { className: 'e-page__lead' }, ...text);
 const quiet = (...children) => el('p', { className: 'e-page__links' }, ...children);
@@ -185,6 +186,28 @@ export function drawVerify() {
   draw('Verify your email', steps(2), mark('mail'), pageTitle('Verify your email'),
     lead('We sent a link to ', el('strong', {}, account.email), '. Open it to verify your email, then press Continue.'),
     actions(status, next, resend));
+}
+
+// The banner render() puts over every screen past the sign-in screens while the account's email is not verified. It never
+// blocks: verification gates only password reset (1791140019_unverified_can_edit.js). "Resend email" asks for the same email
+// as the verify screen's. Its answer is an aria-live line, not a `status`, so each screen keeps its own status line the only one.
+// ASSUMPTION: the banner goes once a refresh reads the email as verified, which every route() does, the verification link's
+// Continue included (rung 5: no polling). Overturned if it must go in a tab that stays open while the link is followed elsewhere.
+export function unverifiedBanner() {
+  const said = el('p', { 'aria-live': 'polite' });
+  const resend = el('button', {
+    type: 'button',
+    className: 'e-btn e-btn--secondary',
+    'data-test': 'resend-verification',
+    onclick: async () => {
+      const res = await pressed(resend, () => api('users/request-verification', { method: 'POST', body: { email: account.email } }));
+      said.textContent = res.ok ? resendAsked(account.email) : res.data.message || 'The email could not be sent. Try again.';
+    },
+  }, 'Resend email');
+  return el('div', { className: 'e-msg e-msg--info e-banner', 'data-test': 'unverified-banner' },
+    el('p', {}, 'Email not verified. You can use everything, but you can\'t reset your password until you confirm it.'),
+    resend,
+    said);
 }
 
 // ---- The emails' screens -------------------------------------------------------------------------------------------------

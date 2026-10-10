@@ -8,8 +8,9 @@
 // Ticket 25: log-in, sign-up, the claim step and the "verify your email" screen. `/edit` sends a Creator with no session to
 // log-in, and a signed-in one to the first Onboarding step that applies: no Profile, the claim step.
 // An unverified email no longer holds Onboarding on the verify screen (the Operator, 2026-10-10; the rules' side is
-// 1791140019_unverified_can_edit.js): the account goes on to the Profile step and uses the whole Editor.
-// `/edit/verify-email` stays, opened by its URL.
+// 1791140019_unverified_can_edit.js): the account goes on to the Profile step and uses the whole Editor, and every screen past
+// the sign-in screens shows the unverified banner (screens/auth.js, unverifiedBanner) until a refresh reads the email as
+// verified. `/edit/verify-email` stays, opened by its URL.
 // Ticket 26: then no display name, the Profile step; no Link, the first-Link step (the Link form), followed by the live
 // address; otherwise the Editor, which for now holds "Your Bio Link", the Links list in Visitor order and "Add link". Progress
 // is derived from the records each time, never stored.
@@ -33,7 +34,7 @@
 // ASSUMPTION: the screen path `/edit/stats` (rung 6, as above; it adds no top-level path, so no Username is reserved).
 // Overturned by a later ticket moving it.
 
-import { drawLogin, drawSignup, drawClaim, drawRetry, drawVerify, drawVerified, drawReset, drawForgot } from './screens/auth.js';
+import { drawLogin, drawSignup, drawClaim, drawRetry, drawVerify, drawVerified, drawReset, drawForgot, unverifiedBanner } from './screens/auth.js';
 import { drawLinkForm, drawHome } from './screens/links.js';
 import { drawProfileStep } from './screens/profile.js';
 import { openStats } from './stats.js';
@@ -173,11 +174,16 @@ export function el(tag, props = {}, ...children) {
 
 // Draws a screen: `heading` goes to the tab title (the top bar shows the wordmark alone), `children` into one `e-page` column in
 // <main>. A new screen starts at the top with the focus on its h1. A last argument `{ focus: false }` redraws the same screen in
-// place (a Stats filter or range tab): the scroll and the focus are left to the caller.
+// place (a Stats filter or range tab): the scroll and the focus are left to the caller. While the signed-in account's email is
+// not verified, the unverified banner heads the column, after the Creator nav when there is one; the sign-in screens
+// (screens/auth.js) pass `{ banner: false }`, since the verify screen is about the same email and the rest come before it.
 let shown = location.pathname + location.search; // the address of the screen last drawn or being opened (route())
 export function render(heading, ...children) {
   const last = children[children.length - 1];
-  const { focus = true } = last && Object.getPrototypeOf(last) === Object.prototype ? children.pop() : {};
+  const { focus = true, banner = true } = last && Object.getPrototypeOf(last) === Object.prototype ? children.pop() : {};
+  if (banner && account && !account.verified) {
+    children.splice(children[0] instanceof Element && children[0].classList.contains('e-nav') ? 1 : 0, 0, unverifiedBanner());
+  }
   document.title = `${heading} · ofl.ink`;
   shown = location.pathname + location.search;
   screen.removeAttribute('aria-busy');
