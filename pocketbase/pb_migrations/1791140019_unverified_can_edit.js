@@ -12,7 +12,13 @@ migrate((app) => {
   // Kept inside the callback: migration files may share one JS runtime.
   const VERIFIED = "@request.auth.verified = true";
   const SLOT_VERIFIED = "(@request.body.slot = 1 || @request.auth.verified = true)";
-  const without = (rule, gone) => rule.split(" && ").filter((clause) => clause !== gone).join(" && ");
+  // A rule the clause is missing from means the state is not what this migration knows, so it stops, as down() does.
+  const without = (rule, gone) => {
+    if (rule === null) throw new Error(`1791140019 up: the rule is null, no clause "${gone}"`);
+    const kept = rule.split(" && ").filter((clause) => clause !== gone).join(" && ");
+    if (kept === rule) throw new Error(`1791140019 up: no clause "${gone}" in ${rule}`);
+    return kept;
+  };
 
   const profiles = app.findCollectionByNameOrId("profiles");
   profiles.createRule = without(profiles.createRule, SLOT_VERIFIED);
