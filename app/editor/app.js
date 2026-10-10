@@ -6,8 +6,10 @@
 // and the router, started at the end once every module has loaded. The screens are in screens/auth.js, screens/links.js,
 // screens/profile.js and stats.js; they import the helpers from here, and the router imports them.
 // Ticket 25: log-in, sign-up, the claim step and the "verify your email" screen. `/edit` sends a Creator with no session to
-// log-in, and a signed-in one to the first Onboarding step that applies: no Profile, the claim step; email not verified, the
-// verify screen.
+// log-in, and a signed-in one to the first Onboarding step that applies: no Profile, the claim step.
+// An unverified email no longer holds Onboarding on the verify screen (the Operator, 2026-10-10; the rules' side is
+// 1791140019_unverified_can_edit.js): the account goes on to the Profile step and uses the whole Editor.
+// `/edit/verify-email` stays, opened by its URL.
 // Ticket 26: then no display name, the Profile step; no Link, the first-Link step (the Link form), followed by the live
 // address; otherwise the Editor, which for now holds "Your Bio Link", the Links list in Visitor order and "Add link". Progress
 // is derived from the records each time, never stored.
@@ -389,7 +391,6 @@ export async function onboarded() {
   owned = res.data.items;
   const profile = owned.find((p) => p.id === localStorage.getItem(CURRENT)) || owned[0];
   if (!profile) return show('/edit/claim', () => drawClaim());
-  if (!account.verified) return show('/edit/verify-email', drawVerify);
   if (!profile.displayName) return show('/edit/profile', () => drawProfileStep(profile));
   const links = await linksOf(profile);
   if (!links.ok) return drawRetry(links.data.message);
@@ -416,6 +417,7 @@ export async function route() {
   if (path === '/edit/forgot') return drawForgot();
   if (!(await refresh())) return show('/edit/login', drawLogin);
   if (path === '/edit/stats') return openStats();
+  if (path === '/edit/verify-email') return drawVerify();
   if (path === '/edit/domain') { const done = await onboarded(); if (done) show('/edit/domain', () => drawDomain(done.profile, done.domain)); return; }
   if (path === '/edit/new') return openNew();
   return onboard();

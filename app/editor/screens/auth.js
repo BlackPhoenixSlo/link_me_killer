@@ -103,7 +103,7 @@ export function drawSignup() {
       api('users/request-verification', { method: 'POST', body: { email: body.email }, keepalive: true }).catch(() => {});
       const claimed = await claim(wanted, 1);
       if (!claimed.ok) return show('/edit/claim', () => drawClaim({ username: wanted, error: claimReason(claimed, wanted) }));
-      return show('/edit/verify-email', drawVerify);
+      return onboard();
     },
   },
   field('auth-email', 'Email', email),
