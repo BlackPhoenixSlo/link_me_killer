@@ -267,7 +267,7 @@ Every `ASSUMPTION:` across the specs, grouped, sharpest first. 199 raw flags at 
 18. **The US fallback on hosts without a country header** (Phase 2, Visitor location; Phase 5 DNS records).
     - If wrong: under the Cloudflare position, Custom Domain Visitors get the Geo Rule's catch-all code instead of their own. In today's v1 data this is never another country's code.
     - Overturned by: the geo-IP answer to item 2.
-19. **Public sign-up does not get ofl.ink Flagged** (Phase 3, Content writes need a verified email; "Publish" is the last screen).
+19. **Public sign-up does not get ofl.ink Flagged** (Phase 3, Content writes do not need a verified email, ADR 0006; "Publish" is the last screen).
     - If wrong: squatted or stranger content on the shared domain invites a Flag.
     - Overturned by: abuse appearing.
 20. **sharp runs on Alpine, and HEIC may need help** (Phase 2 Upload, Base images).

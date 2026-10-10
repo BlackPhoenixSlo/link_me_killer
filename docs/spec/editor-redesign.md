@@ -136,7 +136,7 @@ Page padding is `--e-space-4` at 375, `--e-space-8` from 768 and `--e-space-10` 
    - "“{name}” is reserved. Pick another Username."
    - "The claim failed. Try again."
 
-**4.3 Verify your email**, `/edit/verify-email` (P3 s6, s7, s9; this is the unverified state). Shows "Step 2 of 5".
+**4.3 Verify your email**, `/edit/verify-email` (P3 s6, s7). Shows "Step 2 of 5". Onboarding no longer stops here (P3 amendment 2026-10-10, ADR 0006); the screen stays reachable, and the Editor's "Email not verified" notice with "Resend email" is the unverified state.
 1. A 48px mail icon. h1 "Verify your email" (kept).
 2. Text: "We sent a link to **{email}**. Open it to verify your email, then press Continue." (kept)
 3. Buttons: primary "Continue", secondary "Resend email".
