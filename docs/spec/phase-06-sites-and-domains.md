@@ -12,7 +12,7 @@
 
 Accounts and Profiles
 - At most one Profile per account: `idx_profiles_owner`, unique on `profiles(owner) WHERE owner != ''` (`pocketbase/pb_migrations/1791140004_sign_up_and_claim.js`); Phase 3 story 46 and "One Profile per Creator", whose ASSUMPTION is "overturned by agency-style accounts, which would drop the index". `tests/e2e/03-auth-and-editor.spec.ts` asserts "a second Profile" is refused (400).
-- The claim (`app/editor/screens/auth.js`) posts `{ username, owner, mode }`; the create rule allows nothing else, refuses reserved names and lets an unverified account claim. The update rule refuses `username`, `owner`, `verified`, `v1Key` and needs a verified email (`1791140005_content_rules.js`; the verified clause is dropped since by `1791140019`, ADR 0006). The links and `dailyStats` rules key on `profile.owner`, so they already hold for any number of Profiles.
+- The claim (`app/editor/screens/auth.js`) posts `{ username, owner, mode }`; the create rule allows nothing else, refuses reserved names and lets an unverified account claim. The update rule refuses `username`, `owner`, `verified`, `v1Key` (`1791140005_content_rules.js`; its verified-email clause is dropped by `1791140019`, ADR 0006). The links and `dailyStats` rules key on `profile.owner`, so they already hold for any number of Profiles.
 - The Editor assumes one: `onboarded()` reads `profiles/records?perPage=1` and takes `items[0]` (`app/editor/app.js`), and every screen gets that `profile`. Stats sends no Profile filter and lets the list rule choose its rows (`app/editor/stats.js`, header), which is right only while an account owns one Profile. The Bio Link is `location.origin + '/' + username` (`address()`).
 
 Custom Domains and Spare Domains (Phase 5, built)
