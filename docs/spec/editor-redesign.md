@@ -83,7 +83,8 @@ Page padding is `--e-space-4` at 375, `--e-space-8` from 768 and `--e-space-10` 
 | `/edit` | entry: log-in, the first Onboarding step that applies, or `/edit/home` | – | fixed |
 | `/edit/signup`, `/edit/login[?next=]`, `/edit/forgot` | Sign up, Log in, Forgot password | top bar | existing |
 | `/edit/verify?token=`, `/edit/reset?token=` | Email verified / Set a new password, or "Link invalid or expired" | top bar | fixed |
-| `/edit/claim`, `/edit/verify-email`, `/edit/profile`, `/edit/first-link`, `/edit/live` | Onboarding steps 1–5 | top bar + step | existing |
+| `/edit/claim`, `/edit/profile`, `/edit/first-link`, `/edit/live` | Onboarding steps 1–4 | top bar + step | existing |
+| `/edit/verify-email` | Verify your email, off the Onboarding way, reachable by its URL | top bar | existing |
 | `/edit/home` | **Links** tab (the Editor's home, where log-in lands) | nav | existing |
 | `/edit/add-link`, `/edit/link` | Link editor (sheet screen) | nav hidden below 768 | existing |
 | `/edit/me` | **Profile** tab | nav | new |
@@ -106,12 +107,12 @@ Page padding is `--e-space-4` at 375, `--e-space-8` from 768 and `--e-space-10` 
 **Layout shared by auth and Onboarding.** These screens use a single centred column, `--e-auth-max` wide, holding one `e-card`.
 - The card holds an optional step line, then the h1 (24px; 30px from 768), the muted lead (16px), the form, one full-width primary button, and quiet links beneath.
 - At 1024 the same card sits 64px from the top on `--e-color-bg`.
-- **Step line** (`e-steps`, plain text, never `role="status"`): "Step n of 5", plus a 4px track whose fill shows n/5.
+- **Step line** (`e-steps`, plain text, never `role="status"`): "Step n of 4", plus a 4px track whose fill shows n/4.
 - **Busy:** while a request runs, the form carries `aria-busy="true"` and its controls are disabled. The primary button keeps its label and shows a CSS spinner (`::after`).
 - **One `role="status"` per screen** (`e-msg`, an empty line until it has a message). The one exception is the Links tab, which has two: the Bio Link's and the list's.
 - Every quoted string below is exact copy. "Kept" means the string is unchanged from `editor.js`.
 
-**4.1 Sign up**, `/edit/signup` (P3 s1–s4, s16). Shows "Step 1 of 5".
+**4.1 Sign up**, `/edit/signup` (P3 s1–s4, s16). Shows "Step 1 of 4".
 1. h1 "Create your page" (kept). Lead: "Your email, a password and the Username your page lives at."
 2. Fields:
    - "Email" (`type=email`, `autocomplete=email`)
@@ -124,7 +125,7 @@ Page padding is `--e-space-4` at 375, `--e-space-8` from 768 and `--e-space-10` 
    - "Your account was made, but log-in was refused: {reason}" (kept)
    - A refused claim lands on 4.2 with its reason.
 
-**4.2 Claim your Username**, `/edit/claim` (P3 s3–s5). Shows "Step 1 of 5".
+**4.2 Claim your Username**, `/edit/claim` (P3 s3–s5). Shows "Step 1 of 4".
 1. h1 "Claim your Username" (kept). Lead: "It becomes your page's address. Lowercase letters, digits and _, 3 to 30 characters."
 2. "Username" field with its prefix, as in 4.1. Primary button "Claim".
 3. Messages (all kept):
@@ -136,7 +137,7 @@ Page padding is `--e-space-4` at 375, `--e-space-8` from 768 and `--e-space-10` 
    - "“{name}” is reserved. Pick another Username."
    - "The claim failed. Try again."
 
-**4.3 Verify your email**, `/edit/verify-email` (P3 s6, s7). Shows "Step 2 of 5". Onboarding no longer stops here (P3 amendment 2026-10-10, ADR 0006); the screen stays reachable, and the Editor's "Email not verified" notice with "Resend email" is the unverified state.
+**4.3 Verify your email**, `/edit/verify-email` (P3 s6, s7). Shows no step line: Onboarding no longer stops here (P3 amendment 2026-10-10, ADR 0006); the screen stays reachable, and the Editor's "Email not verified" notice with "Resend email" is the unverified state.
 1. A 48px mail icon. h1 "Verify your email" (kept).
 2. Text: "We sent a link to **{email}**. Open it to verify your email, then press Continue." (kept)
 3. Buttons: primary "Continue", secondary "Resend email".
@@ -169,7 +170,7 @@ Page padding is `--e-space-4` at 375, `--e-space-8` from 768 and `--e-space-10` 
 - **Bad token, found on submit:** h1 "Link invalid or expired", "This reset link is invalid or expired. Enter your email and we will send you a new one.", then "Email", a primary "Send a new link" button, ok "If an account uses that address, we sent it a link. Check your inbox." and errors as PocketBase's field reasons or "The email could not be sent. Try again." (all kept).
 - **Refused:** the field reasons, or "The password could not be set. Try again."
 
-**4.8 Your Profile**, Onboarding, `/edit/profile` (P3 s17, s20). Shows "Step 3 of 5".
+**4.8 Your Profile**, Onboarding, `/edit/profile` (P3 s17, s20). Shows "Step 2 of 4".
 1. h1 "Your Profile". Lead: "What Visitors see at the top of your page. A photo in jpg, png, heic, gif or webp." (kept)
 2. "Display name" (required). "Bio" (3-row textarea, helper "Optional. A line or two."). "Profile picture" (`e-file`).
 3. Primary button "Continue".
@@ -180,9 +181,9 @@ Page padding is `--e-space-4` at 375, `--e-space-8` from 768 and `--e-space-10` 
    - "The image was refused ({status}). Try again."
    - "The save failed ({status}). Try again."
 
-**4.9 Add your first Link**, `/edit/first-link` (P3 s18). Shows "Step 4 of 5". h1 "Add your first Link". Lead: "Where the card on your page leads." The Link form (4.12) sits inline, with no Cancel, and uses the same sticky foot (status line and "Save link") at 375. Saving goes to 4.10.
+**4.9 Add your first Link**, `/edit/first-link` (P3 s18). Shows "Step 3 of 4". h1 "Add your first Link". Lead: "Where the card on your page leads." The Link form (4.12) sits inline, with no Cancel, and uses the same sticky foot (status line and "Save link") at 375. Saving goes to 4.10.
 
-**4.10 Your page is live**, `/edit/live` (P3 s19). Shows "Step 5 of 5".
+**4.10 Your page is live**, `/edit/live` (P3 s19). Shows "Step 4 of 4".
 1. h1 "Your page is live". Lead: "Paste this address into your Instagram or TikTok bio."
 2. The address, in a muted box: 20px, `word-break: break-all`, exact text `{origin}/{username}`.
 3. A primary "Open" link (new tab, `rel=noopener`) and a secondary "Copy" button. Below them, a ghost "Go to the Editor" button.

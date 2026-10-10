@@ -16,13 +16,12 @@ Phase 2 gives v2 a database, file storage and an admin screen, but only the Oper
 
 ## Solution
 
-v2 gets its own Editor at `/edit`, on the same origin as the Profiles. Anyone with the link opens the sign-up screen and enters an email, a password and the Username they want. Onboarding then takes them through five steps:
+v2 gets its own Editor at `/edit`, on the same origin as the Profiles. Anyone with the link opens the sign-up screen and enters an email, a password and the Username they want. Onboarding then takes them through four steps, with the verification email sent but not waited on (ADR 0006):
 
 1. claim the Username
-2. verify the email, which Onboarding asks for but does not wait on (ADR 0006)
-3. fill in the Profile
-4. add a first Link
-5. see the live address, with Open and Copy, to paste into their Instagram or TikTok bio
+2. fill in the Profile
+3. add a first Link
+4. see the live address, with Open and Copy, to paste into their Instagram or TikTok bio
 
 From then on, logging in lands them in the Editor, a phone-sized copy of the link.me Template's "Edit Profile" screen. In it the Creator can:
 
