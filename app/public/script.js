@@ -10,10 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeOverlayBtn = document.getElementById('closeOverlayBtn');
     const continueBtn = document.getElementById('continueBtn');
     const igOverlay = document.getElementById('igOverlay');
-    const igCloseBtn = document.getElementById('igCloseBtn');
-    const igOpenBtn = document.getElementById('igOpenBtn');
-    const igTarget = document.getElementById('igTarget');
-    const igCopyBtn = document.getElementById('igCopyBtn');
     const igIcon = document.getElementById('igIcon');
     const igAppName = document.getElementById('igAppName');
 
@@ -90,21 +86,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Destination (the Chrome intent); iOS and Instagram stay on the overlay and escape by its manual instructions.
                 const target = escapeTarget(shortcutLink.id);
                 pointAddressAt(target);
-                openEscapeOverlay(target, true);
+                openEscapeOverlay(target);
                 if (isAndroid) revealAndGo(shortcutLink, popOut);
                 return;
             }
 
             // Escape Overlay on open: In-App Browser and a Profile default of Escape Mode, as v1 shows it to Instagram; the
-            // pop-out waits for the Visitor's tap, "Open in browser" or a Link
+            // no pop-out on iOS: the Visitor leaves by the app's ··· menu; Android bounces from a Link tap
             if (isInAppBrowser && defaultMode() === 'escape_ig') {
                 const target = escapeTarget(null);
                 pointAddressAt(target);
-                openEscapeOverlay(target, !linksData.every(link => effectiveMode(link) === 'escape_ig'));
+                openEscapeOverlay(target);
             }
 
-            // Link Shortcut, with no Age Gate (v1's Link Shortcut has none): the Destination as a tap gets it, Revealed then navigated to
-            if (shortcutLink) {
+            // Link Shortcut, with no Age Gate (v1's Link Shortcut has none): the Destination as a tap gets it, Revealed then navigated to.
+            // Never inside an In-App Browser: an automatic navigation to the Destination there is what gets links flagged
+            if (shortcutLink && !isInAppBrowser) {
                 revealAndGo(shortcutLink);
             }
         })
@@ -302,41 +299,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = escapeTarget(link.id);
         pointAddressAt(target);
         popOut(target.url);
-        openEscapeOverlay(target, true);
+        openEscapeOverlay(target);
     }
 
-    // Address bar while an Escape Overlay shows: the target's path and query; Close puts back the one it replaced
-    let addressBeforeOverlay = null;
+    // Address bar while an Escape Overlay shows: point it at the escape target so the app's own ··· "Open in browser" opens it
     function pointAddressAt(target) {
-        addressBeforeOverlay = window.location.pathname + window.location.search + window.location.hash;
         window.history.replaceState({}, '', target.path);
     }
 
-    // Escape Overlay: every way out aimed at the escape target; blocks scrolling while it shows
-    function openEscapeOverlay(target, closeable) {
+    // Escape Overlay: v1's passive manual instructions (the ··· menu), no buttons. The address bar already points at the
+    // escape target, so the app's own "Open in browser" carries the right URL. Blocks scrolling while it shows.
+    function openEscapeOverlay(target) {
         igIcon.style.display = isInstagram ? '' : 'none';
         igAppName.textContent = isInstagram ? 'Instagram' : 'This app';
-        igOpenBtn.href = escapeLink(target.url) || target.url;
-        igTarget.textContent = target.url;
-        igCloseBtn.hidden = !closeable;
         igOverlay.classList.remove('hidden');
         igOverlay.classList.add('active');
         document.body.style.overflow = 'hidden';
     }
-
-    function closeEscapeOverlay() {
-        window.history.replaceState({}, '', addressBeforeOverlay);
-        igOverlay.classList.remove('active');
-        igOverlay.classList.add('hidden');
-        document.body.style.overflow = '';
-    }
-
-    igCloseBtn.addEventListener('click', closeEscapeOverlay);
-
-    igCopyBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(igTarget.textContent)
-            .catch(err => console.error('Error copying link:', err));
-    });
 
     // Overlay Logic
     function openOverlay(linkId) {

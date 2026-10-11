@@ -383,51 +383,62 @@ test('with an iOS Instagram User-Agent, creator.test/ shows the Escape Overlay e
   expect(shown, 'the Escape Overlay with the stored default, then with Direct Mode').toEqual([true, false]);
 });
 
+// The Fixture Profile's JSON at `origin`, served to `visitor` with a Direct default so no Escape Overlay shows on open and the
+// Escape Link can be tapped: the Escape Overlay has no Close any more (amended 2026-10-11). Fetched as overlayShows fetches it.
+async function serveDirectDefault(visitor: Page, request: APIRequestContext, origin: string) {
+  const served = await (await request.get('/api/profiles/fixture.json', { headers: { host: new URL(origin).host } })).json();
+  served.profile.mode = 'direct';
+  await visitor.route(`${origin}/api/profiles/fixture.json`, (route) => route.fulfill({ json: served }));
+}
+
 // The Escapes fired at `origin` + `path` with an Android In-App Browser `userAgent`: each a Chrome `intent://` URL as Phase 1
-// captures it. The Fixture's Escape Mode default pops nothing out on open; after closing the Escape Overlay it shows, a tap on
-// the Escape Link fires the one intent. Only Android fires a scheme now.
-async function escapesFired(browser: Browser, origin: string, path: string, userAgent: string) {
+// captures it. With a Direct default nothing shows or pops out on open; a tap on the Escape Link fires the one intent. Only
+// Android fires a scheme now.
+async function escapesFired(browser: Browser, request: APIRequestContext, origin: string, path: string, userAgent: string) {
   const context = await phoneContext(browser, { origin, userAgent });
   const visitor = await context.newPage();
+  await serveDirectDefault(visitor, request, origin);
   const navigations = await recordNavigations(visitor);
   await visitor.goto(origin + path);
   await showsFixture(visitor, `${origin}${path}`);
-  await escapeOverlay(visitor).getByRole('button', { name: 'Close' }).click();
   await card(visitor, 'Escape Link').click();
   await expect.poll(() => intents(navigations), `the Escapes fired on ${origin}${path}`).toHaveLength(1);
   await context.close();
   return intents(navigations);
 }
 
-// iOS is passive: an Escape Link tap fires no scheme and shows the Escape Overlay, whose "Open in browser" link's href is the
-// page's own https address. Returns that href for the test to compare to the escape target.
-async function iosEscapeTarget(browser: Browser, origin: string, path: string) {
+// iOS is passive: an Escape Link tap fires no scheme and shows the Escape Overlay, the manual ··· menu instructions with no
+// link or button of its own, and rewrites the address bar to the escape target so the app's own ··· menu opens it. Returns that
+// address, as https as the escape target spells it, for the test to compare to the escape target.
+async function iosEscapeTarget(browser: Browser, request: APIRequestContext, origin: string, path: string) {
   const context = await phoneContext(browser, { origin, userAgent: UA.iosInstagram });
   const visitor = await context.newPage();
+  await serveDirectDefault(visitor, request, origin);
   const navigations = await recordNavigations(visitor);
   await visitor.goto(origin + path);
   await showsFixture(visitor, `${origin}${path}`);
-  await escapeOverlay(visitor).getByRole('button', { name: 'Close' }).click();
   await card(visitor, 'Escape Link').click();
   await expect(escapeOverlay(visitor)).toBeVisible();
-  const href = await escapeOverlay(visitor).getByRole('link', { name: 'Open in browser' }).getAttribute('href');
+  await expect(escapeOverlay(visitor).locator('a, button'), `no link or button on the Escape Overlay for ${origin}${path}`).toHaveCount(0);
+  await expect(visitor).toHaveURL(/\?link=/);
   const schemes = navigations.map(({ url }) => url).filter((url) => /^(instagram:|x-safari-|intent:)/.test(url));
   expect(schemes, `no native scheme fired on iOS for ${origin}${path}`).toEqual([]);
+  const address = new URL(visitor.url());
   await context.close();
-  return href;
+  return `https://${address.host}${address.pathname}${address.search}`;
 }
 
 test('an Escape from creator.test/{code} targets creator.test and /{code}, with no Username segment, passively on iOS and as the Android intent', async ({ browser, request }) => {
   const linkId = await fixtureLinkId(request, 'Escape Link');
   const target = `https://${CUSTOM}:${PORT}/111?link=${linkId}`; // the escape target, spelled out as the Phase 1 spec spells it
-  expect(await iosEscapeTarget(browser, at(CUSTOM), '/111'), `the iOS escape target for Link ${linkId} on ${CUSTOM}/111`).toBe(target);
-  expect(await escapesFired(browser, at(CUSTOM), '/111', UA.androidInstagram), `the Android Escape for Link ${linkId} on ${CUSTOM}/111`)
+  expect(await iosEscapeTarget(browser, request, at(CUSTOM), '/111'), `the iOS escape target for Link ${linkId} on ${CUSTOM}/111`).toBe(target);
+  expect(await escapesFired(browser, request, at(CUSTOM), '/111', UA.androidInstagram), `the Android Escape for Link ${linkId} on ${CUSTOM}/111`)
     .toEqual([`intent://${CUSTOM}:${PORT}/111?link=${linkId}#Intent;scheme=https;package=com.android.chrome;end`]);
 });
 
 test('an Escape from spare.test/{username}/{code} keeps /{username}/{code}', async ({ browser, request }) => {
   const linkId = await fixtureLinkId(request, 'Escape Link');
-  expect(await iosEscapeTarget(browser, at(SPARE), '/fixture/222'), `the iOS escape target for Link ${linkId} on ${SPARE}/fixture/222`)
+  expect(await iosEscapeTarget(browser, request, at(SPARE), '/fixture/222'), `the iOS escape target for Link ${linkId} on ${SPARE}/fixture/222`)
     .toBe(`https://${SPARE}:${PORT}/fixture/222?link=${linkId}`);
 });
 

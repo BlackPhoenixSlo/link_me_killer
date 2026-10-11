@@ -2,7 +2,7 @@ import { test, expect, type Browser, type BrowserContextOptions, type Page } fro
 import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { type Creator, featured, heading, mailedLink, onLocalStack, signUp, VERIFY } from '../e2e/helpers';
+import { type Creator, featured, heading, mailedLink, onLocalStack, signUp } from '../e2e/helpers';
 
 // The landing page's four screenshots (docs/spec/editor-redesign.md, section 6, Screenshot slots): a demo Creator, Mia, signed up
 // through the Editor on the local test stack, with three non-adult Links on example.com and stock icons; her Editor, her public
@@ -107,7 +107,7 @@ test('the landing\'s four screenshots of a demo Creator', async ({ browser, base
   const phone = await fenced(browser, origin, PHONE);
   const page = await phone.newPage();
   await signUp(page, MIA);
-  await expect(heading(page, VERIFY)).toBeVisible();
+  await expect(heading(page, 'Your Profile')).toBeVisible(); // sign-up goes straight on, unverified, since feat/unverified-can-edit
   await page.goto(await mailedLink(MIA.email, '/edit/verify'));
   await expect(heading(page, 'Email verified')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -151,17 +151,18 @@ test('the landing\'s four screenshots of a demo Creator', async ({ browser, base
   // The Escape Overlay, the screen Escape Mode shows a Visitor inside the Instagram in-app browser: its UA (an `Instagram` token
   // script.js matches) makes her Escape Mode Profile show the on-load screen. Its up-arrow (to the ··· menu) and Instagram mark
   // are inline SVG in index.html, so they render under the strict fence with no webfont to wait on. The shot is cropped to the
-  // content (top of frame down to the "Copy link" button) so the overlay's top-aligned dead black band is left out. Her
-  // example.com Links keep any Destination out of the shot, and the escape target shown is her own Profile URL, rewritten to
-  // https://ofl.ink by settle().
+  // content (top of frame down to the overlay's text block, its manual ··· menu instructions; the overlay has no buttons since
+  // 2026-10-11) so the overlay's top-aligned dead black band is left out. Her example.com Links keep any Destination out of the
+  // shot.
   const IG_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 300.0.0.0.0 (iPhone14,3; iOS 17_0; en_US; en-US; scale=3.00; 1170x2532; 000000000)';
   const igPhone = await fenced(browser, origin, { ...PHONE, userAgent: IG_UA });
   const ig = await igPhone.newPage();
   await ig.goto(`/${MIA.username}`);
   await expect(ig.locator('#igOverlay')).toBeVisible();
-  await expect(ig.locator('#igCopyBtn')).toBeVisible();
+  const igText = ig.locator('#igOverlay .overlay-content p');
+  await expect(igText).toContainText('Open in External Browser');
   await shootClip(ig, origin, 'escape-overlay-mobile', async (p) => {
-    const bottom = await p.locator('#igCopyBtn').evaluate((node) => node.getBoundingClientRect().bottom);
+    const bottom = await p.locator('#igOverlay .overlay-content p').evaluate((node) => node.getBoundingClientRect().bottom);
     return { x: 0, y: 0, width: 390, height: Math.ceil(bottom + 24) };
   });
   await igPhone.close();

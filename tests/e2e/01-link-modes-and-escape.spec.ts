@@ -102,6 +102,13 @@ function watchReveals(page: Page) {
   });
   return requests;
 }
+// Document loads in the main frame: the page's own load, then any navigation that leaves or reloads it. The address-bar
+// rewrite to the escape target (history.replaceState) is a same-document navigation and loads nothing.
+function watchLoads(page: Page) {
+  const loads: string[] = [];
+  page.on('request', (req) => { if (req.isNavigationRequest() && req.frame() === page.mainFrame()) loads.push(req.url()); });
+  return loads;
+}
 const nextReveal = (page: Page) => page.waitForResponse((res) => new URL(res.url()).pathname === REVEAL_PATH);
 async function realUrlOf(reveal: Response): Promise<string> {
   expect(reveal.status()).toBe(200);
@@ -110,7 +117,16 @@ async function realUrlOf(reveal: Response): Promise<string> {
   return realUrl;
 }
 
-const closeButton = (page: Page) => escapeOverlay(page).getByRole('button', { name: 'Close' });
+// The Escape Overlay as v1 shows it (amended 2026-10-11): the manual ··· menu instructions only, with no "Open in browser" link,
+// no "Copy link" and no "Close". It cannot be dismissed, and the address bar it leaves is the escape target.
+async function expectManualOverlay(page: Page) {
+  await expect(escapeOverlay(page)).toBeVisible();
+  await expect(escapeOverlay(page).getByText('Open in External Browser')).toBeVisible(); // the app-menu instruction
+  await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveCount(0);
+  await expect(escapeOverlay(page).getByRole('button', { name: 'Copy link' })).toHaveCount(0);
+  await expect(escapeOverlay(page).getByRole('button', { name: 'Close' })).toHaveCount(0);
+  await expect(escapeOverlay(page).locator('a, button')).toHaveCount(0);
+}
 
 // Android's Chrome intent for an https address, as v1's performBounce spelled it: the only native escape scheme the page fires.
 const strip = (url: string) => url.replace(/^https?:\/\//, '');
@@ -136,10 +152,11 @@ async function tapEscapeFromCode(page: Page, link: Link = byMode.escape_ig, edit
   await serveVariant(page, edit);
   const navigations = await recordNavigations(page);
   const reveals = watchReveals(page);
+  const loads = watchLoads(page);
   await openProfile(page, `/${username}/${TC}`);
   const target = `https://${new URL(page.url()).host}/${username}/${TC}?link=${link.id}`;
   await card(page, link).click();
-  return { navigations, reveals, target };
+  return { navigations, reveals, loads, target };
 }
 
 test.describe('System Browser (desktop Chrome)', () => {
@@ -281,9 +298,36 @@ const SCHEME_ANCHORS = 'a[href^="instagram:"], a[href^="x-safari-"], a[href^="in
 const schemeNavigations = (navigations: Navigation[]) =>
   navigations.map(({ url }) => url).filter((url) => /^(instagram:|x-safari-|intent:)/.test(url));
 
-// In-App Browsers on iOS (Instagram, Facebook, TikTok): passive. The Escape Overlay carries the manual instructions and an
-// "Open in browser" link whose href is the page's own https address (same domain), never a native scheme and never the raw
-// Destination. Nothing pops out by itself.
+// In an In-App Browser a Link Shortcut to a Direct Link (amended 2026-10-11) does not auto-navigate to the Destination: an
+// automatic navigation there is what gets links flagged. The Profile loads as a plain visit, with no Reveal and no navigation,
+// under either Profile default. Registered inside each In-App describe below, so it runs under that describe's User-Agent.
+function inAppDirectShortcutStays() {
+  for (const [name, edit] of [['Direct', directDefault], ['Escape', escapeDefault]] as const) {
+    test(`?link={Direct Link Id} on load, ${name} default, does not navigate to the Destination and sends no Reveal`, async ({ page }) => {
+      const link = byMode.direct;
+      await serveVariant(page, edit);
+      const navigations = await recordNavigations(page);
+      const reveals = watchReveals(page);
+      const loads = watchLoads(page);
+      await openProfile(page, `/${username}?link=${link.id}`);
+      await page.waitForLoadState('networkidle');
+      expect(reveals).toHaveLength(0);
+      expect(loads).toHaveLength(1); // the Profile's own load only
+      expect(schemeNavigations(navigations)).toEqual([]);
+      if (name === 'Direct') {
+        await expect(escapeOverlay(page)).toBeHidden();
+        await expect(page).toHaveURL(`/${username}?link=${link.id}`);
+      } else {
+        await expectManualOverlay(page); // the Escape default's overlay on open, its address the Profile's own
+        await expect(page).toHaveURL(`/${username}`);
+      }
+    });
+  }
+}
+
+// In-App Browsers on iOS (Instagram, Facebook, TikTok): passive. The Escape Overlay carries only the manual instructions, and
+// the address bar is rewritten to the escape target (the page's own address) so the app's own ··· menu opens it. No native
+// scheme, no raw Destination, and nothing pops out or navigates by itself.
 for (const [app, userAgent] of [
   ['iOS Instagram', UA.iosInstagram],
   ['iOS Facebook', UA.fban],
@@ -292,15 +336,15 @@ for (const [app, userAgent] of [
   test.describe(`In-App Browser (${app})`, () => {
     test.use({ userAgent });
 
-    test('Escape default: the Escape Overlay shows on open, aimed at the page\'s own https address, with no scheme fired', async ({ page }) => {
+    test('Escape default: the manual Escape Overlay shows on open, the address bar at the escape target, with no scheme fired', async ({ page }) => {
       await serveVariant(page, escapeDefault);
       const navigations = await recordNavigations(page);
+      const loads = watchLoads(page);
       await openProfile(page, `/${username}/${TC}`);
-      await expect(escapeOverlay(page)).toBeVisible();
-      const target = `https://${new URL(page.url()).host}/${username}/${TC}`;
-      await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', target);
-      await expect(escapeOverlay(page).getByText(target, { exact: true })).toBeVisible();
+      await expectManualOverlay(page);
+      await expect(page).toHaveURL(`/${username}/${TC}`);
       await page.waitForLoadState('networkidle');
+      expect(loads).toHaveLength(1); // the Profile's own load only
       expect(schemeNavigations(navigations)).toEqual([]);
       await expect(page.locator(SCHEME_ANCHORS)).toHaveCount(0);
     });
@@ -318,71 +362,52 @@ for (const [app, userAgent] of [
       expect(schemeNavigations(navigations)).toEqual([]);
     });
 
-    test('a tap on the Escape Link shows the Escape Overlay aimed at the escape target, with no scheme and no Reveal', async ({ page }) => {
+    test('a tap on the Escape Link shows the manual Escape Overlay, the address bar at the escape target, with no navigation and no Reveal', async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       const link = byMode.escape_ig;
-      const { navigations, reveals, target } = await tapEscapeFromCode(page, link);
-      await expect(escapeOverlay(page)).toBeVisible();
+      const { navigations, reveals, loads } = await tapEscapeFromCode(page, link);
+      await expectManualOverlay(page);
       await expect(page).toHaveURL(`/${username}/${TC}?link=${link.id}`);
-      await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', target);
-      await expect(escapeOverlay(page).getByText(target, { exact: true })).toBeVisible();
-      await expect(escapeOverlay(page).getByRole('button', { name: 'Copy link' })).toBeVisible();
-      await expect(escapeOverlay(page).getByText('Open in External Browser')).toBeVisible(); // the app-menu instruction
-      await expect(closeButton(page)).toBeVisible();
       await expect(page.locator(SCHEME_ANCHORS)).toHaveCount(0);
+      await page.waitForLoadState('networkidle');
+      expect(loads).toHaveLength(1); // no reload to the escape target: the Profile's own load only
       expect(schemeNavigations(navigations)).toEqual([]);
       expect(reveals).toHaveLength(0);
       if (app === 'iOS Instagram') await page.screenshot({ path: SCREENSHOT, animations: 'disabled' });
     });
 
-    test('"Close" hides the Escape Overlay and puts the address back to /{username}/{code}', async ({ page }) => {
-      const link = byMode.escape_ig;
-      await tapEscapeFromCode(page, link);
-      await expect(page).toHaveURL(`/${username}/${TC}?link=${link.id}`);
-      await closeButton(page).click();
-      await expect(escapeOverlay(page)).toBeHidden();
-      await expect(page).toHaveURL(`/${username}/${TC}`);
-    });
-
-    test('the Adult Link set to Escape Mode: the Age Gate, then Continue (18+) shows the Escape Overlay, with no scheme and no Reveal', async ({ page }) => {
+    test('the Adult Link set to Escape Mode: the Age Gate, then Continue (18+) shows the manual Escape Overlay, with no navigation and no Reveal', async ({ page }) => {
       const adultEscape = (json: ProfileJson) => { directDefault(json); linkIn(json, adult.id).mode = 'escape_ig'; };
-      const { navigations, reveals } = await tapEscapeFromCode(page, adult, adultEscape);
+      const { navigations, reveals, loads } = await tapEscapeFromCode(page, adult, adultEscape);
       await expect(page.getByRole('heading', { name: 'Mature Content Disclaimer' })).toBeVisible();
 
       await page.getByRole('button', { name: 'Continue (18+)' }).click();
-      await expect(escapeOverlay(page)).toBeVisible();
-      await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' }))
-        .toHaveAttribute('href', `https://${new URL(page.url()).host}/${username}/${TC}?link=${adult.id}`);
+      await expectManualOverlay(page);
       await expect(page).toHaveURL(`/${username}/${TC}?link=${adult.id}`);
       await expect(page.locator(SCHEME_ANCHORS)).toHaveCount(0);
+      await page.waitForLoadState('networkidle');
+      expect(loads).toHaveLength(1);
       expect(schemeNavigations(navigations)).toEqual([]);
       expect(reveals).toHaveLength(0);
     });
 
-    test('?link={Escape Link Id} on load shows the Escape Overlay, with no scheme and no Reveal (iOS is passive on load)', async ({ page }) => {
+    test('?link={Escape Link Id} on load shows the manual Escape Overlay, with no navigation and no Reveal (iOS is passive on load)', async ({ page }) => {
       const link = byMode.escape_ig;
       await serveVariant(page, directDefault);
       const navigations = await recordNavigations(page);
       const reveals = watchReveals(page);
+      const loads = watchLoads(page);
       await openProfile(page, `/${username}/${TC}?link=${link.id}`);
-      await expect(escapeOverlay(page)).toBeVisible();
-      await expect(closeButton(page)).toBeVisible();
+      await expectManualOverlay(page);
       await expect(page).toHaveURL(`/${username}/${TC}?link=${link.id}`);
       await page.waitForLoadState('networkidle');
       expect(reveals).toHaveLength(0);
+      expect(loads).toHaveLength(1);
       expect(schemeNavigations(navigations)).toEqual([]);
       await expect(page.locator(SCHEME_ANCHORS)).toHaveCount(0);
     });
 
-    test.describe('with clipboard permission on the localhost origin', () => {
-      test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
-
-      test('"Copy link" puts the https escape target on the clipboard', async ({ page }) => {
-        const { target } = await tapEscapeFromCode(page);
-        await escapeOverlay(page).getByRole('button', { name: 'Copy link' }).click();
-        await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(target);
-      });
-    });
+    inAppDirectShortcutStays();
   });
 }
 
@@ -405,15 +430,14 @@ for (const [app, userAgent] of [
       expect(intents(navigations)).toEqual([]);
     });
 
-    test('a tap on the Escape Link fires the Chrome intent to the escape target, in the tap\'s own task; "Open in browser" carries it; no Reveal', async ({ page }) => {
+    test('a tap on the Escape Link fires the Chrome intent to the escape target, in the tap\'s own task, and shows the manual Escape Overlay; no Reveal', async ({ page }) => {
       const link = byMode.escape_ig;
       const { navigations, reveals, target } = await tapEscapeFromCode(page, link);
       const intent = chromeIntent(target);
       await expect.poll(() => intents(navigations)).toEqual([intent]);
       expect(navigations).toContainEqual({ url: intent, inTapTask: true });
-      await expect(escapeOverlay(page)).toBeVisible();
-      await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', intent);
-      await expect(escapeOverlay(page).getByRole('link', { name: 'Try another way' })).toHaveCount(0);
+      await expectManualOverlay(page);
+      await expect(page).toHaveURL(`/${username}/${TC}?link=${link.id}`);
       expect(reveals).toHaveLength(0);
     });
 
@@ -443,7 +467,7 @@ for (const [app, userAgent] of [
       expect(reveals).toHaveLength(0);
     });
 
-    test('?link={Escape Link Id} on load reveals, then fires the Chrome intent straight to the Destination, with the Escape Overlay aimed at the page address', async ({ page }) => {
+    test('?link={Escape Link Id} on load reveals, then fires the Chrome intent straight to the Destination, with the manual Escape Overlay and the address bar at the escape target', async ({ page }) => {
       const link = byMode.escape_ig;
       await serveVariant(page, directDefault);
       const navigations = await recordNavigations(page);
@@ -452,14 +476,13 @@ for (const [app, userAgent] of [
       const reveal = nextReveal(page);
       await openProfile(page, address);
       const destination = await realUrlOf(await reveal);
-      const target = `https://${new URL(page.url()).host}${address}`;
-      await expect(escapeOverlay(page)).toBeVisible();
-      await expect(escapeOverlay(page).getByText(target, { exact: true })).toBeVisible();
-      await expect(closeButton(page)).toBeVisible();
+      await expectManualOverlay(page);
       await expect(page).toHaveURL(address);
       await expect.poll(() => intents(navigations)).toEqual([chromeIntent(destination)]);
       expect(reveals.map((url) => url.searchParams.get('id'))).toEqual([link.id]);
     });
+
+    inAppDirectShortcutStays();
   });
 }
 
@@ -518,11 +541,11 @@ test.describe('the Escape Overlay outside Instagram (TikTok, v2\'s extension)', 
 test.describe('In-App Browser on neither iOS nor Android (desktop UA carrying "Instagram")', () => {
   test.use({ userAgent: UA.desktopInstagram });
 
-  test('a tap on the Escape Link records no scheme navigation and shows the Escape Overlay, whose "Open in browser" carries the plain https target', async ({ page }) => {
-    const { navigations, target } = await tapEscapeFromCode(page);
-    await expect(escapeOverlay(page)).toBeVisible();
-    await expect(escapeOverlay(page).getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', target);
-    await expect(escapeOverlay(page).getByRole('link', { name: 'Try another way' })).toHaveCount(0);
+  test('a tap on the Escape Link records no navigation and shows the manual Escape Overlay, the address bar at the escape target', async ({ page }) => {
+    const { navigations, loads } = await tapEscapeFromCode(page);
+    await expectManualOverlay(page);
+    await page.waitForLoadState('networkidle');
+    expect(loads).toHaveLength(1);
     expect(schemeNavigations(navigations)).toEqual([]);
     await expect(page).toHaveURL(`/${username}/${TC}?link=${byMode.escape_ig.id}`);
   });
